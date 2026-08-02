@@ -256,7 +256,7 @@ export class AuthService {
 
     const accessToken = await this.jwtService.signAsync(payload);
     const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: this.configService.get<string>('jwt.secret')!,
+      secret: process.env.JWT_SECRET || 'vibeai-jwt-secret-key-2024',
       expiresIn: this.refreshExpiresIn as `${number}${'s' | 'm' | 'h' | 'd'}`,
     });
 
