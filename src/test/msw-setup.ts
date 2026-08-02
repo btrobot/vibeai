@@ -59,6 +59,73 @@ export const defaultHandlers = [
   ),
 ];
 
+// 默认 billing handlers（各测试可覆盖）
+const now = new Date().toISOString();
+const defaultBillingPlans = [
+  {
+    id: 'plan-free', slug: 'free', name: '免费版', description: '适合个人体验',
+    credits: 100, priceMonthly: 0, priceYearly: null,
+    maxProjects: 3, maxStorageBytes: 104857600, maxConcurrentTasks: 2,
+    capabilities: ['text-generation', 'image-generation'],
+    features: { apiAccess: true, prioritySupport: false, privateDeployment: false },
+    sortOrder: 1, createdAt: now,
+  },
+  {
+    id: 'plan-starter', slug: 'starter', name: '入门版', description: '适合个人创作者',
+    credits: 500, priceMonthly: 29, priceYearly: 299,
+    maxProjects: 10, maxStorageBytes: 536870912, maxConcurrentTasks: 5,
+    capabilities: ['text-generation', 'image-generation', 'video-generation'],
+    features: { apiAccess: true, prioritySupport: false, privateDeployment: false },
+    sortOrder: 2, createdAt: now,
+  },
+  {
+    id: 'plan-pro', slug: 'pro', name: '专业版', description: '适合专业创作者',
+    credits: 2000, priceMonthly: 99, priceYearly: 999,
+    maxProjects: 50, maxStorageBytes: 1073741824, maxConcurrentTasks: 10,
+    capabilities: ['*'],
+    features: { apiAccess: true, prioritySupport: true, privateDeployment: false },
+    sortOrder: 3, createdAt: now,
+  },
+  {
+    id: 'plan-enterprise', slug: 'enterprise', name: '企业版', description: '适合团队和企业',
+    credits: 8000, priceMonthly: 299, priceYearly: 2999,
+    maxProjects: 999, maxStorageBytes: 10737418240, maxConcurrentTasks: 50,
+    capabilities: ['*'],
+    features: { apiAccess: true, prioritySupport: true, privateDeployment: true },
+    sortOrder: 4, createdAt: now,
+  },
+];
+
+function makeDefaultPlan(slug: string): any {
+  return defaultBillingPlans.find((p: any) => p.slug === slug) ?? defaultBillingPlans[0];
+}
+
+defaultHandlers.push(
+  http.get('/api/billing/plans', () => HttpResponse.json({ success: true, data: defaultBillingPlans })),
+  http.get('/api/billing/subscription', () => HttpResponse.json({
+    success: true,
+    data: {
+      id: 'sub-1', userId: 'user-1',
+      plan: makeDefaultPlan('free'),
+      creditsRemaining: 150,
+      creditsUsed: 30,
+      currentPeriodStart: '2026-01-01T00:00:00Z',
+      currentPeriodEnd: '2026-02-01T00:00:00Z',
+      autoRenew: false,
+      createdAt: now,
+    },
+  })),
+  http.get('/api/billing/stats', () => HttpResponse.json({
+    success: true,
+    data: {
+      totalCreditsUsed: 30,
+      totalTasksCompleted: 25,
+      storageUsed: 52428800,
+      currentPeriod: { start: '2026-01-01', end: '2026-01-31' },
+    },
+  })),
+);
+
 export const server = setupServer(...defaultHandlers);
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));

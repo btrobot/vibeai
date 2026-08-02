@@ -112,10 +112,15 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 4: Project | `project.service.test.ts` | 11 | ✅ |
 | Phase 4: WebSocket | `ws.service.test.ts` | 14 | ✅ |
 | Phase 5: Billing | `billing.service.test.ts` | 19 | ✅ |
-| **合计** | | **120** | **✅ 全部通过** |
+| Phase 6: Dashboard Page | `DashboardPage.test.tsx` | 4 | ✅ |
+| Phase 6: Billing Page | `BillingPage.test.tsx` | 4 | ✅ |
+| Phase 6: Workspace Page | `WorkspacePage.test.tsx` | 4 | ✅ |
+| Phase 6: Login Page | `LoginPage.test.tsx` | 3 | ✅ |
+| **合计** | | **157** | **✅ 全部通过** |
 
 ### 下一阶段目标
-- Phase 6: 业务前端组件测试
+- 更多前端组件测试（RegisterPage, ToolPage, SettingsPage 等）
+- Phase 7: E2E 测试（Playwright）
 
 ## 关键架构决策
 

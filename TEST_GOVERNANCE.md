@@ -796,9 +796,16 @@ pnpm test -- --reporter=junit --outputFile=test-results.xml
 // E2E: 浏览套餐 → 订阅 → 查看用量
 ```
 
-### Phase 5: 业务前端 (P2) — ⏳ 待开始
+### Phase 5: 业务前端 (P2) — ✅ 已完成部分
 
 ```typescript
-// 组件测试: ToolPage, GalleryPage, SettingsPage, AdminPage
+// 组件测试: DashboardPage (4条), BillingPage (4条), WorkspacePage (4条), LoginPage (3条)
+// 待补充: ToolPage, GalleryPage, SettingsPage, AdminPage, RegisterPage
 // E2E: 电商工具使用流程, 管理后台流程
 ```
+
+### 累计测试覆盖
+
+| 后端 | 前端 | 合计 |
+|------|------|------|
+| 116 条 (8 文件) | 41 条 (5 文件) | **157 条** |
