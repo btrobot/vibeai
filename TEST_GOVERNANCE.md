@@ -778,7 +778,7 @@ pnpm test -- --reporter=junit --outputFile=test-results.xml
 // 待补: S3Provider/LocalProvider 单元测试, 集成测试, 组件测试, E2E
 ```
 
-### Phase 3: Gateway + Task Engine (P0+P1) — ⏳ 待开始
+### Phase 3: Gateway + Task Engine (P0+P1) — ✅ 进行中 (Gateway 完成)
 
 ```typescript
 // 单元测试: GatewayService, TaskService, Router

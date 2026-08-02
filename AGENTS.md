@@ -99,8 +99,18 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - `vitest.config.ts` (前端) + `server/vitest.config.ts` (后端)
 - `src/test/setup.ts` + `server/src/test/setup.ts` — 测试环境初始化
 
+### 测试进展 (续)
+
+| 模块 | 测试文件 | 测试数 | 状态 |
+|------|---------|-------|------|
+| Phase 1: Auth | `auth.service.test.ts` | 9 | ✅ |
+| Phase 1: Zod Schema | `schema.test.ts` | 26 | ✅ |
+| Phase 1: Drizzle Mock | `drizzle-mock.test.ts` | 3 | ✅ |
+| Phase 2: Storage | `storage.service.test.ts` | 12 | ✅ |
+| Phase 3: Gateway | `gateway.service.test.ts` | 25 | ✅ |
+| **合计** | | **53** | **✅ 全部通过** |
+
 ### 下一阶段目标
-- Phase 3: AI Gateway 服务测试 (Capability/Model Registry + Router)
 - Phase 4: Task Engine + WebSocket 服务测试
 - Phase 5: Billing 服务测试
 - Phase 6: 业务前端组件测试
