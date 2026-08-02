@@ -108,10 +108,12 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 1: Drizzle Mock | `drizzle-mock.test.ts` | 3 | ✅ |
 | Phase 2: Storage | `storage.service.test.ts` | 12 | ✅ |
 | Phase 3: Gateway | `gateway.service.test.ts` | 25 | ✅ |
-| **合计** | | **53** | **✅ 全部通过** |
+| Phase 4: Task Engine | `task.service.test.ts` | 23 | ✅ |
+| Phase 4: Project | `project.service.test.ts` | 11 | ✅ |
+| Phase 4: WebSocket | `ws.service.test.ts` | 14 | ✅ |
+| **合计** | | **101** | **✅ 全部通过** |
 
 ### 下一阶段目标
-- Phase 4: Task Engine + WebSocket 服务测试
 - Phase 5: Billing 服务测试
 - Phase 6: 业务前端组件测试
 

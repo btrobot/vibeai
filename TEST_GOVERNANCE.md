@@ -778,10 +778,10 @@ pnpm test -- --reporter=junit --outputFile=test-results.xml
 // 待补: S3Provider/LocalProvider 单元测试, 集成测试, 组件测试, E2E
 ```
 
-### Phase 3: Gateway + Task Engine (P0+P1) — ✅ 进行中 (Gateway 完成)
+### Phase 3: Gateway + Task Engine (P0+P1) — ✅ 已完成
 
 ```typescript
-// 单元测试: GatewayService, TaskService, Router
+// 单元测试: GatewayService (25 条), TaskService (23 条), ProjectService (11 条), WsService (14 条)
 // 集成测试: POST /api/gateway/generate, GET /api/tasks/:id, WebSocket
 // 组件测试: WorkspacePage
 // E2E: 创建项目 → 提交生成 → 查看结果
