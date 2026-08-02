@@ -86,7 +86,45 @@ export enum SubscriptionTier {
   ENTERPRISE = 'enterprise',
 }
 
+// ===== File Schemas =====
+
+export const FileCategorySchema = z.enum([
+  'image', 'video', 'audio', 'document', 'temp', 'private', 'asset', 'backup',
+]);
+
+export interface FileResponse {
+  id: string;
+  userId: string;
+  name: string;
+  originalName: string;
+  key: string;
+  category: string;
+  mimeType: string;
+  size: number;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  isPublic: boolean;
+  thumbnailUrl: string | null;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FileUploadResponse {
+  file: FileResponse;
+  uploadUrl: string;
+}
+
+export interface FileListResponse {
+  files: FileResponse[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // ===== Type Exports =====
 
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 export type LoginInput = z.infer<typeof LoginSchema>;
+export type FileCategoryType = z.infer<typeof FileCategorySchema>;
