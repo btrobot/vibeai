@@ -12,8 +12,8 @@ pnpm install --prefer-frozen-lockfile --prefer-offline --loglevel debug --report
 cd server && pnpm install --prefer-offline --reporter=append-only 2>/dev/null || pnpm install
 cd "${COZE_WORKSPACE_PATH}"
 
-echo "Starting NestJS backend on port 3001..."
-cd server && (nohup pnpm dev > /app/work/logs/bypass/vibeai/backend.log 2>&1 &)
+echo "Starting mock API server on port 3001..."
+cd server && (nohup pnpm tsx scripts/mock-server.ts > /tmp/mock-server.log 2>&1 &)
 cd "${COZE_WORKSPACE_PATH}"
 
 sleep 2
