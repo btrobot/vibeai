@@ -2,7 +2,7 @@ import { Controller, Get, Post, Patch, Body, Param, Req, UseGuards, HttpCode, Ht
 import { BillingService } from './billing.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Request } from 'express';
-import type { CreateSubscriptionInput } from '@shared/index';
+import type { CreateSubscriptionInput } from '../../shared-types';
 
 @Controller('api/billing')
 export class BillingController {

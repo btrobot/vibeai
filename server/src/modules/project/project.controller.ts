@@ -1,8 +1,8 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Req, UseGuards, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CreateProjectSchema, UpdateProjectSchema } from '@shared/index';
-import type { CreateProjectInput, UpdateProjectInput } from '@shared/index';
+import { CreateProjectSchema, UpdateProjectSchema } from '../../shared-types';
+import type { CreateProjectInput, UpdateProjectInput } from '../../shared-types';
 import { ZodValidationPipe } from '../../common/zod-validation.pipe';
 
 @Controller('api/projects')

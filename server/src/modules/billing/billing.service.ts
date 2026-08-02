@@ -9,7 +9,7 @@ import type {
   CreditUsageResponse,
   UsageStatsResponse,
   CreateSubscriptionInput,
-} from '@shared/index';
+} from '../../shared-types';
 
 @Injectable()
 export class BillingService {

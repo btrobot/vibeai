@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DrizzleService } from '../../common/drizzle.service';
 import { projects, tasks } from '../../db/schema/task-engine';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
-import type { CreateProjectInput, UpdateProjectInput, ProjectResponse } from '@shared/index';
+import type { CreateProjectInput, UpdateProjectInput, ProjectResponse } from '../../shared-types';
 
 @Injectable()
 export class ProjectService {

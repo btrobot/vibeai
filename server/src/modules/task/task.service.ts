@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { DrizzleService } from '../../common/drizzle.service';
 import { tasks, executionStates } from '../../db/schema/task-engine';
 import { eq, and, desc, count, asc } from 'drizzle-orm';
-import type { TaskResponse, ExecutionStateResponse } from '@shared/index';
+import type { TaskResponse, ExecutionStateResponse } from '../../shared-types';
 import { BillingService } from '../billing/billing.service';
 
 @Injectable()
