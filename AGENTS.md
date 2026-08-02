@@ -121,11 +121,16 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 6: Settings Page | `SettingsPage.test.tsx` | 7 | ✅ |
 | Phase 6: Admin Page | `AdminPage.test.tsx` | 4 | ✅ |
 | Phase 6: Gallery Page | `GalleryPage.test.tsx` | 4 | ✅ |
-| **合计** | | **182** | **✅ 全部通过** |
+| **合计（单元测试）** | | **182** | **✅ 全部通过** |
+| Phase 7: Auth Integration | `test-integration.js` | 10 | ✅ |
 
 ### 下一阶段目标
-- 更多前端组件测试（RegisterPage, ToolPage, SettingsPage 等）
 - Phase 7: E2E 测试（Playwright）
+- Husky + lint-staged 质量门禁
+
+### 已知问题
+- **tsx ESM loader 与 NestJS 装饰器不兼容**：集成测试无法通过 vitest 运行（`NestFactory.create` 在 tsx 环境下导致 `authService` 为 undefined）。解决方案：先 `pnpm build` 编译为 JavaScript，再通过 `node scripts/test-integration.js` 运行。
+- **JWT 重复 token 问题**：`generateTokens` 方法在相同秒内调用会生成相同的 JWT（`iat` 相同），导致 `sessions.refreshToken` 唯一约束冲突。已通过添加 `jti` 随机值修复。
 
 ## 关键架构决策
 

@@ -252,7 +252,8 @@ export class AuthService {
   }
 
   private async generateTokens(userId: string, email: string, role: string) {
-    const payload = { sub: userId, email, role };
+    const now = Date.now();
+    const payload = { sub: userId, email, role, jti: `${userId}-${now}-${Math.random().toString(36).slice(2, 8)}` };
 
     const accessToken = await this.jwtService.signAsync(payload);
     const refreshToken = await this.jwtService.signAsync(payload, {
