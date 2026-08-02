@@ -16,7 +16,7 @@ import { AuthService } from './auth.service';
 import { createDrizzleMockForNestJS, mockSingle, mockEmpty, mockReturning } from '../../test/drizzle-mock';
 import { createMockJwtService } from '../../test/nest-test-utils';
 import { buildUser } from '../../test/factories';
-import { DRIZZLE } from '../../common/drizzle.module';
+import { DRIZZLE } from '../../common/drizzle.constants';
 
 // 模拟 bcrypt
 vi.mock('bcrypt', () => ({

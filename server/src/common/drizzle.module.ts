@@ -2,8 +2,8 @@ import { Global, Module } from '@nestjs/common';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../db/schema';
-
-export const DRIZZLE = 'DRIZZLE';
+import { DrizzleService } from './drizzle.service';
+import { DRIZZLE } from './drizzle.constants';
 
 @Global()
 @Module({
@@ -16,7 +16,8 @@ export const DRIZZLE = 'DRIZZLE';
         return drizzle(client, { schema });
       },
     },
+    DrizzleService,
   ],
-  exports: [DRIZZLE],
+  exports: [DRIZZLE, DrizzleService],
 })
 export class DrizzleModule {}

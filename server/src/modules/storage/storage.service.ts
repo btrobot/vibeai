@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { DRIZZLE } from '../../common/drizzle.module';
+import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { files } from '../../db/schema/files';

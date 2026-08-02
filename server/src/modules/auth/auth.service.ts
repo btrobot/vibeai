@@ -8,7 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { eq, and } from 'drizzle-orm';
-import { DRIZZLE } from '../../common/drizzle.module';
+import { DRIZZLE } from '../../common/drizzle.constants';
 import { users, sessions, loginLogs } from '../../db/schema';
 import { RegisterDto, LoginDto } from './dto';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';

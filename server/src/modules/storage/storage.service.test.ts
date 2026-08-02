@@ -13,7 +13,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Inject } from '@nestjs/common';
-import { DRIZZLE } from '../../common/drizzle.module';
+import { DRIZZLE } from '../../common/drizzle.constants';
 import { StorageService } from './storage.service';
 import { createDrizzleMockForNestJS, mockSingle, mockEmpty, mockMany, mockReturning } from '../../test/drizzle-mock';
 import { buildFile, buildUser } from '../../test/factories';

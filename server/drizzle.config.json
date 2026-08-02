@@ -3,6 +3,6 @@
   "schema": "./src/db/schema/index.ts",
   "out": "./drizzle",
   "dbCredentials": {
-    "url": "postgresql://postgres:postgres@localhost:5432/vibeai"
+    "url": "postgresql://vibeai:vibeai123@localhost:5432/vibeai"
   }
 }
