@@ -171,7 +171,71 @@ export const GenerationRequestSchema = z.object({
   config: z.record(z.unknown()).optional(),
 });
 
-// ===== Type Exports =====
+// ===== Billing Types =====
+
+export interface PlanResponse {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  credits: number;
+  priceMonthly: number;
+  priceYearly: number | null;
+  maxProjects: number;
+  maxStorageBytes: number;
+  maxConcurrentTasks: number;
+  capabilities: string[];
+  features: Record<string, unknown>;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface SubscriptionResponse {
+  id: string;
+  userId: string;
+  planId: string;
+  plan: PlanResponse | null;
+  status: 'active' | 'cancelled' | 'expired' | 'trialing';
+  billingCycle: 'monthly' | 'yearly';
+  creditsRemaining: number;
+  creditsUsed: number;
+  currentPeriodStart: string;
+  currentPeriodEnd: string | null;
+  autoRenew: boolean;
+  createdAt: string;
+}
+
+export interface CreditUsageResponse {
+  id: string;
+  userId: string;
+  taskId: string | null;
+  credits: number;
+  action: string;
+  description: string | null;
+  balanceAfter: number;
+  createdAt: string;
+}
+
+export interface UsageStatsResponse {
+  totalCreditsUsed: number;
+  creditsRemaining: number;
+  creditsUsedThisMonth: number;
+  totalTasksCompleted: number;
+  totalImagesGenerated: number;
+  totalVideosGenerated: number;
+  storageUsedBytes: number;
+  planSlug: string;
+  planName: string;
+  periodStart: string;
+  periodEnd: string | null;
+}
+
+export const CreateSubscriptionSchema = z.object({
+  planSlug: z.enum(['free', 'starter', 'pro', 'enterprise']),
+  billingCycle: z.enum(['monthly', 'yearly']).default('monthly'),
+});
+
+export type CreateSubscriptionInput = z.infer<typeof CreateSubscriptionSchema>;
 
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 export type LoginInput = z.infer<typeof LoginSchema>;

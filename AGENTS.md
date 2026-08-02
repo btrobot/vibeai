@@ -54,7 +54,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **Phase 2 ✅**: 存储系统（文件上传/管理，Provider 抽象层 S3 + Local）
 - **Phase 3 ✅**: AI Gateway（能力注册表/模型注册表/路由/生成任务提交）
 - **Phase 4 ✅**: 任务执行引擎（Project/Task/ExecutionState + WebSocket 实时推送）
-- **Phase 5**: 计费系统
+- **Phase 5 ✅**: 计费系统（套餐管理/订阅/信用额度/用量统计/自动扣减）
 - **Phase 6**: 业务前端
 
 ## 开发规范

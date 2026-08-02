@@ -7,6 +7,7 @@ import { GatewayModule } from './modules/gateway/gateway.module';
 import { WsModule } from './modules/ws/ws.module';
 import { ProjectModule } from './modules/project/project.module';
 import { TaskModule } from './modules/task/task.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { DrizzleModule } from './common/drizzle.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { DrizzleModule } from './common/drizzle.module';
     GatewayModule,
     ProjectModule,
     TaskModule,
+    BillingModule,
   ],
 })
 export class AppModule {}

@@ -1,14 +1,18 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { DrizzleService } from '../../common/drizzle.service';
 import { tasks, executionStates } from '../../db/schema/task-engine';
 import { eq, and, desc, count, asc } from 'drizzle-orm';
 import type { TaskResponse, ExecutionStateResponse } from '@shared/index';
+import { BillingService } from '../billing/billing.service';
 
 @Injectable()
 export class TaskService {
   private readonly logger = new Logger(TaskService.name);
 
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(
+    private readonly drizzle: DrizzleService,
+    private readonly billing: BillingService,
+  ) {}
 
   private toTaskResponse(t: typeof tasks.$inferSelect): TaskResponse {
     return {
@@ -54,7 +58,16 @@ export class TaskService {
     input: Record<string, unknown>;
     modelSlug?: string;
     priority?: number;
+    creditCost?: number;
   }): Promise<TaskResponse> {
+    // Check credits if creditCost is specified
+    if (params.creditCost && params.creditCost > 0) {
+      const hasCredits = await this.billing.checkCredits(params.userId, params.creditCost);
+      if (!hasCredits) {
+        throw new BadRequestException('信用额度不足，请升级套餐或等待额度恢复');
+      }
+    }
+
     const [task] = await this.drizzle.db
       .insert(tasks)
       .values({
@@ -146,6 +159,64 @@ export class TaskService {
     if (!task) throw new NotFoundException('任务不存在');
     this.logger.log(`Task cancelled: ${taskId}`);
     return this.toTaskResponse(task);
+  }
+
+  /**
+   * Complete a task with credit deduction
+   * Deducts credits from user's account on successful completion
+   */
+  async completeTaskWithCredits(
+    taskId: string,
+    userId: string,
+    creditCost: number,
+    result: Record<string, unknown>,
+    output?: Record<string, unknown>,
+  ): Promise<TaskResponse> {
+    const task = await this.updateTaskStatus(taskId, {
+      status: 'completed',
+      progress: 100,
+      result,
+      output: output ?? result,
+      completedAt: new Date(),
+    });
+
+    // Deduct credits
+    if (creditCost > 0) {
+      const deducted = await this.billing.deductCredits(
+        userId,
+        taskId,
+        creditCost,
+        `任务执行消耗: ${task.type}`,
+      );
+      if (!deducted) {
+        this.logger.warn(`用户 ${userId} 额度不足，但任务已完成: ${taskId}`);
+      }
+    }
+
+    return task;
+  }
+
+  /**
+   * Fail a task with credit refund
+   */
+  async failTaskWithRefund(
+    taskId: string,
+    userId: string,
+    creditCost: number,
+    errorMessage: string,
+  ): Promise<TaskResponse> {
+    const task = await this.updateTaskStatus(taskId, {
+      status: 'failed',
+      errorMessage,
+      completedAt: new Date(),
+    });
+
+    // Refund credits if task failed
+    if (creditCost > 0) {
+      await this.billing.refundCredits(userId, taskId, creditCost, '任务失败额度返还');
+    }
+
+    return task;
   }
 
   // ===== Execution States =====

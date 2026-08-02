@@ -4,6 +4,7 @@ import { pgTable, text, timestamp, uuid, integer, varchar, boolean, index } from
 export * from './files';
 export * from './gateway';
 export * from './task-engine';
+export * from './billing';
 
 // ===== Users Table =====
 export const users = pgTable('users', {
