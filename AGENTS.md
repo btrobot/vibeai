@@ -116,7 +116,12 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 6: Billing Page | `BillingPage.test.tsx` | 4 | ✅ |
 | Phase 6: Workspace Page | `WorkspacePage.test.tsx` | 4 | ✅ |
 | Phase 6: Login Page | `LoginPage.test.tsx` | 3 | ✅ |
-| **合计** | | **157** | **✅ 全部通过** |
+| Phase 6: Register Page | `RegisterPage.test.tsx` | 6 | ✅ |
+| Phase 6: Tool Page | `ToolPage.test.tsx` | 7 | ✅ |
+| Phase 6: Settings Page | `SettingsPage.test.tsx` | 7 | ✅ |
+| Phase 6: Admin Page | `AdminPage.test.tsx` | 4 | ✅ |
+| Phase 6: Gallery Page | `GalleryPage.test.tsx` | 4 | ✅ |
+| **合计** | | **182** | **✅ 全部通过** |
 
 ### 下一阶段目标
 - 更多前端组件测试（RegisterPage, ToolPage, SettingsPage 等）
