@@ -59,6 +59,12 @@ export function createDrizzleMock(): DrizzleMock {
     set: vi.fn(() => chainable),
     delete: vi.fn(() => chainable),
 
+    // ── 事务支持 ──
+    // 注: 事务回调接收的 tx 与 db 是同一个 mock 对象
+    transaction: vi.fn(async (fn: (tx: any) => Promise<any>) => {
+      return fn(chainable);
+    }),
+
     // ── 终端操作（返回 Promise） ──
     execute: vi.fn(() => Promise.resolve(chainable._result ?? [])),
     all: vi.fn(() => Promise.resolve(chainable._result ?? [])),

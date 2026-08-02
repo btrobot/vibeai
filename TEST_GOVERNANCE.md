@@ -787,10 +787,10 @@ pnpm test -- --reporter=junit --outputFile=test-results.xml
 // E2E: 创建项目 → 提交生成 → 查看结果
 ```
 
-### Phase 4: Billing 模块 (P1) — ⏳ 待开始
+### Phase 4: Billing 模块 (P1) — ✅ 已完成
 
 ```typescript
-// 单元测试: BillingService (credit deduction, plan validation)
+// 单元测试: BillingService (19 条: plan/subscription/credit/usage/stats)
 // 集成测试: POST /api/billing/subscribe, GET /api/billing/usage
 // 组件测试: BillingPage
 // E2E: 浏览套餐 → 订阅 → 查看用量
