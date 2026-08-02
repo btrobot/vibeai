@@ -177,3 +177,84 @@ export type RegisterInput = z.infer<typeof RegisterSchema>;
 export type LoginInput = z.infer<typeof LoginSchema>;
 export type FileCategoryType = z.infer<typeof FileCategorySchema>;
 export type GenerationRequestInput = z.infer<typeof GenerationRequestSchema>;
+
+// ===== Task Engine Types =====
+
+export enum ProjectStatus {
+  DRAFT = 'draft',
+  ACTIVE = 'active',
+  ARCHIVED = 'archived',
+}
+
+export interface ProjectResponse {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  coverImage: string | null;
+  status: ProjectStatus;
+  tags: string[];
+  totalTasks: number;
+  completedTasks: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const CreateProjectSchema = z.object({
+  name: z.string().min(1, '项目名称不能为空').max(200, '项目名称最多200字'),
+  description: z.string().max(1000).optional(),
+  template: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const UpdateProjectSchema = CreateProjectSchema.partial();
+
+export type CreateProjectInput = z.infer<typeof CreateProjectSchema>;
+export type UpdateProjectInput = z.infer<typeof UpdateProjectSchema>;
+
+export interface TaskResponse {
+  id: string;
+  projectId: string | null;
+  userId: string;
+  type: string;
+  status: TaskStatus;
+  priority: number;
+  progress: number;
+  input: Record<string, unknown>;
+  output: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
+  modelSlug: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  estimatedCompletionAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExecutionStateResponse {
+  id: string;
+  taskId: string;
+  step: string;
+  status: TaskStatus;
+  progress: number;
+  message: string | null;
+  metadata: Record<string, unknown> | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface WsTaskUpdate {
+  type: 'task:progress' | 'task:completed' | 'task:failed' | 'task:cancelled';
+  payload: {
+    taskId: string;
+    projectId: string | null;
+    status: TaskStatus;
+    progress: number;
+    step?: string;
+    message?: string;
+    result?: Record<string, unknown>;
+    error?: string;
+  };
+}

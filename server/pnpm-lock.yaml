@@ -66,7 +66,7 @@ importers:
         specifier: ^14.0.1
         version: 14.0.1
       ws:
-        specifier: ^8.18.0
+        specifier: ^8.21.1
         version: 8.21.1
       zod:
         specifier: ^3.24.0
@@ -91,7 +91,7 @@ importers:
         specifier: ^11.0.0
         version: 11.0.0
       '@types/ws':
-        specifier: ^8.5.14
+        specifier: ^8.18.1
         version: 8.18.1
       tsx:
         specifier: ^4.19.2

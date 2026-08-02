@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { WsService } from './modules/ws/ws.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -24,6 +25,13 @@ async function bootstrap() {
 
   const port = process.env.BACKEND_PORT || 3001;
   await app.listen(port);
+
+  // Initialize WebSocket server on the same HTTP server
+  const httpServer = app.getHttpServer();
+  const wsService = app.get(WsService);
+  wsService.initialize(httpServer);
+
   console.log(`Backend running on http://localhost:${port}`);
+  console.log(`WebSocket server running on ws://localhost:${port}/ws/tasks`);
 }
 bootstrap();

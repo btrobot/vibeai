@@ -3,6 +3,7 @@ import { pgTable, text, timestamp, uuid, integer, varchar, boolean, index } from
 // ===== Re-export sub-schemas =====
 export * from './files';
 export * from './gateway';
+export * from './task-engine';
 
 // ===== Users Table =====
 export const users = pgTable('users', {
