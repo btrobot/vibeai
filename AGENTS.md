@@ -73,6 +73,16 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - 前后端共享类型（Zod schema）
 - 每个模块按 Schema → Service → Controller → Module 组织
 
+## 测试规范
+
+详见 `TEST_GOVERNANCE.md` — 基于测试金字塔 + 质量门禁体系，包含：
+- 测试金字塔策略（单元 65% / 组件 15% / 集成 15% / E2E 5%）
+- 各模块覆盖率目标（服务层 ≥ 90% 行，Zod Schema 100%）
+- 质量门禁（提交前/PR/部署三级门禁）
+- Drizzle 链式调用 Mock 模板 + WebSocket Mock 模板
+- 测试数据工厂模式
+- 红线规则与降级策略
+
 ## 关键架构决策
 
 - 前后端分离，独立端口运行（Vite 5000 / NestJS 3001）
