@@ -123,8 +123,57 @@ export interface FileListResponse {
   pageSize: number;
 }
 
+// ===== AI Gateway Schemas =====
+
+export interface CapabilityDefinition {
+  slug: string;
+  name: string;
+  description: string;
+  category: 'text' | 'image' | 'video' | 'analysis';
+  icon: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  config: Record<string, unknown>;
+  sortOrder: number;
+}
+
+export interface ModelDefinition {
+  slug: string;
+  name: string;
+  provider: string;
+  description: string;
+  capabilities: string[];
+  config: Record<string, unknown>;
+  inputTypes: string[];
+  outputTypes: string[];
+  sortOrder: number;
+}
+
+export interface GenerationRequest {
+  capabilitySlug: string;
+  modelSlug?: string;
+  input: Record<string, unknown>;
+  config?: Record<string, unknown>;
+}
+
+export interface GenerationTaskResponse {
+  taskId: string;
+  status: string;
+  capabilitySlug: string;
+  modelSlug: string;
+  createdAt: string;
+}
+
+export const GenerationRequestSchema = z.object({
+  capabilitySlug: z.string().min(1, '请选择能力'),
+  modelSlug: z.string().optional(),
+  input: z.record(z.unknown()),
+  config: z.record(z.unknown()).optional(),
+});
+
 // ===== Type Exports =====
 
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 export type LoginInput = z.infer<typeof LoginSchema>;
 export type FileCategoryType = z.infer<typeof FileCategorySchema>;
+export type GenerationRequestInput = z.infer<typeof GenerationRequestSchema>;

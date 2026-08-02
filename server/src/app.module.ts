@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { GatewayModule } from './modules/gateway/gateway.module';
 import { DrizzleModule } from './common/drizzle.module';
 
 @Module({
@@ -15,6 +16,7 @@ import { DrizzleModule } from './common/drizzle.module';
     AuthModule,
     UserModule,
     StorageModule,
+    GatewayModule,
   ],
 })
 export class AppModule {}

@@ -1,5 +1,9 @@
 import { pgTable, text, timestamp, uuid, integer, varchar, boolean, index } from 'drizzle-orm/pg-core';
 
+// ===== Re-export sub-schemas =====
+export * from './files';
+export * from './gateway';
+
 // ===== Users Table =====
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
