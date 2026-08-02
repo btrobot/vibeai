@@ -1,0 +1,8 @@
+{
+  "dialect": "postgresql",
+  "schema": "./src/db/schema/index.ts",
+  "out": "./drizzle",
+  "dbCredentials": {
+    "url": "postgresql://postgres:postgres@localhost:5432/vibeai"
+  }
+}

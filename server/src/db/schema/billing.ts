@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, integer, varchar, boolean, jsonb, decimal, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, integer, bigint, varchar, boolean, jsonb, decimal, index } from 'drizzle-orm/pg-core';
 import { users } from './index';
 import { tasks } from './task-engine';
 
@@ -12,7 +12,7 @@ export const subscriptionPlans = pgTable('subscription_plans', {
   priceMonthly: decimal('price_monthly', { precision: 10, scale: 2 }).notNull().default('0'),
   priceYearly: decimal('price_yearly', { precision: 10, scale: 2 }),
   maxProjects: integer('max_projects').notNull().default(5),
-  maxStorageBytes: integer('max_storage_bytes').notNull().default(104857600), // 100MB
+  maxStorageBytes: bigint('max_storage_bytes', { mode: 'number' }).notNull().default(104857600), // 100MB
   maxConcurrentTasks: integer('max_concurrent_tasks').notNull().default(1),
   capabilities: text('capabilities').array().default([]),
   features: jsonb('features').default({}),

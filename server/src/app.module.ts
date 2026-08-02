@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './modules/auth/auth.module';
-import { UserModule } from './modules/user/user.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
 import { WsModule } from './modules/ws/ws.module';
@@ -19,7 +18,6 @@ import { DrizzleModule } from './common/drizzle.module';
     DrizzleModule,
     WsModule,
     AuthModule,
-    UserModule,
     StorageModule,
     GatewayModule,
     ProjectModule,

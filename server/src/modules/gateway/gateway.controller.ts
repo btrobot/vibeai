@@ -15,7 +15,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GenerateSchema } from './dto/index';
 import type { GenerateInput } from './dto/index';
 
-@Controller('api/gateway')
+@Controller('gateway')
 export class GatewayController {
   constructor(private readonly gatewayService: GatewayService) {}
 

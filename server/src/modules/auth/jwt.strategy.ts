@@ -1,7 +1,6 @@
 import { Injectable, UnauthorizedException, Inject } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config';
 import { eq } from 'drizzle-orm';
 import { DRIZZLE } from '../../common/drizzle.module';
 import { users } from '../../db/schema';
@@ -18,12 +17,11 @@ interface JwtPayload {
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     @Inject(DRIZZLE) private db: PostgresJsDatabase<typeof schema>,
-    configService: ConfigService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('jwt.secret')!,
+      secretOrKey: process.env.JWT_SECRET || 'vibeai-dev-jwt-secret-key-2026',
     });
   }
 

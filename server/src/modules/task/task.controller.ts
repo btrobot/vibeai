@@ -2,7 +2,7 @@ import { Controller, Get, Post, Param, Query, Req, UseGuards, ParseUUIDPipe } fr
 import { TaskService } from './task.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
-@Controller('api/tasks')
+@Controller('tasks')
 @UseGuards(JwtAuthGuard)
 export class TaskController {
   constructor(private readonly taskService: TaskService) {}

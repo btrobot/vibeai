@@ -18,7 +18,7 @@ import { StorageService } from './storage.service';
 import { uploadFileSchema, listFilesQuerySchema } from './dto';
 import type { Request } from 'express';
 
-@Controller('api/storage')
+@Controller('storage')
 @UseGuards(JwtAuthGuard)
 export class StorageController {
   constructor(private readonly storageService: StorageService) {}

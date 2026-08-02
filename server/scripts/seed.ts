@@ -24,6 +24,9 @@ async function main() {
   await db.delete(schema.executionStates);
   await db.delete(schema.tasks);
   await db.delete(schema.projects);
+  await db.delete(schema.aiCapabilities);
+  await db.delete(schema.generationTasks);
+  await db.delete(schema.files);
   await db.delete(schema.sessions);
   await db.delete(schema.loginLogs);
   await db.delete(schema.oauthAccounts);
@@ -38,7 +41,7 @@ async function main() {
     .insert(schema.users)
     .values({
       email: 'test@vibeai.com',
-      nickname: '测试用户',
+      name: '测试用户',
       passwordHash,
       role: 'user',
       credits: 500,
@@ -51,7 +54,7 @@ async function main() {
     .insert(schema.users)
     .values({
       email: 'admin@vibeai.com',
-      nickname: '管理员',
+      name: '管理员',
       passwordHash: adminHash,
       role: 'admin',
       credits: 99999,
@@ -70,14 +73,12 @@ async function main() {
       slug: 'free',
       name: '免费版',
       description: '适合个人体验，基本 AI 创作功能',
-      price: 0,
-      currency: 'CNY',
-      interval: 'month' as const,
       credits: 100,
+      priceMonthly: '0',
       maxProjects: 3,
-      maxConcurrent: 1,
+      maxConcurrentTasks: 1,
       maxStorageBytes: 104857600, // 100MB
-      features: ['基础 AI 生成', '3 个项目', '1 个并发任务', '100MB 存储'],
+      features: { label: '基础 AI 生成', projectLimit: 3, storageLimit: '100MB' },
       sortOrder: 1,
       isActive: true,
     },
@@ -85,14 +86,12 @@ async function main() {
       slug: 'starter',
       name: '入门版',
       description: '适合个人创作者，更多额度与功能',
-      price: 4900, // ¥49
-      currency: 'CNY',
-      interval: 'month' as const,
       credits: 500,
+      priceMonthly: '49',
       maxProjects: 10,
-      maxConcurrent: 3,
+      maxConcurrentTasks: 3,
       maxStorageBytes: 1073741824, // 1GB
-      features: ['所有 AI 生成能力', '10 个项目', '3 个并发任务', '1GB 存储', '无水印'],
+      features: { label: '所有 AI 生成能力', projectLimit: 10, storageLimit: '1GB', watermark: false },
       sortOrder: 2,
       isActive: true,
     },
@@ -100,14 +99,12 @@ async function main() {
       slug: 'pro',
       name: '专业版',
       description: '适合专业创作者与小型团队',
-      price: 19900, // ¥199
-      currency: 'CNY',
-      interval: 'month' as const,
       credits: 2000,
+      priceMonthly: '199',
       maxProjects: 50,
-      maxConcurrent: 10,
+      maxConcurrentTasks: 10,
       maxStorageBytes: 10737418240, // 10GB
-      features: ['所有 AI 生成能力', '50 个项目', '10 个并发任务', '10GB 存储', '无水印', '优先生成', 'API 访问'],
+      features: { label: '所有 AI 生成能力', projectLimit: 50, storageLimit: '10GB', watermark: false, priority: true, api: true },
       sortOrder: 3,
       isActive: true,
     },
@@ -115,23 +112,19 @@ async function main() {
       slug: 'enterprise',
       name: '企业版',
       description: '适合企业级用户，全功能与专属支持',
-      price: 79900, // ¥799
-      currency: 'CNY',
-      interval: 'month' as const,
       credits: 8000,
+      priceMonthly: '799',
       maxProjects: 999999,
-      maxConcurrent: 30,
+      maxConcurrentTasks: 30,
       maxStorageBytes: 107374182400, // 100GB
-      features: ['所有 AI 生成能力', '不限项目', '30 个并发任务', '100GB 存储', '无水印', '优先生成', 'API 访问', '专属支持'],
+      features: { label: '所有 AI 生成能力', projectLimit: '无限', storageLimit: '100GB', watermark: false, priority: true, api: true, support: '专属' },
       sortOrder: 4,
       isActive: true,
     },
   ];
 
-  for (const plan of plans) {
-    await db.insert(schema.subscriptionPlans).values(plan);
-  }
-  console.log(`  ✓ 已创建 ${plans.length} 个套餐`);
+  const createdPlans = await db.insert(schema.subscriptionPlans).values(plans).returning();
+  console.log(`  ✓ 已创建 ${createdPlans.length} 个套餐`);
 
   // ========== 创建能力注册表 ==========
   console.log('Creating AI capabilities...');
@@ -341,20 +334,19 @@ async function main() {
   console.log(`  ✓ 已创建 ${sampleProjects.length} 个示例项目`);
 
   // ========== 为测试用户激活入门版订阅 ==========
-  const starterPlan = plans[1];
+  const starterPlan = createdPlans[1];
   const now = new Date();
   const endDate = new Date(now);
   endDate.setMonth(endDate.getMonth() + 1);
 
   await db.insert(schema.subscriptions).values({
     userId: testUser.id,
-    planSlug: starterPlan.slug,
+    planId: starterPlan.id,
     status: 'active',
-    creditsTotal: starterPlan.credits,
     creditsUsed: 0,
     creditsRemaining: starterPlan.credits,
-    startDate: now,
-    endDate,
+    currentPeriodStart: now,
+    currentPeriodEnd: endDate,
     autoRenew: true,
     createdAt: now,
     updatedAt: now,
@@ -362,19 +354,18 @@ async function main() {
   console.log(`  ✓ 已为测试用户激活入门版订阅`);
 
   // ========== 为管理员激活企业版订阅 ==========
-  const enterprisePlan = plans[3];
+  const enterprisePlan = createdPlans[3];
   const adminEndDate = new Date(now);
   adminEndDate.setFullYear(adminEndDate.getFullYear() + 1);
 
   await db.insert(schema.subscriptions).values({
     userId: adminUser.id,
-    planSlug: enterprisePlan.slug,
+    planId: enterprisePlan.id,
     status: 'active',
-    creditsTotal: enterprisePlan.credits,
     creditsUsed: 0,
     creditsRemaining: enterprisePlan.credits,
-    startDate: now,
-    endDate: adminEndDate,
+    currentPeriodStart: now,
+    currentPeriodEnd: adminEndDate,
     autoRenew: true,
     createdAt: now,
     updatedAt: now,

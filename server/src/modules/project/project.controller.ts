@@ -5,7 +5,7 @@ import { CreateProjectSchema, UpdateProjectSchema } from '../../shared-types';
 import type { CreateProjectInput, UpdateProjectInput } from '../../shared-types';
 import { ZodValidationPipe } from '../../common/zod-validation.pipe';
 
-@Controller('api/projects')
+@Controller('projects')
 @UseGuards(JwtAuthGuard)
 export class ProjectController {
   constructor(private readonly projectService: ProjectService) {}

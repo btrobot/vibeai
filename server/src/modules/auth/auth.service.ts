@@ -6,7 +6,6 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE } from '../../common/drizzle.module';
@@ -23,10 +22,9 @@ export class AuthService {
   constructor(
     @Inject(DRIZZLE) private db: PostgresJsDatabase<typeof schema>,
     private jwtService: JwtService,
-    private configService: ConfigService,
   ) {
-    this.saltRounds = this.configService.get<number>('bcrypt.saltRounds', 12);
-    this.refreshExpiresIn = this.configService.get<string>('jwt.refreshExpiresIn', '7d');
+    this.saltRounds = 12;
+    this.refreshExpiresIn = '7d';
   }
 
   async register(dto: RegisterDto) {

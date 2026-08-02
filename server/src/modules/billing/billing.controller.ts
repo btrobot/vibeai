@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Request } from 'express';
 import type { CreateSubscriptionInput } from '../../shared-types';
 
-@Controller('api/billing')
+@Controller('billing')
 export class BillingController {
   constructor(private readonly billing: BillingService) {}
 
