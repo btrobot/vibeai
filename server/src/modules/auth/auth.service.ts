@@ -21,7 +21,7 @@ export class AuthService {
 
   constructor(
     @Inject(DRIZZLE) private db: PostgresJsDatabase<typeof schema>,
-    private jwtService: JwtService,
+    @Inject(JwtService) private jwtService: JwtService,
   ) {
     this.saltRounds = 12;
     this.refreshExpiresIn = '7d';
