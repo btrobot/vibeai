@@ -1,11 +1,11 @@
 import { vi } from 'vitest';
-import { createDrizzleMock } from './drizzle-mock';
+import { createDrizzleMockForNestJS } from './drizzle-mock';
 
 /**
  * NestJS 测试模块工厂
  *
  * 提供快速创建 NestJS 测试模块的辅助函数，
- * 自动注入 Mock Drizzle Provider。
+ * 自动注入 Mock Drizzle Provider（非 thenable 版本）。
  */
 
 export const DRIZZLE = 'DRIZZLE';
@@ -13,7 +13,7 @@ export const DRIZZLE = 'DRIZZLE';
 export function createMockDrizzleProvider() {
   return {
     provide: DRIZZLE,
-    useValue: createDrizzleMock(),
+    useValue: createDrizzleMockForNestJS(),
   };
 }
 

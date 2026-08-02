@@ -83,6 +83,28 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - 测试数据工厂模式
 - 红线规则与降级策略
 
+## 测试进展
+
+### Phase 1: 认证系统 ✅ (28/28 tests passing)
+- **Zod Schema** (26 tests) — 全部通过
+- **Auth Service** (9 tests) — 注册/登录/刷新/用户信息/登出
+- **Drizzle Mock** (3 tests) — 链式调用的 thenable 协议与 NestJS 兼容性
+- **Storage Service** (12 tests) — 上传/列表/详情/删除/签名URL/统计
+
+### 测试基础设施
+- `server/src/test/drizzle-mock.ts` — Drizzle ORM 链式调用 Mock
+- `server/src/test/ws-mock.ts` — WebSocket Mock
+- `server/src/test/nest-test-utils.ts` — NestJS 测试工具（JwtService mock, AuthGuard mock）
+- `server/src/test/factories.ts` — 测试数据工厂（8 个工厂）
+- `vitest.config.ts` (前端) + `server/vitest.config.ts` (后端)
+- `src/test/setup.ts` + `server/src/test/setup.ts` — 测试环境初始化
+
+### 下一阶段目标
+- Phase 3: AI Gateway 服务测试 (Capability/Model Registry + Router)
+- Phase 4: Task Engine + WebSocket 服务测试
+- Phase 5: Billing 服务测试
+- Phase 6: 业务前端组件测试
+
 ## 关键架构决策
 
 - 前后端分离，独立端口运行（Vite 5000 / NestJS 3001）

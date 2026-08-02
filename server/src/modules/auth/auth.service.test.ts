@@ -13,7 +13,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { createDrizzleMock, mockSingle, mockEmpty, mockReturning } from '../../test/drizzle-mock';
+import { createDrizzleMockForNestJS, mockSingle, mockEmpty, mockReturning } from '../../test/drizzle-mock';
 import { createMockJwtService } from '../../test/nest-test-utils';
 import { buildUser } from '../../test/factories';
 import { DRIZZLE } from '../../common/drizzle.module';
@@ -30,11 +30,11 @@ vi.mock('bcrypt', () => ({
 
 describe('AuthService', () => {
   let authService: AuthService;
-  let db: ReturnType<typeof createDrizzleMock>;
+  let db: ReturnType<typeof createDrizzleMockForNestJS>;
   let jwtService: ReturnType<typeof createMockJwtService>;
 
   beforeEach(async () => {
-    db = createDrizzleMock();
+    db = createDrizzleMockForNestJS();
     jwtService = createMockJwtService();
 
     const module: TestingModule = await Test.createTestingModule({
@@ -56,7 +56,8 @@ describe('AuthService', () => {
     };
 
     it('应该成功注册新用户', async () => {
-      mockEmpty(db);
+      // limit 首次调用返回 []（无重复），returning 返回新用户
+      (db as any).limit.mockResolvedValueOnce([]);
       mockReturning(db, [
         {
           id: 'user-new',

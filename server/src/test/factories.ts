@@ -209,16 +209,16 @@ export interface TestFile {
   userId: string;
   originalName: string;
   mimeType: string;
-  sizeBytes: number;
-  storagePath: string;
-  storageProvider: string;
+  size: number;
   category: string;
+  storageKey: string;
+  url: string;
+  isPublic: boolean;
   width: number | null;
   height: number | null;
   duration: number | null;
-  tags: string[];
-  checksum: string | null;
-  isPublic: boolean;
+  thumbnailKey: string | null;
+  metadata: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -229,16 +229,16 @@ export function buildFile(partial?: Partial<TestFile>): TestFile {
     userId: 'user-1',
     originalName: 'test.png',
     mimeType: 'image/png',
-    sizeBytes: 102400,
-    storagePath: 'uploads/test.png',
-    storageProvider: 'local',
+    size: 102400,
     category: 'image',
+    storageKey: 'uploads/test.png',
+    url: 'https://cdn.vibeai.com/uploads/test.png',
+    isPublic: false,
     width: 1024,
     height: 768,
     duration: null,
-    tags: [],
-    checksum: 'abc123',
-    isPublic: false,
+    thumbnailKey: null,
+    metadata: null,
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
     ...partial,
