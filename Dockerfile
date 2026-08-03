@@ -82,6 +82,10 @@ FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 
 # ─── OCI 标准标签（放在最终阶段确保生效）───
+ARG PROJECT_NAME=vibeai
+ARG PROJECT_VERSION=1.0.0
+ARG BUILD_DATE
+ARG GIT_COMMIT
 LABEL org.opencontainers.image.title="${PROJECT_NAME}"
 LABEL org.opencontainers.image.description="VibeAI 内容创作平台 — AI 视频/图片生成 + 电商内容工具"
 LABEL org.opencontainers.image.version="${PROJECT_VERSION}"
