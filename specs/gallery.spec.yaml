@@ -11,7 +11,7 @@ last_updated: "2025-04-06"
 entities:
   - name: GalleryWork
     table: gallery_works
-    description: "社区画廊作品"
+    description: "画廊作品"
     fields:
       - name: id
         type: uuid
@@ -21,61 +21,44 @@ entities:
         type: uuid
         notNull: true
         fk: { table: "users", field: "id", onDelete: "cascade" }
-      - name: taskId
-        type: uuid
-        nullable: true
-        fk: { table: "tasks", field: "id", onDelete: "set null" }
       - name: title
         type: varchar(255)
         notNull: true
-      - name: description
+        default: ""
+      - name: imageUrl
+        type: text
+        nullable: true
+      - name: videoUrl
         type: text
         nullable: true
       - name: type
-        type: varchar(50)
+        type: varchar(20)
         notNull: true
-        enum: ["image", "video", "audio"]
-      - name: url
-        type: text
-        notNull: true
-      - name: thumbnailUrl
-        type: text
-        nullable: true
-      - name: tags
-        type: "text[]"
-        nullable: true
-        default: "[]"
-      - name: width
-        type: integer
-        nullable: true
-      - name: height
-        type: integer
-        nullable: true
-      - name: duration
-        type: integer
-        nullable: true
+        default: image
       - name: prompt
         type: text
         nullable: true
-      - name: modelUsed
+      - name: modelSlug
         type: varchar(100)
         nullable: true
-      - name: likeCount
+      - name: capabilitySlug
+        type: varchar(100)
+        nullable: true
+      - name: thumbnailUrl
+        type: text
+        nullable: true
+      - name: likes
         type: integer
         notNull: true
         default: 0
-      - name: commentCount
+      - name: views
         type: integer
         notNull: true
         default: 0
-      - name: isFeatured
+      - name: isPublished
         type: boolean
         notNull: true
         default: false
-      - name: isPublic
-        type: boolean
-        notNull: true
-        default: true
       - name: createdAt
         type: timestamp
         notNull: true
@@ -85,22 +68,21 @@ entities:
         notNull: true
         default: now()
     indexes:
-      - fields: ["userId"]
-        name: gallery_works_user_id_idx
-      - fields: ["type"]
-        name: gallery_works_type_idx
-      - fields: ["tags"]
-        name: gallery_works_tags_idx
-      - fields: ["createdAt"]
-        name: gallery_works_created_at_idx
-      - fields: ["likeCount"]
-        name: gallery_works_like_count_idx
-      - fields: ["isFeatured"]
-        name: gallery_works_featured_idx
+      - name: gallery_works_user_id_idx
+        fields: [userId]
+      - name: gallery_works_type_idx
+        fields: [type]
+      - name: gallery_works_is_published_idx
+        fields: [isPublished]
+      - name: gallery_works_created_at_idx
+        fields: [createdAt]
+      - name: gallery_works_likes_idx
+        fields: [likes]
+    timestamps: true
 
   - name: GalleryLike
     table: gallery_likes
-    description: "作品点赞记录"
+    description: "作品点赞"
     fields:
       - name: id
         type: uuid
@@ -118,246 +100,141 @@ entities:
         type: timestamp
         notNull: true
         default: now()
-      - name: updatedAt
-        type: timestamp
-        notNull: true
-        default: now()
     indexes:
-      - fields: ["workId", "userId"]
-        name: gallery_likes_work_user_idx
+      - name: gallery_likes_work_id_idx
+        fields: [workId]
+      - name: gallery_likes_user_id_idx
+        fields: [userId]
+      - name: gallery_likes_work_user_unique_idx
         unique: true
-
-  - name: GalleryComment
-    table: gallery_comments
-    description: "作品评论"
-    fields:
-      - name: id
-        type: uuid
-        pk: true
-        default: gen_random_uuid()
-      - name: workId
-        type: uuid
-        notNull: true
-        fk: { table: "gallery_works", field: "id", onDelete: "cascade" }
-      - name: userId
-        type: uuid
-        notNull: true
-        fk: { table: "users", field: "id", onDelete: "cascade" }
-      - name: content
-        type: text
-        notNull: true
-      - name: createdAt
-        type: timestamp
-        notNull: true
-        default: now()
-      - name: updatedAt
-        type: timestamp
-        notNull: true
-        default: now()
-    indexes:
-      - fields: ["workId"]
-        name: gallery_comments_work_id_idx
-      - fields: ["userId"]
-        name: gallery_comments_user_id_idx
+        fields: [workId, userId]
+    timestamps: false
 
 # ============================================================
 # 操作定义
 # ============================================================
 operations:
   - name: listWorks
-    summary: "浏览画廊作品"
     method: GET
-    path: /api/gallery/works
+    path: /gallery/works
+    description: "获取作品列表（公开）"
     auth: none
-    input:
-      type: { type: "string", optional: true, enum: ["image", "video", "audio"], desc: "按类型筛选" }
-      tag: { type: "string", optional: true, desc: "按标签筛选" }
-      sort: { type: "string", optional: true, default: "latest", enum: ["latest", "popular", "trending"], desc: "排序方式" }
-      page: { type: "number", optional: true, default: 1 }
-      limit: { type: "number", optional: true, default: 20 }
-    output:
-      data: { items: "array", total: "number", page: "number", limit: "number" }
-    pre:
-      - "仅返回 isPublic=true 的作品"
     post:
-      - "按 sort 参数排序（latest=createdAt desc, popular=likeCount desc）"
+      - "返回公开作品列表（分页，支持按标签/类型筛选）"
+    test: true
 
-  - name: getWorkDetail
-    summary: "获取作品详情"
+  - name: getWork
     method: GET
-    path: /api/gallery/works/:id
+    path: /gallery/works/:id
+    description: "获取作品详情"
     auth: none
-    output:
-      data:
-        id: uuid
-        title: string
-        type: string
-        url: string
-        thumbnailUrl: { type: "string", nullable: true }
-        tags: "string[]"
-        likeCount: number
-        commentCount: number
-        user: { id: uuid, name: string, avatar: { type: "string", nullable: true } }
-        createdAt: string
     pre:
-      - "作品存在且 isPublic=true"
-    post:
-      - "返回作品完整信息及作者信息"
+      - "作品存在且已发布"
     errors:
       - status: 404
-        condition: "作品不存在或非公开"
+        condition: "作品不存在或未发布"
         message: "作品不存在"
+    test: true
 
   - name: publishWork
-    summary: "发布作品到画廊"
     method: POST
-    path: /api/gallery/works
+    path: /gallery/works
+    description: "发布作品到画廊"
     auth: jwt
-    input:
-      title: { type: "string", minLength: 1, maxLength: 255, desc: "作品标题" }
-      type: { type: "string", enum: ["image", "video", "audio"], desc: "作品类型" }
-      url: { type: "string", desc: "作品文件 URL" }
-      thumbnailUrl: { type: "string", optional: true, desc: "缩略图 URL" }
-      tags: { type: "string[]", optional: true, desc: "标签列表" }
-      prompt: { type: "string", optional: true, desc: "生成使用的提示词" }
-      modelUsed: { type: "string", optional: true, desc: "使用的模型" }
-    output:
-      data:
-        id: uuid
-        title: string
-        createdAt: string
-    post:
-      - "创建作品记录，userId 关联到当前用户"
-    errors:
-      - status: 400
-        condition: "参数校验失败"
-        message: "请求参数不合法"
+    pre:
+      - "用户已登录"
+    effect:
+      - "创建 GalleryWork 记录"
+    test: true
 
   - name: likeWork
-    summary: "点赞作品"
     method: POST
-    path: /api/gallery/works/:id/like
+    path: /gallery/works/:id/like
+    description: "点赞/取消点赞作品"
     auth: jwt
     pre:
-      - "作品存在且 isPublic=true"
-      - "用户未对该作品点赞"
-    post:
-      - "创建点赞记录"
-      - "递增作品 likeCount"
+      - "用户已登录"
+      - "作品存在且已发布"
     effect:
-      - "INSERT INTO gallery_likes"
-      - "UPDATE gallery_works SET likeCount = likeCount + 1"
-    errors:
-      - status: 409
-        condition: "已点赞"
-        message: "已点赞过该作品"
-        test: "like_work_already_liked"
+      - "若已点赞则删除 GalleryLike"
+      - "若未点赞则创建 GalleryLike"
+      - "更新 GalleryWork.likes 计数"
+    test: true
 
-  - name: unlikeWork
-    summary: "取消点赞"
-    method: POST
-    path: /api/gallery/works/:id/unlike
+  - name: getLikeStatus
+    method: GET
+    path: /gallery/works/:id/like
+    description: "查看当前用户是否已点赞"
     auth: jwt
     pre:
-      - "用户已对该作品点赞"
-    post:
-      - "删除点赞记录"
-      - "递减作品 likeCount"
-    effect:
-      - "DELETE FROM gallery_likes"
-      - "UPDATE gallery_works SET likeCount = likeCount - 1"
+      - "用户已登录"
+    test: true
 
   - name: deleteWork
-    summary: "删除作品"
     method: DELETE
-    path: /api/gallery/works/:id
+    path: /gallery/works/:id
+    description: "删除作品"
     auth: jwt
     pre:
-      - "作品存在"
-      - "当前用户是作品所有者或用户角色为 admin"
-    post:
-      - "级联删除点赞和评论"
-      - "删除作品记录"
+      - "用户已登录"
+      - "作品存在且属于当前用户"
+    effect:
+      - "删除 GalleryWork 及关联的点赞"
     errors:
       - status: 404
         condition: "作品不存在"
         message: "作品不存在"
-      - status: 403
-        condition: "非作品所有者且非管理员"
-        message: "无权删除此作品"
+    test: true
 
-  - name: addComment
-    summary: "添加评论"
-    method: POST
-    path: /api/gallery/works/:id/comments
+  - name: listMyWorks
+    method: GET
+    path: /gallery/my-works
+    description: "获取当前用户的作品列表"
     auth: jwt
-    input:
-      content: { type: "string", minLength: 1, maxLength: 1000, desc: "评论内容" }
-    output:
-      data:
-        id: uuid
-        content: string
-        user: { id: uuid, name: string, avatar: { type: "string", nullable: true } }
-        createdAt: string
     pre:
-      - "作品存在且 isPublic=true"
-    post:
-      - "创建评论记录"
-      - "递增作品 commentCount"
-    errors:
-      - status: 404
-        condition: "作品不存在"
-        message: "作品不存在"
+      - "用户已登录"
+    test: true
 
 # ============================================================
 # 业务规则
 # ============================================================
 rules:
-  - id: GALL-001
-    description: "画廊仅展示 isPublic=true 的作品"
+  - name: work_owner_only
+    id: GAL-001
     severity: error
-    enforcement: service_logic
-    test: "gallery_only_public_works"
+    level: error
+    description: "只有作品所有者可删除作品"
+    enforcement: "删除时检查 userId = jwt.userId"
+    test: "need to add"
 
-  - id: GALL-002
-    description: "用户对同一作品只能点赞一次"
+  - name: one_like_per_user
+    id: GAL-002
     severity: error
-    enforcement: db_unique_constraint + service_logic
-    test: "like_work_already_liked"
+    level: error
+    description: "每个用户对同一作品只能点赞一次"
+    enforcement: "unique index on (workId, userId)"
+    test: "need to add"
 
-  - id: GALL-003
-    description: "取消点赞时必须已点赞"
+  - name: like_self_deny
+    id: GAL-003
     severity: error
-    enforcement: service_logic
-    test: "unlike_work_not_liked"
+    level: error
+    description: "用户不能给自己的作品点赞"
+    enforcement: "点赞前检查 userId != work.userId"
+    test: "need to add"
 
-  - id: GALL-004
-    description: "仅作品所有者或管理员可删除作品"
+  - name: published_only_visible
+    id: GAL-004
     severity: error
-    enforcement: service_logic
-    test: "delete_work_unauthorized"
+    level: error
+    description: "未发布作品不在公开列表中显示"
+    enforcement: "listWorks 只返回 isPublished=true"
+    test: "need to add"
 
-  - id: GALL-005
-    description: "评论内容长度 1-1000 字符"
+  - name: like_count_sync
+    id: GAL-005
     severity: error
-    enforcement: zod_schema
-
-# ============================================================
-# 错误码
-# ============================================================
-errors:
-  - code: GALL_WORK_NOT_FOUND
-    status: 404
-    message: "作品不存在"
-  - code: GALL_LIKE_DUPLICATE
-    status: 409
-    message: "已点赞过该作品"
-  - code: GALL_UNLIKE_NOT_FOUND
-    status: 404
-    message: "未点赞该作品"
-  - code: GALL_DELETE_FORBIDDEN
-    status: 403
-    message: "无权删除此作品"
-  - code: GALL_COMMENT_TOO_LONG
-    status: 400
-    message: "评论内容过长"
+    level: error
+    description: "GalleryWork.likes 必须与 GalleryLike 记录数一致"
+    enforcement: "点赞/取消点赞时同步更新 likes 计数"
+    test: "need to add"

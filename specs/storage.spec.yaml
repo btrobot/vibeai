@@ -11,7 +11,7 @@ last_updated: "2025-04-06"
 entities:
   - name: File
     table: files
-    description: "用户上传的文件记录"
+    description: "用户上传的文件"
     fields:
       - name: id
         type: uuid
@@ -22,26 +22,31 @@ entities:
         notNull: true
         fk: { table: "users", field: "id", onDelete: "cascade" }
       - name: originalName
-        type: varchar(255)
+        type: varchar(1024)
         notNull: true
       - name: mimeType
-        type: varchar(100)
+        type: varchar(255)
         notNull: true
+        default: application/octet-stream
       - name: size
-        type: integer
+        type: bigint
         notNull: true
+        default: 0
+      - name: category
+        type: varchar(20)
+        notNull: true
+        default: temp
       - name: storageKey
         type: text
         notNull: true
         unique: true
-      - name: provider
-        type: varchar(20)
+      - name: url
+        type: text
         notNull: true
-        default: local
-        enum: ["local", "s3", "oss"]
-      - name: bucket
-        type: varchar(255)
-        nullable: true
+      - name: isPublic
+        type: boolean
+        notNull: true
+        default: false
       - name: width
         type: integer
         nullable: true
@@ -54,15 +59,8 @@ entities:
       - name: thumbnailKey
         type: text
         nullable: true
-      - name: checksum
-        type: varchar(64)
-        nullable: true
-      - name: isPublic
-        type: boolean
-        notNull: true
-        default: false
-      - name: category
-        type: varchar(50)
+      - name: metadata
+        type: text
         nullable: true
       - name: createdAt
         type: timestamp
@@ -73,227 +71,169 @@ entities:
         notNull: true
         default: now()
     indexes:
-      - fields: ["userId"]
-        name: files_user_id_idx
-      - fields: ["mimeType"]
-        name: files_mime_type_idx
-      - fields: ["category"]
-        name: files_category_idx
-      - fields: ["createdAt"]
-        name: files_created_at_idx
+      - name: files_user_id_idx
+        fields: [userId]
+      - name: files_category_idx
+        fields: [category]
+      - name: files_storage_key_idx
+        fields: [storageKey]
+      - name: files_created_at_idx
+        fields: [createdAt]
+    timestamps: true
 
 # ============================================================
 # 操作定义
 # ============================================================
 operations:
   - name: uploadFile
-    summary: "上传文件"
     method: POST
-    path: /api/storage/upload
+    path: /storage/upload
+    description: "上传文件"
     auth: jwt
-    input:
-      file: { type: "file", desc: "上传的文件（multipart/form-data）" }
-      category: { type: "string", optional: true, desc: "文件分类" }
-    output:
-      data:
-        id: uuid
-        originalName: string
-        mimeType: string
-        size: number
-        url: string
     pre:
-      - "用户已认证"
-      - "文件大小 ≤ 套餐限制（maxFileSize）"
-      - "文件类型在允许列表内"
-    post:
-      - "文件保存到存储后端（local 或 S3）"
-      - "创建文件记录"
-      - "如果是图片/视频，提取宽高信息"
+      - "用户已登录"
+      - "文件大小不超过套餐限制"
+      - "存储空间不超过套餐限制"
+    effect:
+      - "创建 File 记录"
+      - "将文件写入存储 Provider"
     errors:
       - status: 413
         condition: "文件大小超限"
-        message: "文件大小超过限制"
-        test: "upload_file_size_exceeded"
-      - status: 415
-        condition: "文件类型不支持"
-        message: "不支持的文件类型"
+        message: "文件大小超出套餐限制"
+      - status: 413
+        condition: "存储空间不足"
+        message: "存储空间不足"
+    test: true
 
   - name: listFiles
-    summary: "获取文件列表"
     method: GET
-    path: /api/storage/files
+    path: /storage/files
+    description: "获取文件列表"
     auth: jwt
-    input:
-      category: { type: "string", optional: true, desc: "按分类筛选" }
-      mimeType: { type: "string", optional: true, desc: "按 MIME 类型筛选" }
-      page: { type: "number", optional: true, default: 1 }
-      limit: { type: "number", optional: true, default: 20 }
-      sortBy: { type: "string", optional: true, default: "createdAt", enum: ["createdAt", "size", "originalName"] }
-      sortOrder: { type: "string", optional: true, default: "desc", enum: ["asc", "desc"] }
-    output:
-      data: { items: "array", total: "number", page: "number", limit: "number" }
+    pre:
+      - "用户已登录"
     post:
-      - "仅返回当前用户的文件"
-      - "签名 URL 在返回时生成（有效期 1 小时）"
+      - "返回用户文件列表（分页）"
+    test: true
 
   - name: getFileDetail
-    summary: "获取文件详情"
     method: GET
-    path: /api/storage/files/:id
+    path: /storage/files/:id
+    description: "获取文件详情"
     auth: jwt
-    output:
-      data:
-        id: uuid
-        originalName: string
-        mimeType: string
-        size: number
-        url: string
-        thumbnailUrl: { type: "string", nullable: true }
-        width: { type: "number", nullable: true }
-        height: { type: "number", nullable: true }
-        createdAt: string
     pre:
-      - "文件存在"
-      - "当前用户是文件所有者或文件已公开"
-    post:
-      - "返回文件完整元数据"
-      - "生成临时签名 URL"
-    errors:
-      - status: 404
-        condition: "文件不存在"
-        message: "文件不存在"
-      - status: 403
-        condition: "非文件所有者且文件非公开"
-        message: "无权访问此文件"
+      - "用户已登录"
+      - "文件存在且属于当前用户（或为公开文件）"
+    test: true
 
   - name: deleteFile
-    summary: "删除文件"
     method: DELETE
-    path: /api/storage/files/:id
+    path: /storage/files/:id
+    description: "删除文件"
     auth: jwt
     pre:
-      - "文件存在"
-      - "当前用户是文件所有者"
-    post:
-      - "从存储后端删除文件"
-      - "删除文件记录"
+      - "用户已登录"
+      - "文件存在且属于当前用户"
+    effect:
+      - "删除 File 记录"
+      - "从存储 Provider 删除文件"
     errors:
       - status: 404
         condition: "文件不存在"
         message: "文件不存在"
-      - status: 403
-        condition: "非文件所有者"
-        message: "无权删除此文件"
+    test: true
 
   - name: getSignedUrl
-    summary: "获取文件签名 URL"
     method: GET
-    path: /api/storage/files/:id/url
+    path: /storage/files/:id/signed-url
+    description: "获取签名 URL（用于前端下载/预览）"
     auth: jwt
-    output:
-      data: { url: string, expiresAt: number }
     pre:
-      - "文件存在"
-      - "当前用户是文件所有者或文件已公开"
+      - "用户已登录"
+      - "文件存在且属于当前用户"
     post:
-      - "生成带有效期的签名 URL"
-      - "记录签名 URL 生成事件"
+      - "返回签名 URL（有时效）"
     errors:
       - status: 404
         condition: "文件不存在"
         message: "文件不存在"
+    test: true
 
   - name: getStorageStats
-    summary: "获取存储统计"
     method: GET
-    path: /api/storage/stats
+    path: /storage/stats
+    description: "获取存储统计"
     auth: jwt
-    output:
-      data:
-        totalFiles: number
-        totalSize: number
-        byCategory: { type: "object", desc: "按分类统计" }
     pre:
-      - "用户已认证"
+      - "用户已登录"
     post:
-      - "返回当前用户的存储使用统计"
-      - status: 401
-        condition: "未认证"
-        message: "未认证"
+      - "返回总文件数、总大小、各分类用量"
+    test: true
 
   - name: getPublicFileUrl
-    summary: "获取公开文件 URL（无需认证）"
-    method: GET
-    path: /api/storage/public/:id
-    auth: none
-    output:
-      data: { url: string }
-    pre:
-      - "文件存在且 isPublic=true"
-    errors:
-      - status: 404
-        condition: "文件不存在或非公开"
-        message: "文件不存在"
+    method: N/A
+    auth: internal
+    path: /storage/public/:id
+    description: "获取公开文件的访问 URL（已通过 signedUrl 覆盖）"
+    test: true
 
 # ============================================================
 # 业务规则
 # ============================================================
 rules:
-  - id: STOR-001
-    description: "文件大小限制依据用户套餐配置"
+  - name: file_owner_only
+    id: STR-001
     severity: error
-    enforcement: service_logic
-    test: "upload_file_size_exceeded"
+    level: error
+    description: "只有文件所有者可查看/删除文件"
+    enforcement: "文件操作检查 userId = jwt.userId"
+    test: "server/src/test/storage.service.test.ts"
 
-  - id: STOR-002
-    description: "仅文件所有者可删除文件"
+  - name: storage_quota
+    id: STR-002
     severity: error
-    enforcement: service_logic
-    test: "delete_file_unauthorized"
+    level: error
+    description: "用户存储空间受套餐限制"
+    enforcement: "上传前检查总大小 < maxStorageBytes"
+    test: "server/src/test/storage.service.test.ts"
 
-  - id: STOR-003
-    description: "签名 URL 有效期 1 小时"
-    severity: warning
-    enforcement: service_logic
-
-  - id: STOR-004
-    description: "文件列表仅返回当前用户文件"
+  - name: file_size_limit
+    id: STR-003
     severity: error
-    enforcement: service_logic
-    test: "list_files_scoped_to_user"
+    level: error
+    description: "单文件大小受套餐限制"
+    enforcement: "上传前检查文件大小"
+    test: "server/src/test/storage.service.test.ts"
 
-  - id: STOR-005
-    description: "存储 key 全局唯一"
+  - name: signed_url_expiry
+    id: STR-004
     severity: error
-    enforcement: db_unique_constraint
+    level: error
+    description: "签名 URL 有时效（默认 1 小时）"
+    enforcement: "生成签名 URL 时设置过期时间"
+    test: "server/src/test/storage.service.test.ts"
 
-  - id: STOR-006
-    description: "可公开分享的文件（isPublic=true）无需认证即可访问"
+  - name: provider_abstraction
+    id: STR-005
     severity: error
-    enforcement: service_logic
-    test: "public_file_no_auth"
+    level: error
+    description: "存储操作通过 Provider 抽象层完成"
+    enforcement: "StorageProvider 接口 + S3/Local 实现"
+    test: "server/src/test/storage.service.test.ts"
 
-  - id: STOR-007
-    description: "上传时自动检测图片/视频尺寸"
-    severity: warning
-    enforcement: service_logic
+  - name: file_cleanup
+    id: STR-006
+    severity: error
+    level: error
+    description: "删除文件记录时同步删除存储中的文件"
+    enforcement: "deleteFile 调用 provider.delete"
+    test: "server/src/test/storage.service.test.ts"
 
-# ============================================================
-# 错误码
-# ============================================================
-errors:
-  - code: STOR_FILE_NOT_FOUND
-    status: 404
-    message: "文件不存在"
-  - code: STOR_FILE_ACCESS_DENIED
-    status: 403
-    message: "无权访问此文件"
-  - code: STOR_FILE_DELETE_DENIED
-    status: 403
-    message: "无权删除此文件"
-  - code: STOR_FILE_SIZE_EXCEEDED
-    status: 413
-    message: "文件大小超过限制"
-  - code: STOR_FILE_TYPE_UNSUPPORTED
-    status: 415
-    message: "不支持的文件类型"
+  - name: category_enum
+    id: STR-007
+    severity: error
+    level: error
+    description: "文件分类限定在已知范围内"
+    enforcement: "category 字段限制"
+    test: "server/src/test/storage.service.test.ts"

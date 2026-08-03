@@ -1,5 +1,5 @@
 # ============================================================
-# VibeAI — AI 网关域规格 (AI Gateway Domain)
+# VibeAI — AI Gateway 域规格 (Gateway Domain)
 # ============================================================
 domain: gateway
 version: "1.0"
@@ -9,9 +9,9 @@ last_updated: "2025-04-06"
 # 实体定义
 # ============================================================
 entities:
-  - name: Capability
-    table: capabilities
-    description: "AI 能力注册（如文生图、图生视频等）"
+  - name: AICapability
+    table: ai_capabilities
+    description: "AI 能力定义"
     fields:
       - name: id
         type: uuid
@@ -22,83 +22,31 @@ entities:
         notNull: true
         unique: true
       - name: name
-        type: varchar(100)
+        type: varchar(255)
         notNull: true
       - name: description
         type: text
         nullable: true
-      - name: type
+      - name: category
         type: varchar(50)
         notNull: true
-        enum: ["text_to_image", "image_to_video", "text_to_video", "image_generation", "image_editing", "video_editing"]
+      - name: icon
+        type: text
+        nullable: true
       - name: inputSchema
         type: jsonb
-        notNull: true
+        default: "{}"
       - name: outputSchema
         type: jsonb
-        notNull: true
-      - name: defaultParams
-        type: jsonb
-        nullable: true
-      - name: creditsCost
-        type: integer
-        notNull: true
-        default: 10
-      - name: isActive
-        type: boolean
-        notNull: true
-        default: true
-      - name: createdAt
-        type: timestamp
-        notNull: true
-        default: now()
-      - name: updatedAt
-        type: timestamp
-        notNull: true
-        default: now()
-    indexes:
-      - fields: ["slug"]
-        name: capabilities_slug_idx
-      - fields: ["type"]
-        name: capabilities_type_idx
-
-  - name: Model
-    table: models
-    description: "AI 模型注册表"
-    fields:
-      - name: id
-        type: uuid
-        pk: true
-        default: gen_random_uuid()
-      - name: capabilityId
-        type: uuid
-        notNull: true
-        fk: { table: "capabilities", field: "id", onDelete: "cascade" }
-      - name: slug
-        type: varchar(100)
-        notNull: true
-        unique: true
-      - name: name
-        type: varchar(100)
-        notNull: true
-      - name: provider
-        type: varchar(50)
-        notNull: true
-        enum: ["openai", "stability", "coze", "internal"]
-      - name: modelName
-        type: varchar(100)
-        notNull: true
-      - name: version
-        type: varchar(50)
-        nullable: true
+        default: "{}"
       - name: config
         type: jsonb
-        nullable: true
+        default: "{}"
       - name: isActive
         type: boolean
         notNull: true
         default: true
-      - name: priority
+      - name: sortOrder
         type: integer
         notNull: true
         default: 0
@@ -111,53 +59,104 @@ entities:
         notNull: true
         default: now()
     indexes:
-      - fields: ["capabilityId"]
-        name: models_capability_id_idx
-      - fields: ["slug"]
-        name: models_slug_idx
+      - name: ai_capabilities_slug_idx
+        fields: [slug]
+    timestamps: true
 
-  - name: GenerationTask
-    table: generation_tasks
-    description: "AI 生成任务（网关层）"
+  - name: AIModel
+    table: ai_models
+    description: "AI 模型定义"
     fields:
       - name: id
         type: uuid
         pk: true
         default: gen_random_uuid()
-      - name: taskId
-        type: uuid
+      - name: slug
+        type: varchar(100)
         notNull: true
         unique: true
-        fk: { table: "tasks", field: "id", onDelete: "cascade" }
-      - name: modelId
-        type: uuid
+      - name: name
+        type: varchar(255)
+        notNull: true
+      - name: provider
+        type: varchar(100)
+        notNull: true
+      - name: description
+        type: text
         nullable: true
-        fk: { table: "models", field: "id", onDelete: "set null" }
+      - name: capabilities
+        type: text[]
+        notNull: true
+        default: []
+      - name: config
+        type: jsonb
+        default: "{}"
+      - name: inputTypes
+        type: jsonb
+        default: []
+      - name: outputTypes
+        type: jsonb
+        default: []
+      - name: isActive
+        type: boolean
+        notNull: true
+        default: true
+      - name: sortOrder
+        type: integer
+        notNull: true
+        default: 0
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: ai_models_slug_idx
+        fields: [slug]
+    timestamps: true
+
+  - name: GenerationTask
+    table: generation_tasks
+    description: "AI 生成任务记录"
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk: { table: "users", field: "id", onDelete: "cascade" }
+      - name: capabilitySlug
+        type: varchar(100)
+        notNull: true
+      - name: modelSlug
+        type: varchar(100)
+        notNull: true
+      - name: input
+        type: jsonb
+        notNull: true
+      - name: output
+        type: jsonb
+        nullable: true
       - name: status
-        type: varchar(20)
+        type: varchar(50)
         notNull: true
         default: pending
-        enum: ["pending", "routing", "processing", "completed", "failed"]
-      - name: requestPayload
-        type: jsonb
-        notNull: true
-      - name: responseData
-        type: jsonb
+      - name: errorMessage
+        type: text
         nullable: true
-      - name: externalTaskId
-        type: varchar(255)
-        nullable: true
+      - name: creditsCost
+        type: integer
+        default: 0
       - name: startedAt
         type: timestamp
         nullable: true
       - name: completedAt
         type: timestamp
-        nullable: true
-      - name: errorMessage
-        type: text
-        nullable: true
-      - name: latencyMs
-        type: integer
         nullable: true
       - name: createdAt
         type: timestamp
@@ -168,150 +167,171 @@ entities:
         notNull: true
         default: now()
     indexes:
-      - fields: ["taskId"]
-        name: generation_tasks_task_id_idx
-      - fields: ["modelId"]
-        name: generation_tasks_model_id_idx
-      - fields: ["status"]
-        name: generation_tasks_status_idx
+      - name: generation_tasks_user_idx
+        fields: [userId]
+      - name: generation_tasks_status_idx
+        fields: [status]
+    timestamps: true
 
 # ============================================================
 # 操作定义
 # ============================================================
 operations:
-  - name: routeTask
-    summary: "路由 AI 任务到合适的模型"
-    method: POST
-    path: /api/gateway/route
-    auth: internal
-    input:
-      taskId: { type: "uuid", desc: "任务 ID" }
-      capabilityType: { type: "string", desc: "能力类型" }
-      inputParams: { type: "object", desc: "任务输入参数" }
-    output:
-      data:
-        modelId: uuid
-        modelSlug: string
-        provider: string
-    pre:
-      - "capabilityType 对应有 isActive=true 的能力"
-      - "该能力下至少有一个 isActive=true 的模型"
-    post:
-      - "按 priority 降序选择最优模型"
-      - "创建 generation_task 记录"
-
-  - name: submitGeneration
-    summary: "提交 AI 生成请求到外部模型"
-    method: POST
-    path: /api/gateway/generate
-    auth: internal
-    input:
-      modelId: { type: "uuid", desc: "模型 ID" }
-      payload: { type: "object", desc: "请求参数" }
-    output:
-      data:
-        externalTaskId: string
-        status: string
-    pre:
-      - "模型存在且 isActive=true"
-    post:
-      - "调用外部 AI 模型 API"
-      - "更新 generation_task 状态为 processing"
-
-  - name: pollGeneration
-    summary: "轮询外部 AI 生成结果"
-    method: POST
-    path: /api/gateway/poll
-    auth: internal
-    input:
-      externalTaskId: { type: "string", desc: "外部任务 ID" }
-    output:
-      data:
-        status: string
-        resultUrls: { type: "string[]", optional: true }
-    pre:
-      - "externalTaskId 对应的 generation_task 存在"
-    post:
-      - "调用外部模型状态查询 API"
-      - "更新 generation_task 状态"
-    errors:
-      - status: 500
-        condition: "轮询超时"
-        message: "外部模型响应超时"
-
   - name: listCapabilities
-    summary: "获取可用能力列表"
     method: GET
-    path: /api/gateway/capabilities
-    auth: none
-    output:
-      data: { items: "array" }
-    pre:
-      - "仅返回 isActive=true 的能力"
+    path: /gateway/capabilities
+    auth: jwt
+    description: "获取所有 AI 能力列表"
+    pre: []
+    post: [返回能力列表]
+    effect: []
+    errors:
+      - status: 401
+        condition: 未认证
+        message: "未登录"
+
+  - name: getCapabilityDetail
+    method: GET
+    path: /gateway/capabilities/:slug
+    auth: jwt
+    description: "获取单个 AI 能力详情"
+    pre: [能力存在]
+    post: [返回能力详情]
+    effect: []
+    errors:
+      - status: 404
+        condition: 能力不存在
+        message: "能力不存在"
+
+  - name: getCapabilityModels
+    method: GET
+    path: /gateway/capabilities/:slug/models
+    auth: jwt
+    description: "获取能力支持的模型列表"
+    pre: [能力存在]
+    post: [返回模型列表]
+    effect: []
+    errors:
+      - status: 404
+        condition: 能力不存在
+        message: "能力不存在"
 
   - name: listModels
-    summary: "获取模型列表"
     method: GET
-    path: /api/gateway/models
-    auth: none
-    input:
-      capabilitySlug: { type: "string", optional: true, desc: "按能力筛选" }
-    output:
-      data: { items: "array" }
-    pre:
-      - "仅返回 isActive=true 的模型"
-    post:
-      - "按 priority 降序排列"
+    path: /gateway/models
+    auth: jwt
+    description: "获取所有模型列表"
+    pre: []
+    post: [返回模型列表]
+    effect: []
+    errors:
+      - status: 401
+        condition: 未认证
+        message: "未登录"
+
+  - name: getModelDetail
+    method: GET
+    path: /gateway/models/:slug
+    auth: jwt
+    description: "获取单个模型详情"
+    pre: [模型存在]
+    post: [返回模型详情]
+    effect: []
+    errors:
+      - status: 404
+        condition: 模型不存在
+        message: "模型不存在"
+
+  - name: submitGeneration
+    method: POST
+    path: /gateway/generate
+    auth: jwt
+    description: "提交 AI 生成任务"
+    pre: [能力存在, 模型存在, 信用充足]
+    post: [创建生成任务记录]
+    effect: [扣减信用额度]
+    errors:
+      - status: 400
+        condition: 输入参数无效
+        message: "请求参数格式错误"
+      - status: 404
+        condition: 能力或模型不存在
+        message: "能力或模型不存在"
+      - status: 409
+        condition: 信用不足
+        message: "信用额度不足"
+
+  - name: getGenerationTask
+    method: GET
+    path: /gateway/tasks/:taskId
+    auth: jwt
+    description: "查询生成任务状态和结果"
+    pre: [任务存在, 属于当前用户]
+    post: [返回任务状态和结果]
+    effect: []
+    errors:
+      - status: 404
+        condition: 任务不存在
+        message: "任务不存在"
 
 # ============================================================
 # 业务规则
 # ============================================================
 rules:
-  - id: GWAY-001
-    description: "模型路由按 priority 降序选择"
+  - name: 能力 slug 唯一
+    id: GTW-001
     severity: error
-    enforcement: service_logic
-    test: "route_model_by_priority"
+    description: "AI 能力的 slug 字段必须全局唯一"
+    enforcement: DB unique constraint
+    test: "slug 重复时写入失败"
 
-  - id: GWAY-002
-    description: "仅活跃（isActive=true）的能力可被路由"
+  - name: 模型 slug 唯一
+    id: GTW-002
     severity: error
-    enforcement: service_logic
-    test: "route_inactive_capability"
+    description: "AI 模型的 slug 字段必须全局唯一"
+    enforcement: DB unique constraint
+    test: "slug 重复时写入失败"
 
-  - id: GWAY-003
-    description: "仅活跃的模型可被路由"
+  - name: 生成任务必有所属用户
+    id: GTW-003
     severity: error
-    enforcement: service_logic
-    test: "route_inactive_model"
+    description: "每个生成任务必须关联一个有效用户"
+    enforcement: FK 约束 + 外键验证
+    test: "任务创建时 userId 必须存在"
 
-  - id: GWAY-004
-    description: "外部模型调用超时时间 60 秒"
-    severity: warning
-    enforcement: service_config
-
-  - id: GWAY-005
-    description: "生成任务失败时更新对应 task 状态为 failed"
+  - name: 生成任务必须关联有效能力和模型
+    id: GTW-004
     severity: error
-    enforcement: service_logic
-    test: "generation_failure_updates_task"
+    description: "生成任务必须指定 gateway 中已注册的能力和模型 slug"
+    enforcement: 路由层校验
+    test: "不存在的能力/模型 slug 应返回 404"
+
+  - name: 生成前检查信用余额
+    id: GTW-005
+    severity: error
+    description: "提交生成任务前必须检查用户信用余额是否充足"
+    enforcement: 服务层预检
+    test: "信用不足时返回 409 并拒绝创建"
 
 # ============================================================
-# 错误码
+# 状态机
 # ============================================================
-errors:
-  - code: GWAY_CAPABILITY_NOT_FOUND
-    status: 404
-    message: "能力不存在"
-  - code: GWAY_MODEL_NOT_FOUND
-    status: 404
-    message: "模型不存在"
-  - code: GWAY_ROUTE_FAILED
-    status: 500
-    message: "无法路由到合适的模型"
-  - code: GWAY_POLL_TIMEOUT
-    status: 500
-    message: "外部模型响应超时"
-  - code: GWAY_GENERATION_FAILED
-    status: 500
-    message: "AI 生成失败"
+state_machines:
+  - entity: GenerationTask
+    field: status
+    states:
+      - pending
+      - queued
+      - running
+      - completed
+      - failed
+      - cancelled
+    transitions:
+      - from: pending
+        to: [queued, cancelled]
+      - from: queued
+        to: [running, failed]
+      - from: running
+        to: [completed, failed, cancelled]
+    initial: pending
+    terminal: [completed, failed, cancelled]

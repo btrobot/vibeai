@@ -1,17 +1,10 @@
-# ============================================================
-# VibeAI — 认证域规格 (Auth Domain)
-# ============================================================
 domain: auth
-version: "1.0"
-last_updated: "2025-04-06"
-
-# ============================================================
-# 实体定义
-# ============================================================
+version: '1.0'
+last_updated: '2025-04-06'
 entities:
   - name: User
     table: users
-    description: "平台用户"
+    description: 平台用户
     fields:
       - name: id
         type: uuid
@@ -34,7 +27,6 @@ entities:
         type: varchar(20)
         notNull: true
         default: user
-        enum: ["user", "admin", "vip"]
       - name: credits
         type: integer
         notNull: true
@@ -66,37 +58,13 @@ entities:
         notNull: true
         default: now()
     indexes:
-      - fields: ["email"]
-        name: users_email_idx
-    relations:
-      - type: hasMany
-        target: Session
-        via: userId
-      - type: hasMany
-        target: OAuthAccount
-        via: userId
-      - type: hasMany
-        target: LoginLog
-        via: userId
-      - type: hasMany
-        target: File
-        via: userId
-      - type: hasMany
-        target: Project
-        via: userId
-      - type: hasMany
-        target: Task
-        via: userId
-      - type: hasMany
-        target: Subscription
-        via: userId
-      - type: hasMany
-        target: GalleryWork
-        via: userId
-
+      - name: users_email_idx
+        fields:
+          - email
+    timestamps: true
   - name: Session
     table: sessions
-    description: "用户登录会话（refresh token 存储）"
+    description: 用户登录会话
     fields:
       - name: id
         type: uuid
@@ -105,7 +73,10 @@ entities:
       - name: userId
         type: uuid
         notNull: true
-        fk: { table: "users", field: "id", onDelete: "cascade" }
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
       - name: refreshToken
         type: text
         notNull: true
@@ -127,19 +98,17 @@ entities:
         type: timestamp
         notNull: true
         default: now()
-      - name: updatedAt
-        type: timestamp
-        notNull: true
-        default: now()
     indexes:
-      - fields: ["userId"]
-        name: sessions_user_id_idx
-      - fields: ["refreshToken"]
-        name: sessions_refresh_token_idx
-
+      - name: sessions_user_id_idx
+        fields:
+          - userId
+      - name: sessions_refresh_token_idx
+        fields:
+          - refreshToken
+    timestamps: false
   - name: OAuthAccount
     table: oauth_accounts
-    description: "第三方 OAuth 账号绑定"
+    description: 第三方 OAuth 账号绑定
     fields:
       - name: id
         type: uuid
@@ -148,7 +117,10 @@ entities:
       - name: userId
         type: uuid
         notNull: true
-        fk: { table: "users", field: "id", onDelete: "cascade" }
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
       - name: provider
         type: varchar(50)
         notNull: true
@@ -158,23 +130,23 @@ entities:
       - name: providerData
         type: text
         nullable: true
-      - name: updatedAt
-        type: timestamp
-        notNull: true
-        default: now()
       - name: createdAt
         type: timestamp
         notNull: true
         default: now()
     indexes:
-      - fields: ["userId"]
-        name: oauth_accounts_user_id_idx
-      - fields: ["provider", "providerAccountId"]
-        name: oauth_accounts_provider_idx
-
+      - name: oauth_accounts_user_id_idx
+        fields:
+          - userId
+      - name: oauth_accounts_provider_idx
+        unique: true
+        fields:
+          - provider
+          - providerAccountId
+    timestamps: false
   - name: LoginLog
     table: login_logs
-    description: "登录日志审计"
+    description: 登录日志
     fields:
       - name: id
         type: uuid
@@ -183,14 +155,16 @@ entities:
       - name: userId
         type: uuid
         nullable: true
-        fk: { table: "users", field: "id", onDelete: "set null" }
+        fk:
+          table: users
+          field: id
+          onDelete: set null
       - name: email
         type: varchar(255)
         notNull: true
       - name: action
         type: varchar(50)
         notNull: true
-        enum: ["login", "logout", "failed", "refresh"]
       - name: ipAddress
         type: varchar(45)
         nullable: true
@@ -203,310 +177,226 @@ entities:
       - name: failReason
         type: text
         nullable: true
-      - name: updatedAt
-        type: timestamp
-        notNull: true
-        default: now()
       - name: createdAt
         type: timestamp
         notNull: true
         default: now()
     indexes:
-      - fields: ["userId"]
-        name: login_logs_user_id_idx
-      - fields: ["createdAt"]
-        name: login_logs_created_at_idx
-
-# ============================================================
-# 操作定义
-# ============================================================
+      - name: login_logs_user_id_idx
+        fields:
+          - userId
+      - name: login_logs_created_at_idx
+        fields:
+          - createdAt
+    timestamps: false
 operations:
   - name: register
-    summary: "用户注册"
     method: POST
-    path: /api/auth/register
+    path: /auth/register
+    description: 用户注册
     auth: none
-    input:
-      email: { type: "string", format: "email", desc: "邮箱地址" }
-      password: { type: "string", minLength: 8, desc: "密码（需含字母和数字）" }
-      name: { type: "string", minLength: 2, maxLength: 50, desc: "昵称" }
-    output:
-      success: boolean
-      data:
-        id: uuid
-        email: string
-        name: string
-        role: string
-        credits: number
-        createdAt: string
-      message: string
     pre:
-      - "邮箱未被注册"
-    post:
-      - "创建用户记录，角色为 user，信用额度 100"
-      - "不返回 passwordHash"
-      - "不自动登录（无 token 返回）"
+      - 邮箱未注册
+      - 密码符合强度要求（≥8位，含字母和数字）
     effect:
-      - "INSERT INTO users"
+      - 创建 User 记录
+      - 创建登录日志
     errors:
       - status: 409
-        condition: "邮箱已存在"
-        message: "该邮箱已被注册"
-        test: "register_duplicate_email"
-
+        condition: 邮箱已注册
+        message: 邮箱已被注册
+      - status: 400
+        condition: 密码强度不足
+        message: 密码至少 8 位，包含字母和数字
+    test: true
   - name: login
-    summary: "用户登录"
     method: POST
-    path: /api/auth/login
+    path: /auth/login
+    description: 用户登录
     auth: none
-    input:
-      email: { type: "string", format: "email", desc: "邮箱地址" }
-      password: { type: "string", minLength: 1, desc: "密码" }
-    output:
-      success: boolean
-      data:
-        user:
-          id: uuid
-          email: string
-          name: string
-          avatar: { type: "string", nullable: true }
-          role: string
-          credits: number
-          createdAt: string
-        tokens:
-          accessToken: string
-          refreshToken: string
-          expiresIn: number
-      message: string
     pre:
-      - "用户存在且 isActive = true"
-      - "账户未被锁定（lockedUntil < now）"
-    post:
-      - "清除 failedLoginAttempts，更新 lastLoginAt"
-      - "生成 accessToken（15min）和 refreshToken（7d）"
-      - "记录 session 到 sessions 表"
-      - "记录 login_log（action=login, success=true）"
+      - 用户存在且活跃
+      - 密码正确
+      - 账号未被锁定
     effect:
-      - "UPDATE users SET failedLoginAttempts=0, lockedUntil=null, lastLoginAt=now()"
-      - "INSERT INTO sessions"
-      - "INSERT INTO login_logs"
+      - 创建 Session 记录
+      - 更新 lastLoginAt
+      - 重置 failedLoginAttempts
+      - 设置 HttpOnly Cookie（accessToken + refreshToken）
     errors:
       - status: 401
-        condition: "邮箱不存在"
-        message: "邮箱或密码错误"
-        test: "login_wrong_email"
-      - status: 401
-        condition: "密码错误"
-        message: "邮箱或密码错误"
-        test: "login_wrong_password"
-      - status: 403
-        condition: "账户被禁用"
-        message: "账户已被禁用"
-        test: "login_disabled_user"
-      - status: 403
-        condition: "账户被锁定（连续5次失败）"
-        message: "账户已被锁定，请 ${remaining} 分钟后重试"
-        test: "login_locked_user"
-
+        condition: 邮箱或密码错误
+        message: 邮箱或密码错误
+      - status: 423
+        condition: 账号被锁定
+        message: 账号已被锁定，请稍后再试
+    test: true
   - name: refresh
-    summary: "刷新 Token"
     method: POST
-    path: /api/auth/refresh
+    path: /auth/refresh
+    description: 刷新访问令牌
     auth: none
-    input:
-      refreshToken: { type: "string", minLength: 1, desc: "刷新令牌" }
-    output:
-      success: boolean
-      data:
-        user: { id: uuid, email: string, name: string, avatar: { type: "string", nullable: true }, role: string, credits: number, createdAt: string }
-        tokens: { accessToken: string, refreshToken: string, expiresIn: number }
     pre:
-      - "refreshToken 在 sessions 表中存在且 isRevoked = false"
-      - "refreshToken 未过期"
-      - "对应用户存在且 isActive = true"
-    post:
-      - "吊销旧 session"
-      - "生成新 token 对"
-      - "创建新 session 记录"
+      - refreshToken 有效且未过期
+      - Session 未被撤销
     effect:
-      - "UPDATE sessions SET isRevoked=true WHERE refreshToken=old"
-      - "INSERT INTO sessions"
+      - 生成新 accessToken
+      - 更新 Cookie
     errors:
       - status: 401
-        condition: "refreshToken 无效或已过期"
-        message: "refreshToken 无效或已过期"
-        test: "refresh_expired_token"
-      - status: 401
-        condition: "用户不存在或已被禁用"
-        message: "用户不存在或已被禁用"
-
+        condition: refreshToken 无效或过期
+        message: Invalid refresh token
+    test: true
   - name: logout
-    summary: "登出"
     method: POST
-    path: /api/auth/logout
+    path: /auth/logout
+    description: 用户登出
     auth: jwt
-    input:
-      refreshToken: { type: "string", desc: "刷新令牌（从 cookie 或 body 获取）" }
-    output:
-      success: boolean
-      message: string
-    post:
-      - "吊销 refreshToken 对应的 session"
+    pre:
+      - 用户已登录
     effect:
-      - "UPDATE sessions SET isRevoked=true WHERE refreshToken=token"
-    errors:
-      - status: 401
-        condition: "缺少 refreshToken"
-        message: "缺少 refreshToken"
-
+      - 撤销 Session
+      - 清除 Cookie
+    test: true
   - name: getProfile
-    summary: "获取当前用户信息"
     method: GET
-    path: /api/auth/me
+    path: /auth/me
+    description: 获取当前用户信息
     auth: jwt
-    output:
-      success: boolean
-      data:
-        id: uuid
-        email: string
-        name: string
-        avatar: { type: "string", nullable: true }
-        role: string
-        credits: number
-        createdAt: string
     pre:
-      - "JWT token 有效且用户存在"
+      - 用户已登录
     post:
-      - "不返回 passwordHash"
-    errors:
-      - status: 401
-        condition: "用户不存在"
-        message: "用户不存在"
-
+      - 返回用户信息（不含 passwordHash）
+    test: true
   - name: updateProfile
-    summary: "更新用户信息"
     method: PATCH
-    path: /api/auth/me
+    path: /auth/me
+    description: 更新用户信息
     auth: jwt
-    input:
-      name: { type: "string", minLength: 2, maxLength: 50, optional: true, desc: "昵称" }
-      avatar: { type: "string", optional: true, desc: "头像 URL" }
-    output:
-      success: boolean
-      data: { id: uuid, email: string, name: string, avatar: { type: "string", nullable: true }, role: string, credits: number, createdAt: string }
     pre:
-      - "JWT token 有效且用户存在"
-    post:
-      - "更新用户 name/avatar 字段"
-      - "更新 updatedAt"
-
-  - name: changePassword
-    summary: "修改密码"
-    method: POST
-    path: /api/auth/change-password
-    auth: jwt
-    input:
-      currentPassword: { type: "string", minLength: 1, desc: "当前密码" }
-      newPassword: { type: "string", minLength: 8, desc: "新密码（需含字母和数字）" }
-    output:
-      success: boolean
-      message: string
-    pre:
-      - "当前密码验证通过"
-    post:
-      - "更新 passwordHash"
+      - 用户已登录
     effect:
-      - "UPDATE users SET passwordHash=hash, updatedAt=now()"
+      - 更新 User 记录
+    test: true
+  - name: changePassword
+    method: POST
+    path: /auth/change-password
+    description: 修改密码
+    auth: jwt
+    pre:
+      - 用户已登录
+      - 旧密码正确
+      - 新密码符合强度要求
+    effect:
+      - 更新 passwordHash
     errors:
       - status: 400
-        condition: "当前密码错误"
-        message: "当前密码错误"
-        test: "change_password_wrong_current"
-
-# ============================================================
-# 业务规则
-# ============================================================
+        condition: 新密码强度不足
+        message: 密码至少 8 位，包含字母和数字
+      - status: 401
+        condition: 旧密码错误
+        message: 当前密码错误
+    test: true
+  - name: getUser
+    method: GET
+    path: /users/:id
+    auth: jwt
+    description: 获取用户基本信息
+    pre:
+      - 用户存在
+      - 有权限查看
+    post:
+      - 返回用户信息（不含密码）
+    errors:
+      - status: 404
+        condition: 用户不存在
+        message: 用户不存在
+      - status: 403
+        condition: 无权限
+        message: 无权查看该用户信息
 rules:
-  - id: AUTH-001
-    description: "密码必须包含字母和数字"
+  - name: email_unique
+    id: AUTH-001
     severity: error
-    enforcement: zod_schema + class_validator
-    test: "register_password_without_letter or register_password_without_digit"
-
-  - id: AUTH-002
-    description: "连续 5 次登录失败锁定账户 30 分钟"
+    level: error
+    description: 邮箱全局唯一
+    enforcement: DB unique index on email
+    test: server/src/test/auth.service.test.ts
+  - name: password_policy
+    id: AUTH-002
     severity: error
-    enforcement: service_logic
-    test: "login_locked_after_5_failures"
-
-  - id: AUTH-003
-    description: "accessToken 有效期 15 分钟（900 秒）"
-    severity: warning
-    enforcement: jwt_config
-
-  - id: AUTH-004
-    description: "refreshToken 有效期 7 天"
-    severity: warning
-    enforcement: jwt_config
-
-  - id: AUTH-005
-    description: "注册时默认赠送 100 信用额度"
+    level: error
+    description: 密码至少 8 位，包含字母和数字
+    enforcement: 注册/改密码时校验
+    test: server/src/test/auth.service.test.ts
+  - name: login_lockout
+    id: AUTH-003
     severity: error
-    enforcement: service_logic
-    test: "register_credits_default"
-
-  - id: AUTH-006
-    description: "登录时密码比较使用 bcrypt（saltRounds=12）"
+    level: error
+    description: 连续 5 次登录失败锁定账号 15 分钟
+    enforcement: failedLoginAttempts >= 5 → lockedUntil = now + 15min
+    test: server/src/test/auth.service.test.ts
+  - name: session_expiry
+    id: AUTH-004
     severity: error
-    enforcement: service_logic
-
-  - id: AUTH-007
-    description: "refreshToken 使用一次即失效（rotation）"
+    level: error
+    description: accessToken 15 分钟，refreshToken 7 天过期
+    enforcement: JWT 签名时设置 exp
+    test: server/src/test/auth.service.test.ts
+  - name: session_revocation
+    id: AUTH-005
     severity: error
-    enforcement: service_logic
-    test: "refresh_token_rotation"
-
-  - id: AUTH-008
-    description: "昵称长度 2-50 字符"
+    level: error
+    description: 登出后 Session 标记为已撤销，refreshToken 不可再用
+    enforcement: 刷新时检查 isRevoked
+    test: server/src/test/auth.service.test.ts
+  - name: refresh_token_unique
+    id: AUTH-006
     severity: error
-    enforcement: zod_schema + class_validator
-
-  - id: AUTH-009
-    description: "非活跃账户（isActive=false）禁止登录"
+    level: error
+    description: refreshToken 全局唯一
+    enforcement: DB unique index on refresh_token
+    test: server/src/test/auth.service.test.ts
+  - name: admin_role_required
+    id: AUTH-007
     severity: error
-    enforcement: service_logic
-    test: "login_disabled_user"
-
-  - id: AUTH-010
-    description: "用户删除级联删除关联的 session/oauth/project/task/subscription"
+    level: error
+    description: 管理员接口需要 role=admin
+    enforcement: AdminGuard 检查 role
+    test: server/src/test/auth.service.test.ts
+  - name: user_self_only
+    id: AUTH-008
     severity: error
-    enforcement: db_schema_on_delete_cascade
-
-# ============================================================
-# 错误码汇总
-# ============================================================
-errors:
-  - code: AUTH_EMAIL_EXISTS
-    status: 409
-    message: "该邮箱已被注册"
-  - code: AUTH_INVALID_CREDENTIALS
-    status: 401
-    message: "邮箱或密码错误"
-  - code: AUTH_USER_DISABLED
-    status: 403
-    message: "账户已被禁用"
-  - code: AUTH_USER_LOCKED
-    status: 403
-    message: "账户已被锁定，请 ${remaining} 分钟后重试"
-  - code: AUTH_TOKEN_INVALID
-    status: 401
-    message: "refreshToken 无效或已过期"
-  - code: AUTH_TOKEN_MISSING
-    status: 401
-    message: "缺少 refreshToken"
-  - code: AUTH_USER_NOT_FOUND
-    status: 401
-    message: "用户不存在"
-  - code: AUTH_PASSWORD_WRONG
-    status: 400
-    message: "当前密码错误"
+    level: error
+    description: 用户只能修改自己的信息
+    enforcement: getProfile/updateProfile 从 JWT 取 userId
+    test: server/src/test/auth.service.test.ts
+  - name: one_session_per_login
+    id: AUTH-009
+    severity: error
+    level: error
+    description: 每次登录创建一个新会话，不强制踢出旧会话
+    enforcement: 登录时创建新 Session
+    test: server/src/test/auth.service.test.ts
+  - name: inactive_user_blocked
+    id: AUTH-010
+    severity: error
+    level: error
+    description: isActive=false 的用户不可登录
+    enforcement: 登录前检查 isActive
+    test: server/src/test/auth.service.test.ts
+state_machines:
+  - name: account_lockout
+    entity: User
+    description: 账号锁定状态机
+    states:
+      - active
+      - locked
+    transitions:
+      - from: active
+        to: locked
+        trigger: failedLoginAttempts >= 5
+      - from: locked
+        to: active
+        trigger: 锁定时间超过 15 分钟或手动解锁
+    initial: active

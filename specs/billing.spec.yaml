@@ -27,28 +27,34 @@ entities:
       - name: description
         type: text
         nullable: true
+      - name: credits
+        type: integer
+        notNull: true
+        default: 0
       - name: priceMonthly
-        type: integer
+        type: decimal(10,2)
         notNull: true
-        default: 0
+        default: "0"
       - name: priceYearly
-        type: integer
+        type: decimal(10,2)
         nullable: true
-      - name: creditsPerMonth
+      - name: maxProjects
         type: integer
         notNull: true
-        default: 0
-      - name: concurrencyLimit
+        default: 5
+      - name: maxStorageBytes
+        type: bigint
+        notNull: true
+        default: 104857600
+      - name: maxConcurrentTasks
         type: integer
         notNull: true
         default: 1
-      - name: maxFileSize
-        type: integer
-        notNull: true
-        default: 10485760
+      - name: capabilities
+        type: text[]
+        default: "[]"
       - name: features
         type: jsonb
-        notNull: true
         default: "{}"
       - name: isActive
         type: boolean
@@ -67,12 +73,13 @@ entities:
         notNull: true
         default: now()
     indexes:
-      - fields: ["slug"]
-        name: subscription_plans_slug_idx
+      - name: plans_slug_idx
+        fields: [slug]
+    timestamps: true
 
   - name: Subscription
     table: subscriptions
-    description: "用户订阅记录"
+    description: "用户订阅"
     fields:
       - name: id
         type: uuid
@@ -85,26 +92,46 @@ entities:
       - name: planId
         type: uuid
         notNull: true
-        fk: { table: "subscription_plans", field: "id", onDelete: "restrict" }
+        fk: { table: "subscription_plans", field: "id" }
       - name: status
         type: varchar(20)
         notNull: true
         default: active
-        enum: ["active", "cancelled", "expired", "past_due"]
-      - name: billingPeriod
+      - name: billingCycle
         type: varchar(10)
         notNull: true
-        enum: ["monthly", "yearly"]
-      - name: startedAt
+        default: monthly
+      - name: creditsRemaining
+        type: integer
+        notNull: true
+        default: 0
+      - name: creditsUsed
+        type: integer
+        notNull: true
+        default: 0
+      - name: currentPeriodStart
         type: timestamp
         notNull: true
         default: now()
-      - name: expiresAt
+      - name: currentPeriodEnd
         type: timestamp
-        notNull: true
+        nullable: true
+      - name: stripeSubscriptionId
+        type: text
+        nullable: true
+      - name: stripeCustomerId
+        type: text
+        nullable: true
       - name: cancelledAt
         type: timestamp
         nullable: true
+      - name: trialEndsAt
+        type: timestamp
+        nullable: true
+      - name: autoRenew
+        type: boolean
+        notNull: true
+        default: true
       - name: createdAt
         type: timestamp
         notNull: true
@@ -114,64 +141,17 @@ entities:
         notNull: true
         default: now()
     indexes:
-      - fields: ["userId"]
-        name: subscriptions_user_id_idx
-      - fields: ["planId"]
-        name: subscriptions_plan_id_idx
-      - fields: ["status"]
-        name: subscriptions_status_idx
+      - name: subs_user_id_idx
+        fields: [userId]
+      - name: subs_plan_id_idx
+        fields: [planId]
+      - name: subs_status_idx
+        fields: [status]
+    timestamps: true
 
   - name: CreditUsage
     table: credit_usage
-    description: "信用额度消费记录"
-    fields:
-      - name: id
-        type: uuid
-        pk: true
-        default: gen_random_uuid()
-      - name: userId
-        type: uuid
-        notNull: true
-        fk: { table: "users", field: "id", onDelete: "cascade" }
-      - name: taskId
-        type: uuid
-        nullable: true
-        fk: { table: "tasks", field: "id", onDelete: "set null" }
-      - name: amount
-        type: integer
-        notNull: true
-      - name: type
-        type: varchar(20)
-        notNull: true
-        enum: ["deduction", "refund", "bonus", "purchase"]
-      - name: balanceBefore
-        type: integer
-        notNull: true
-      - name: balanceAfter
-        type: integer
-        notNull: true
-      - name: note
-        type: text
-        nullable: true
-      - name: createdAt
-        type: timestamp
-        notNull: true
-        default: now()
-      - name: updatedAt
-        type: timestamp
-        notNull: true
-        default: now()
-    indexes:
-      - fields: ["userId"]
-        name: credit_usage_user_id_idx
-      - fields: ["taskId"]
-        name: credit_usage_task_id_idx
-      - fields: ["createdAt"]
-        name: credit_usage_created_at_idx
-
-  - name: Invoice
-    table: invoices
-    description: "账单记录"
+    description: "信用额度使用记录"
     fields:
       - name: id
         type: uuid
@@ -184,24 +164,86 @@ entities:
       - name: subscriptionId
         type: uuid
         nullable: true
-        fk: { table: "subscriptions", field: "id", onDelete: "set null" }
-      - name: amount
+        fk: { table: "subscriptions", field: "id" }
+      - name: taskId
+        type: uuid
+        nullable: true
+        fk: { table: "tasks", field: "id", onDelete: "set null" }
+      - name: credits
         type: integer
         notNull: true
+      - name: action
+        type: varchar(50)
+        notNull: true
+      - name: description
+        type: text
+        nullable: true
+      - name: balanceAfter
+        type: integer
+        notNull: true
+      - name: metadata
+        type: jsonb
+        default: "{}"
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: usage_user_id_idx
+        fields: [userId]
+      - name: usage_subscription_id_idx
+        fields: [subscriptionId]
+      - name: usage_task_id_idx
+        fields: [taskId]
+      - name: usage_created_at_idx
+        fields: [createdAt]
+    timestamps: false
+
+  - name: Invoice
+    table: invoices
+    description: "发票/账单"
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk: { table: "users", field: "id", onDelete: "cascade" }
+      - name: subscriptionId
+        type: uuid
+        nullable: true
+        fk: { table: "subscriptions", field: "id" }
+      - name: stripeInvoiceId
+        type: text
+        nullable: true
+      - name: amount
+        type: decimal(10,2)
+        notNull: true
+      - name: currency
+        type: varchar(3)
+        notNull: true
+        default: cny
       - name: status
         type: varchar(20)
         notNull: true
         default: pending
-        enum: ["pending", "paid", "failed", "refunded"]
+      - name: description
+        type: text
+        nullable: true
       - name: periodStart
         type: timestamp
-        notNull: true
+        nullable: true
       - name: periodEnd
         type: timestamp
-        notNull: true
+        nullable: true
       - name: paidAt
         type: timestamp
         nullable: true
+      - name: metadata
+        type: jsonb
+        default: "{}"
       - name: createdAt
         type: timestamp
         notNull: true
@@ -211,10 +253,219 @@ entities:
         notNull: true
         default: now()
     indexes:
-      - fields: ["userId"]
-        name: invoices_user_id_idx
-      - fields: ["status"]
-        name: invoices_status_idx
+      - name: invoices_user_id_idx
+        fields: [userId]
+      - name: invoices_subscription_id_idx
+        fields: [subscriptionId]
+      - name: invoices_status_idx
+        fields: [status]
+    timestamps: true
+
+# ============================================================
+# 操作定义
+# ============================================================
+operations:
+  - name: listPlans
+    method: GET
+    path: /billing/plans
+    description: "获取所有套餐列表"
+    auth: none
+    post:
+      - "返回所有活跃套餐"
+    test: true
+
+  - name: getPlan
+    method: GET
+    path: /billing/plans/:slug
+    description: "获取套餐详情"
+    auth: none
+    errors:
+      - status: 404
+        condition: "套餐不存在"
+        message: "Plan not found"
+    test: true
+
+  - name: getSubscription
+    method: GET
+    path: /billing/subscription
+    description: "获取当前用户订阅"
+    auth: jwt
+    pre:
+      - "用户已登录"
+    post:
+      - "返回用户当前订阅信息"
+    test: true
+
+  - name: subscribe
+    method: POST
+    path: /billing/subscription
+    description: "订阅/切换套餐"
+    auth: jwt
+    pre:
+      - "用户已登录"
+      - "目标套餐存在且活跃"
+    effect:
+      - "创建/更新 Subscription 记录"
+      - "更新用户信用额度"
+    errors:
+      - status: 400
+        condition: "目标套餐不存在"
+        message: "套餐不存在"
+    test: true
+
+  - name: cancelSubscription
+    method: POST
+    path: /billing/subscription/cancel
+    description: "取消订阅"
+    auth: jwt
+    pre:
+      - "用户已登录"
+      - "用户有活跃订阅"
+    effect:
+      - "更新 Subscription.status = cancelled"
+      - "设置 cancelledAt"
+    test: true
+
+  - name: getUsageStats
+    method: GET
+    path: /billing/stats
+    description: "获取用量统计"
+    auth: jwt
+    pre:
+      - "用户已登录"
+    post:
+      - "返回信用使用/剩余统计"
+    test: true
+
+  - name: getUsageHistory
+    method: GET
+    path: /billing/history
+    description: "获取信用使用历史"
+    auth: jwt
+    pre:
+      - "用户已登录"
+    post:
+      - "返回 CreditUsage 记录列表（分页）"
+    test: true
+
+  - name: deductCredits
+    method: N/A
+    auth: internal
+    path: "/"
+    description: "扣减信用额度（内部操作，由任务执行触发）"
+    test: true
+
+  - name: refundCredits
+    method: N/A
+    auth: internal
+    path: "/"
+    description: "退还信用额度（内部操作，由任务失败触发）"
+    test: true
+
+  - name: resetMonthlyCredits
+    method: N/A
+    auth: internal
+    path: "/"
+    description: "每月重置信用额度（Cron 任务）"
+    test: false
+
+# ============================================================
+# 业务规则
+# ============================================================
+rules:
+  - name: credits_non_negative
+    id: BIL-001
+    severity: error
+    level: error
+    description: "信用额度不可为负"
+    enforcement: "扣减前检查 creditsRemaining >= 0"
+    test: "server/src/test/billing.service.test.ts"
+
+  - name: one_subscription_per_user
+    id: BIL-002
+    severity: error
+    level: error
+    description: "每个用户同时只能有一个活跃订阅"
+    enforcement: "订阅前检查是否有活跃订阅"
+    test: "server/src/test/billing.service.test.ts"
+
+  - name: subscription_required
+    id: BIL-003
+    severity: error
+    level: error
+    description: "只有活跃订阅用户可执行付费操作"
+    enforcement: "检查 subscription.status = active"
+    test: "server/src/test/billing.service.test.ts"
+
+  - name: free_plan_always_available
+    id: BIL-004
+    severity: error
+    level: error
+    description: "免费套餐始终可用"
+    enforcement: "免费套餐不可取消"
+    test: "server/src/test/billing.service.test.ts"
+
+  - name: usage_logging
+    id: BIL-005
+    severity: error
+    level: error
+    description: "每次信用操作必须记录 CreditUsage"
+    enforcement: "扣减/退还时写入 credit_usage 表"
+    test: "server/src/test/billing.service.test.ts"
+
+  - name: cancel_grace_period
+    id: BIL-006
+    severity: error
+    level: error
+    description: "取消订阅后，当前周期内仍可使用"
+    enforcement: "取消后 currentPeriodEnd 前不限制"
+    test: "server/src/test/billing.service.test.ts"
+
+  - name: plan_slug_unique
+    id: BIL-007
+    severity: error
+    level: error
+    description: "套餐 slug 全局唯一"
+    enforcement: "DB unique index on slug"
+    test: "server/src/test/billing.service.test.ts"
+
+  - name: billing_cycle_enum
+    id: BIL-008
+    severity: error
+    level: error
+    description: "计费周期限定 monthly/yearly"
+    enforcement: "billingCycle 字段限制"
+    test: "server/src/test/billing.service.test.ts"
+
+# ============================================================
+# 状态机
+# ============================================================
+state_machines:
+  - name: subscription_lifecycle
+    entity: Subscription
+    description: "订阅生命周期状态机"
+    states:
+      - active
+      - cancelled
+      - expired
+      - trialing
+    transitions:
+      - from: trialing
+        to: active
+        trigger: "trial 结束或用户选择付费"
+      - from: trialing
+        to: cancelled
+        trigger: "trial 期间取消"
+      - from: active
+        to: cancelled
+        trigger: "用户取消"
+      - from: active
+        to: expired
+        trigger: "周期结束且不续费"
+      - from: cancelled
+        to: expired
+        trigger: "周期结束"
+    initial: active
 
 # ============================================================
 # 种子数据
@@ -222,273 +473,7 @@ entities:
 seed_data:
   - entity: SubscriptionPlan
     records:
-      - slug: free
-        name: 免费版
-        priceMonthly: 0
-        creditsPerMonth: 100
-        concurrencyLimit: 1
-        maxFileSize: 10485760
-        features: { apiAccess: false, teamSeats: 1, priority: "standard" }
-        sortOrder: 0
-      - slug: basic
-        name: 基础版
-        priceMonthly: 2990
-        creditsPerMonth: 500
-        concurrencyLimit: 3
-        maxFileSize: 52428800
-        features: { apiAccess: true, teamSeats: 3, priority: "high" }
-        sortOrder: 1
-      - slug: pro
-        name: 专业版
-        priceMonthly: 9990
-        creditsPerMonth: 2000
-        concurrencyLimit: 10
-        maxFileSize: 209715200
-        features: { apiAccess: true, teamSeats: 10, priority: "premium" }
-        sortOrder: 2
-      - slug: enterprise
-        name: 企业版
-        priceMonthly: 29990
-        creditsPerMonth: 10000
-        concurrencyLimit: 50
-        maxFileSize: 1073741824
-        features: { apiAccess: true, teamSeats: 50, priority: "enterprise" }
-        sortOrder: 3
-
-# ============================================================
-# 操作定义
-# ============================================================
-operations:
-  - name: getPlans
-    summary: "获取所有套餐列表"
-    method: GET
-    path: /api/billing/plans
-    auth: none
-    output:
-      data: { items: "array" }
-    pre:
-      - "仅返回 isActive=true 的套餐"
-    post:
-      - "按 sortOrder 升序排列"
-
-  - name: getPlanDetail
-    summary: "获取套餐详情"
-    method: GET
-    path: /api/billing/plans/:slug
-    auth: none
-    output:
-      data: { slug: string, name: string, priceMonthly: number, creditsPerMonth: number, features: object }
-    pre:
-      - "套餐存在且 isActive=true"
-    post:
-      - "返回套餐完整信息"
-    errors:
-      - status: 404
-        condition: "套餐不存在"
-        message: "套餐不存在"
-
-  - name: subscribe
-    summary: "订阅套餐"
-    method: POST
-    path: /api/billing/subscribe
-    auth: jwt
-    input:
-      planSlug: { type: "string", desc: "套餐标识" }
-      billingPeriod: { type: "string", enum: ["monthly", "yearly"], desc: "计费周期" }
-    output:
-      data:
-        id: uuid
-        planSlug: string
-        status: string
-        expiresAt: string
-    pre:
-      - "套餐存在且 isActive=true"
-      - "用户当前无活跃订阅，或当前订阅已过期"
-    post:
-      - "创建或更新订阅记录，status=active"
-      - "重置用户信用额度为套餐额度"
-    effect:
-      - "INSERT INTO subscriptions OR UPDATE WHERE userId=:userId"
-      - "UPDATE users SET credits = plan.creditsPerMonth"
-    errors:
-      - status: 400
-        condition: "已有活跃订阅"
-        message: "已有活跃订阅，请先取消当前订阅"
-        test: "subscribe_already_active"
-
-  - name: cancelSubscription
-    summary: "取消订阅"
-    method: POST
-    path: /api/billing/cancel
-    auth: jwt
-    pre:
-      - "用户有活跃订阅"
-    post:
-      - "设置 status=cancelled，记录 cancelledAt"
-      - "当前周期结束后不再续费"
-    effect:
-      - "UPDATE subscriptions SET status=cancelled, cancelledAt=now()"
-
-  - name: getSubscription
-    summary: "获取当前订阅信息"
-    method: GET
-    path: /api/billing/subscription
-    auth: jwt
-    output:
-      data:
-        plan: { slug: string, name: string, creditsPerMonth: number }
-        status: string
-        expiresAt: string
-        remainingDays: number
-    pre:
-      - "JWT token 有效"
-    post:
-      - "返回用户当前活跃订阅，无订阅则返回 null"
-
-  - name: getUsage
-    summary: "获取信用额度使用统计"
-    method: GET
-    path: /api/billing/usage
-    auth: jwt
-    input:
-      startDate: { type: "string", format: "date", optional: true, desc: "开始日期" }
-      endDate: { type: "string", format: "date", optional: true, desc: "结束日期" }
-    output:
-      data:
-        totalDeducted: number
-        totalRefunded: number
-        balance: number
-        history: { items: "array" }
-    pre:
-      - "JWT token 有效"
-    post:
-      - "统计指定时间范围内的消费和退款"
-
-  - name: deductCredits
-    summary: "扣除信用额度（内部）"
-    method: N/A
-    path: N/A
-    auth: internal
-    input:
-      userId: { type: "uuid", desc: "用户 ID" }
-      amount: { type: "number", desc: "扣除数量" }
-      taskId: { type: "uuid", desc: "关联任务" }
-    pre:
-      - "用户信用额度 ≥ amount"
-    post:
-      - "扣除用户信用额度"
-      - "记录 credit_usage（type=deduction）"
-    effect:
-      - "UPDATE users SET credits = credits - amount"
-      - "INSERT INTO credit_usage"
-
-  - name: refundCredits
-    summary: "退回信用额度（内部）"
-    method: N/A
-    path: N/A
-    auth: internal
-    input:
-      userId: { type: "uuid", desc: "用户 ID" }
-      amount: { type: "number", desc: "退回数量" }
-      taskId: { type: "uuid", desc: "关联任务" }
-    post:
-      - "增加用户信用额度"
-      - "记录 credit_usage（type=refund）"
-    effect:
-      - "UPDATE users SET credits = credits + amount"
-      - "INSERT INTO credit_usage"
-
-  - name: checkCredits
-    summary: "检查信用额度是否充足（内部）"
-    method: N/A
-    path: N/A
-    auth: internal
-    input:
-      userId: { type: "uuid", desc: "用户 ID" }
-      amount: { type: "number", desc: "所需数量" }
-    output:
-      sufficient: boolean
-      available: number
-      needed: number
-
-  - name: getUsageHistory
-    summary: "获取信用消费历史"
-    method: GET
-    path: /api/billing/usage/history
-    auth: jwt
-    input:
-      page: { type: "number", optional: true, default: 1 }
-      limit: { type: "number", optional: true, default: 20 }
-    output:
-      data: { items: "array", total: "number" }
-    pre:
-      - "JWT token 有效"
-    post:
-      - "按 createdAt 倒序排列"
-      - "仅返回当前用户的消费记录"
-
-# ============================================================
-# 业务规则
-# ============================================================
-rules:
-  - id: BILL-001
-    description: "信用额度不可为负"
-    severity: error
-    enforcement: service_logic + db_check
-    test: "credits_never_negative"
-
-  - id: BILL-002
-    description: "扣除信用时必须记录 credit_usage"
-    severity: error
-    enforcement: service_logic
-    test: "deduct_credits_creates_usage_record"
-
-  - id: BILL-003
-    description: "退费时信用额度增加必须记录"
-    severity: error
-    enforcement: service_logic
-    test: "refund_credits_creates_usage_record"
-
-  - id: BILL-004
-    description: "免费套餐价格必须为 0"
-    severity: error
-    enforcement: seed_data
-    test: "free_plan_price_zero"
-
-  - id: BILL-005
-    description: "用户只能有一个活跃订阅"
-    severity: error
-    enforcement: service_logic
-    test: "subscribe_already_active"
-
-  - id: BILL-006
-    description: "过期订阅自动降级为免费套餐"
-    severity: warning
-    enforcement: scheduled_job
-
-  - id: BILL-007
-    description: "信用额度按月重置"
-    severity: warning
-    enforcement: scheduled_job
-
-  - id: BILL-008
-    description: "已取消订阅不可再使用付费功能"
-    severity: error
-    enforcement: service_logic
-
-# ============================================================
-# 错误码
-# ============================================================
-errors:
-  - code: BILL_PLAN_NOT_FOUND
-    status: 404
-    message: "套餐不存在"
-  - code: BILL_SUBSCRIBE_ALREADY_ACTIVE
-    status: 400
-    message: "已有活跃订阅，请先取消当前订阅"
-  - code: BILL_INSUFFICIENT_CREDITS
-    status: 402
-    message: "信用额度不足"
-  - code: BILL_SUBSCRIPTION_NOT_FOUND
-    status: 404
-    message: "未找到订阅信息"
+      - { slug: "free", name: "免费版", credits: 100, priceMonthly: "0", maxProjects: 5, maxStorageBytes: 104857600, maxConcurrentTasks: 1, sortOrder: 0 }
+      - { slug: "starter", name: "入门版", credits: 500, priceMonthly: "29", maxProjects: 20, maxStorageBytes: 536870912, maxConcurrentTasks: 3, sortOrder: 1 }
+      - { slug: "pro", name: "专业版", credits: 2000, priceMonthly: "99", maxProjects: 100, maxStorageBytes: 2147483648, maxConcurrentTasks: 10, sortOrder: 2 }
+      - { slug: "enterprise", name: "企业版", credits: 10000, priceMonthly: "299", maxProjects: -1, maxStorageBytes: 10737418240, maxConcurrentTasks: 50, sortOrder: 3 }

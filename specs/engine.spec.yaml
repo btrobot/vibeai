@@ -1,5 +1,5 @@
 # ============================================================
-# VibeAI — 任务引擎域规格 (Task Engine Domain)
+# VibeAI — 任务引擎域规格 (Engine Domain)
 # ============================================================
 domain: engine
 version: "1.0"
@@ -11,7 +11,7 @@ last_updated: "2025-04-06"
 entities:
   - name: Project
     table: projects
-    description: "用户创作项目"
+    description: "创作项目"
     fields:
       - name: id
         type: uuid
@@ -22,29 +22,35 @@ entities:
         notNull: true
         fk: { table: "users", field: "id", onDelete: "cascade" }
       - name: name
-        type: varchar(255)
+        type: varchar(200)
         notNull: true
       - name: description
         type: text
         nullable: true
-      - name: type
-        type: varchar(50)
-        notNull: true
-        enum: ["video", "image", "audio", "mixed"]
       - name: coverImage
         type: text
         nullable: true
-      - name: tags
-        type: "text[]"
-        nullable: true
-        default: "[]"
-      - name: meta
-        type: jsonb
-        nullable: true
-      - name: isArchived
-        type: boolean
+      - name: status
+        type: varchar(20)
         notNull: true
-        default: false
+        default: draft
+      - name: template
+        type: varchar(50)
+        nullable: true
+      - name: tags
+        type: text[]
+        default: "[]"
+      - name: metadata
+        type: jsonb
+        default: "{}"
+      - name: totalTasks
+        type: integer
+        notNull: true
+        default: 0
+      - name: completedTasks
+        type: integer
+        notNull: true
+        default: 0
       - name: createdAt
         type: timestamp
         notNull: true
@@ -54,20 +60,17 @@ entities:
         notNull: true
         default: now()
     indexes:
-      - fields: ["userId"]
-        name: projects_user_id_idx
-      - fields: ["type"]
-        name: projects_type_idx
-      - fields: ["createdAt"]
-        name: projects_created_at_idx
-    relations:
-      - type: hasMany
-        target: Task
-        via: projectId
+      - name: projects_user_id_idx
+        fields: [userId]
+      - name: projects_status_idx
+        fields: [status]
+      - name: projects_created_at_idx
+        fields: [createdAt]
+    timestamps: true
 
   - name: Task
     table: tasks
-    description: "AI 生成任务"
+    description: "生成任务"
     fields:
       - name: id
         type: uuid
@@ -75,8 +78,8 @@ entities:
         default: gen_random_uuid()
       - name: projectId
         type: uuid
-        notNull: true
-        fk: { table: "projects", field: "id", onDelete: "cascade" }
+        nullable: true
+        fk: { table: "projects", field: "id", onDelete: "set null" }
       - name: userId
         type: uuid
         notNull: true
@@ -84,45 +87,40 @@ entities:
       - name: type
         type: varchar(50)
         notNull: true
-        enum: ["text_to_image", "image_to_video", "text_to_video", "image_generation", "image_editing", "video_editing"]
       - name: status
         type: varchar(20)
         notNull: true
         default: pending
-        enum: ["pending", "queued", "running", "completed", "failed", "cancelled", "refunding", "refunded"]
+      - name: priority
+        type: integer
+        notNull: true
+        default: 0
       - name: progress
         type: integer
         notNull: true
         default: 0
-        range: [0, 100]
-      - name: inputParams
+      - name: input
         type: jsonb
         notNull: true
-      - name: resultUrls
-        type: "text[]"
+      - name: output
+        type: jsonb
         nullable: true
-      - name: modelUsed
+      - name: result
+        type: jsonb
+        nullable: true
+      - name: modelSlug
         type: varchar(100)
         nullable: true
-      - name: creditsCost
-        type: integer
-        notNull: true
-        default: 0
       - name: errorMessage
         type: text
         nullable: true
-      - name: maxRetries
-        type: integer
-        notNull: true
-        default: 3
-      - name: retryCount
-        type: integer
-        notNull: true
-        default: 0
       - name: startedAt
         type: timestamp
         nullable: true
       - name: completedAt
+        type: timestamp
+        nullable: true
+      - name: estimatedCompletionAt
         type: timestamp
         nullable: true
       - name: createdAt
@@ -134,22 +132,21 @@ entities:
         notNull: true
         default: now()
     indexes:
-      - fields: ["projectId"]
-        name: tasks_project_id_idx
-      - fields: ["userId"]
-        name: tasks_user_id_idx
-      - fields: ["status"]
-        name: tasks_status_idx
-      - fields: ["createdAt"]
-        name: tasks_created_at_idx
-    relations:
-      - type: hasMany
-        target: ExecutionState
-        via: taskId
+      - name: tasks_project_id_idx
+        fields: [projectId]
+      - name: tasks_user_id_idx
+        fields: [userId]
+      - name: tasks_status_idx
+        fields: [status]
+      - name: tasks_type_idx
+        fields: [type]
+      - name: tasks_created_at_idx
+        fields: [createdAt]
+    timestamps: true
 
   - name: ExecutionState
     table: execution_states
-    description: "任务执行状态日志（时序记录）"
+    description: "任务执行步骤状态"
     fields:
       - name: id
         type: uuid
@@ -165,21 +162,20 @@ entities:
       - name: status
         type: varchar(20)
         notNull: true
-        enum: ["pending", "running", "completed", "failed"]
+        default: pending
       - name: progress
         type: integer
+        notNull: true
         default: 0
-        range: [0, 100]
       - name: message
         type: text
         nullable: true
-      - name: output
+      - name: metadata
         type: jsonb
-        nullable: true
+        default: "{}"
       - name: startedAt
         type: timestamp
-        notNull: true
-        default: now()
+        nullable: true
       - name: completedAt
         type: timestamp
         nullable: true
@@ -187,385 +183,276 @@ entities:
         type: timestamp
         notNull: true
         default: now()
-      - name: updatedAt
-        type: timestamp
-        notNull: true
-        default: now()
     indexes:
-      - fields: ["taskId"]
-        name: execution_states_task_id_idx
-
-# ============================================================
-# 状态机定义
-# ============================================================
-state_machines:
-  - entity: Task.status
-    description: "AI 生成任务生命周期"
-    states:
-      pending: { label: "待处理", allowed: ["queued", "cancelled"] }
-      queued: { label: "排队中", allowed: ["running", "cancelled"] }
-      running: { label: "执行中", allowed: ["completed", "failed", "refunding"] }
-      completed: { label: "已完成", allowed: [] }
-      failed: { label: "失败", allowed: ["queued"] }
-      cancelled: { label: "已取消", allowed: ["refunding"] }
-      refunding: { label: "退款中", allowed: ["refunded"] }
-      refunded: { label: "已退款", allowed: [] }
-    transitions:
-      - from: pending
-        to: queued
-        trigger: "队列调度"
-        condition: "信用额度足够"
-      - from: pending
-        to: cancelled
-        trigger: "用户取消"
-      - from: queued
-        to: running
-        trigger: "AI 模型开始执行"
-      - from: queued
-        to: cancelled
-        trigger: "用户取消"
-      - from: running
-        to: completed
-        trigger: "AI 生成完成"
-      - from: running
-        to: failed
-        trigger: "AI 生成失败"
-        condition: "重试次数不足"
-      - from: running
-        to: refunding
-        trigger: "系统异常需退款"
-      - from: failed
-        to: queued
-        trigger: "重新入队"
-        condition: "retryCount < maxRetries"
-      - from: cancelled
-        to: refunding
-        trigger: "已扣费取消需退款"
-      - from: refunding
-        to: refunded
-        trigger: "退款成功"
+      - name: execution_states_task_id_idx
+        fields: [taskId]
+      - name: execution_states_step_idx
+        fields: [step]
+    timestamps: false
 
 # ============================================================
 # 操作定义
 # ============================================================
 operations:
   - name: createProject
-    summary: "创建项目"
     method: POST
-    path: /api/projects
+    path: /projects
+    description: "创建项目"
     auth: jwt
-    input:
-      name: { type: "string", minLength: 1, maxLength: 255, desc: "项目名称" }
-      type: { type: "string", enum: ["video", "image", "audio", "mixed"], desc: "项目类型" }
-      description: { type: "string", optional: true, desc: "项目描述" }
-      tags: { type: "string[]", optional: true, desc: "标签列表" }
-    output:
-      data:
-        id: uuid
-        name: string
-        type: string
-        createdAt: string
     pre:
-      - "用户已认证"
-    post:
-      - "创建项目记录，userId 关联到当前用户"
+      - "用户已登录"
+      - "用户项目数未达套餐上限"
     effect:
-      - "INSERT INTO projects"
+      - "创建 Project 记录"
     errors:
-      - status: 400
-        condition: "参数校验失败"
-        message: "请求参数不合法"
+      - status: 409
+        condition: "项目数达到上限"
+        message: "项目数已达套餐上限"
+    test: true
 
   - name: listProjects
-    summary: "获取项目列表"
     method: GET
-    path: /api/projects
+    path: /projects
+    description: "获取项目列表"
     auth: jwt
-    input:
-      page: { type: "number", optional: true, default: 1, desc: "页码" }
-      limit: { type: "number", optional: true, default: 20, desc: "每页数量" }
-      type: { type: "string", optional: true, desc: "按类型筛选" }
-    output:
-      data: { items: "array", total: "number", page: "number", limit: "number" }
     pre:
-      - "用户已认证"
+      - "用户已登录"
     post:
-      - "仅返回当前用户的项目"
-      - "按 createdAt 倒序排列"
+      - "返回用户的项目列表"
+    test: true
 
   - name: getProject
-    summary: "获取项目详情"
     method: GET
-    path: /api/projects/:id
+    path: /projects/:id
+    description: "获取项目详情"
     auth: jwt
-    output:
-      data: { id: uuid, name: string, type: string, description: { type: "string", nullable: true }, tasks: "array", createdAt: string }
     pre:
-      - "项目存在"
-      - "当前用户是项目所有者"
-    post:
-      - "返回项目完整信息及关联任务列表"
+      - "用户已登录"
+      - "项目存在且属于当前用户"
     errors:
       - status: 404
         condition: "项目不存在"
         message: "项目不存在"
-      - status: 403
-        condition: "非项目所有者"
-        message: "无权访问此项目"
+    test: true
+
+  - name: updateProject
+    method: PATCH
+    path: /projects/:id
+    description: "更新项目信息"
+    auth: jwt
+    pre:
+      - "用户已登录"
+      - "项目存在且属于当前用户"
+    effect:
+      - "更新 Project 记录"
+    errors:
+      - status: 404
+        condition: "项目不存在"
+        message: "项目不存在"
+    test: true
 
   - name: deleteProject
-    summary: "删除项目"
     method: DELETE
-    path: /api/projects/:id
+    path: /projects/:id
+    description: "删除项目"
     auth: jwt
     pre:
-      - "项目存在"
-      - "当前用户是项目所有者"
-    post:
-      - "级联删除关联的所有任务和状态记录"
+      - "用户已登录"
+      - "项目存在且属于当前用户"
     effect:
-      - "DELETE FROM projects WHERE id=:id AND userId=:userId"
+      - "删除 Project 及其下的 Tasks"
     errors:
       - status: 404
         condition: "项目不存在"
         message: "项目不存在"
-      - status: 403
-        condition: "非项目所有者"
-        message: "无权删除此项目"
+    test: true
 
-  - name: submitTask
-    summary: "提交 AI 生成任务"
-    method: POST
-    path: /api/tasks
-    auth: jwt
-    input:
-      projectId: { type: "uuid", desc: "所属项目" }
-      type: { type: "string", enum: ["text_to_image", "image_to_video", "text_to_video", "image_generation", "image_editing", "video_editing"], desc: "任务类型" }
-      inputParams: { type: "object", desc: "输入参数（根据任务类型不同）" }
-    output:
-      data:
-        id: uuid
-        status: string
-        creditsCost: number
-    pre:
-      - "用户信用额度 ≥ 任务所需信用"
-      - "用户并发任务数 ≤ 套餐限制"
-    post:
-      - "创建任务记录，status=pending"
-      - "预扣信用额度"
-      - "通过 WebSocket 推送任务创建事件"
-    effect:
-      - "INSERT INTO tasks"
-      - "UPDATE users SET credits = credits - cost"
-    errors:
-      - status: 402
-        condition: "信用额度不足"
-        message: "信用额度不足，需要 ${cost}，当前 ${available}"
-        test: "submit_task_insufficient_credits"
-      - status: 429
-        condition: "并发任务超限"
-        message: "超出并发任务限制"
-        test: "submit_task_concurrency_limit"
-      - status: 400
-        condition: "参数校验失败"
-        message: "请求参数不合法"
+  - name: createTask
+    method: N/A
+    auth: internal
+    path: /tasks
+    description: "创建任务（通过 POST /gateway/generate 间接创建，非直接 HTTP 路由）"
+    test: true
 
   - name: listTasks
-    summary: "获取任务列表"
     method: GET
-    path: /api/tasks
+    path: /tasks
+    description: "获取任务列表"
     auth: jwt
-    input:
-      projectId: { type: "uuid", optional: true, desc: "按项目筛选" }
-      status: { type: "string", optional: true, desc: "按状态筛选" }
-      page: { type: "number", optional: true, default: 1 }
-      limit: { type: "number", optional: true, default: 20 }
-    output:
-      data: { items: "array", total: "number" }
     pre:
-      - "JWT token 有效"
+      - "用户已登录"
     post:
-      - "仅返回当前用户的任务"
-      - "按 createdAt 倒序排列"
+      - "返回用户的任务列表"
+    test: true
 
   - name: getTask
-    summary: "获取任务详情"
     method: GET
-    path: /api/tasks/:id
+    path: /tasks/:id
+    description: "获取任务详情"
     auth: jwt
-    output:
-      data:
-        id: uuid
-        type: string
-        status: string
-        progress: number
-        inputParams: object
-        resultUrls: { type: "string[]", nullable: true }
-        creditsCost: number
-        errorMessage: { type: "string", nullable: true }
-        createdAt: string
     pre:
-      - "任务存在"
-      - "当前用户是任务所有者"
-    post:
-      - "返回任务完整信息"
+      - "用户已登录"
+      - "任务存在且属于当前用户"
     errors:
       - status: 404
         condition: "任务不存在"
         message: "任务不存在"
+    test: true
 
   - name: cancelTask
-    summary: "取消任务"
     method: POST
-    path: /api/tasks/:id/cancel
+    path: /tasks/:id/cancel
+    description: "取消任务"
     auth: jwt
     pre:
-      - "任务存在"
-      - "当前用户是任务所有者"
-      - "任务状态可以是 pending 或 queued"
-    post:
+      - "用户已登录"
+      - "任务存在且属于当前用户"
+      - "任务状态为 pending/queued/running"
+    effect:
       - "更新任务状态为 cancelled"
-      - "如需退款则进入 refunding 状态"
     errors:
-      - status: 400
-        condition: "当前状态不可取消"
-        message: "任务当前状态 ${status} 不可取消"
-        test: "cancel_task_invalid_status"
+      - status: 422
+        condition: "任务状态不可取消"
+        message: "任务已完成或已取消，无法取消"
+    test: true
+
+  - name: getTaskStates
+    method: GET
+    path: /tasks/:id/states
+    description: "获取任务执行步骤状态"
+    auth: jwt
+    pre:
+      - "用户已登录"
+      - "任务存在且属于当前用户"
+    post:
+      - "返回 ExecutionStates 列表"
+    test: true
 
   - name: retryTask
-    summary: "重试失败任务"
-    method: POST
-    path: /api/tasks/:id/retry
+    method: N/A
+    path: N/A
+    description: "重试失败的任务"
     auth: jwt
     pre:
-      - "任务存在"
+      - "用户已登录"
+      - "任务存在且属于当前用户"
       - "任务状态为 failed"
-      - "retryCount < maxRetries"
-    post:
-      - "更新任务状态为 queued"
-      - "递增 retryCount"
-    errors:
-      - status: 400
-        condition: "超出重试次数"
-        message: "已达到最大重试次数 ${maxRetries}"
-        test: "retry_task_exceeded_max"
-
-  - name: completeTaskWithCredits
-    summary: "完成任务并结算信用（内部）"
-    method: N/A
-    path: N/A
-    auth: internal
-    pre:
-      - "任务存在且状态为 running"
-    post:
-      - "更新任务状态为 completed"
-      - "设置 resultUrls 和 completedAt"
-      - "通过 WebSocket 推送完成事件"
     effect:
-      - "UPDATE tasks SET status=completed, resultUrls=urls, completedAt=now()"
-      - "通过 WebSocket 通知客户端"
+      - "重置任务状态为 pending"
+    test: true
 
-  - name: failTaskWithRefund
-    summary: "标记任务失败并退款（内部）"
+  - name: getTaskWebSocket
     method: N/A
-    path: N/A
-    auth: internal
-    pre:
-      - "任务存在且状态为 running"
-    post:
-      - "更新任务状态为 failed"
-      - "设置 errorMessage"
-      - "信用额度退回"
-    effect:
-      - "UPDATE tasks SET status=failed, errorMessage=msg"
-      - "UPDATE users SET credits = credits + cost"
-
-  - name: getTaskStateHistory
-    summary: "获取任务执行状态历史"
-    method: GET
-    path: /api/tasks/:id/states
+    path: /ws/tasks/:id
+    description: "WebSocket 实时推送任务状态（by ws://）"
     auth: jwt
-    output:
-      data: { items: "array" }
-    pre:
-      - "任务存在"
-      - "当前用户是任务所有者"
-    post:
-      - "按 startedAt 顺序返回执行状态记录"
+    test: true
 
 # ============================================================
 # 业务规则
 # ============================================================
 rules:
-  - id: ENGINE-001
-    description: "任务状态转换必须严格遵循状态机定义"
+  - name: project_owner_only
+    id: ENG-001
     severity: error
-    enforcement: service_logic
-    test: "task_state_transition_valid"
+    level: error
+    description: "只有项目所有者可查看/修改/删除项目"
+    enforcement: "所有项目操作检查 userId = jwt.userId"
+    test: "server/src/test/project.service.test.ts"
 
-  - id: ENGINE-002
-    description: "只有项目所有者可以删除项目"
+  - name: task_owner_only
+    id: ENG-002
     severity: error
-    enforcement: service_logic
-    test: "delete_project_unauthorized"
+    level: error
+    description: "只有任务所有者可查看/取消任务"
+    enforcement: "所有任务操作检查 userId = jwt.userId"
+    test: "server/src/test/task.service.test.ts"
 
-  - id: ENGINE-003
-    description: "任务进度 0-100 闭区间"
+  - name: task_status_guard
+    id: ENG-003
     severity: error
-    enforcement: zod_schema
+    level: error
+    description: "已完成/已取消的任务不可再取消"
+    enforcement: "取消前检查 status 是否在 pending/queued/running 中"
+    test: "server/src/test/task.service.test.ts"
 
-  - id: ENGINE-004
-    description: "取消任务仅允许 pending 或 queued 状态"
+  - name: progress_bounds
+    id: ENG-004
     severity: error
-    enforcement: service_logic
-    test: "cancel_task_invalid_status"
+    level: error
+    description: "progress 必须在 0-100 范围内"
+    enforcement: "更新时 clamp progress"
+    test: "server/src/test/task.service.test.ts"
 
-  - id: ENGINE-005
-    description: "重试次数不超过 maxRetries"
+  - name: concurrent_task_limit
+    id: ENG-005
     severity: error
-    enforcement: service_logic
-    test: "retry_task_exceeded_max"
+    level: error
+    description: "用户并发任务数受套餐限制"
+    enforcement: "提交任务前检查 running 任务数 < maxConcurrentTasks"
+    test: "server/src/test/task.service.test.ts"
 
-  - id: ENGINE-006
-    description: "提交任务时预扣信用额度"
+  - name: project_max_projects
+    id: ENG-006
     severity: error
-    enforcement: service_logic
-    test: "submit_task_credits_deducted"
+    level: error
+    description: "用户项目数受套餐限制"
+    enforcement: "创建项目前检查项目数 < maxProjects"
+    test: "server/src/test/project.service.test.ts"
 
-  - id: ENGINE-007
-    description: "失败任务退回信用额度"
+  - name: cascade_delete
+    id: ENG-007
     severity: error
-    enforcement: service_logic
-    test: "fail_task_refund"
+    level: error
+    description: "删除项目时级联删除其任务"
+    enforcement: "DB onDelete cascade"
+    test: "server/src/test/project.service.test.ts"
 
-  - id: ENGINE-008
-    description: "项目列表仅返回当前用户的项目"
+  - name: execution_state_logging
+    id: ENG-008
     severity: error
-    enforcement: service_logic
-    test: "list_projects_scoped_to_user"
+    level: error
+    description: "每个任务执行步骤必须记录 ExecutionState"
+    enforcement: "任务执行时写入 execution_states 表"
+    test: "server/src/test/task.service.test.ts"
 
 # ============================================================
-# 错误码汇总
+# 状态机
 # ============================================================
-errors:
-  - code: ENGINE_PROJECT_NOT_FOUND
-    status: 404
-    message: "项目不存在"
-  - code: ENGINE_PROJECT_ACCESS_DENIED
-    status: 403
-    message: "无权访问此项目"
-  - code: ENGINE_TASK_NOT_FOUND
-    status: 404
-    message: "任务不存在"
-  - code: ENGINE_INSUFFICIENT_CREDITS
-    status: 402
-    message: "信用额度不足，需要 ${cost}，当前 ${available}"
-  - code: ENGINE_CONCURRENCY_LIMIT
-    status: 429
-    message: "超出并发任务限制"
-  - code: ENGINE_CANCEL_INVALID_STATUS
-    status: 400
-    message: "任务当前状态 ${status} 不可取消"
-  - code: ENGINE_RETRY_EXCEEDED
-    status: 400
-    message: "已达到最大重试次数 ${maxRetries}"
+state_machines:
+  - name: task_execution
+    entity: Task
+    description: "任务执行状态机"
+    states:
+      - pending
+      - queued
+      - running
+      - completed
+      - failed
+      - cancelled
+    transitions:
+      - from: pending
+        to: queued
+        trigger: "任务被调度器拾取"
+      - from: queued
+        to: running
+        trigger: "开始执行"
+      - from: running
+        to: completed
+        trigger: "执行成功"
+      - from: running
+        to: failed
+        trigger: "执行失败"
+      - from: pending
+        to: cancelled
+        trigger: "用户取消"
+      - from: queued
+        to: cancelled
+        trigger: "用户取消"
+      - from: running
+        to: cancelled
+        trigger: "用户取消"
+      - from: failed
+        to: pending
+        trigger: "用户重试"
+    initial: pending
