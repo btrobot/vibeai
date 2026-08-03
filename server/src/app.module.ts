@@ -20,7 +20,7 @@ import { DrizzleModule } from './common/drizzle.module';
       exclude: ['/api*', '/ws*'],
       serveStaticOptions: {
         index: 'index.html',
-        fallthrough: false,
+        fallthrough: true,
       },
     }),
     ConfigModule.forRoot({

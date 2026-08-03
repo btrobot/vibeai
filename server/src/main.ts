@@ -42,6 +42,16 @@ async function bootstrap() {
     }),
   );
 
+  // SPA fallback: serve index.html for non-API, non-WebSocket routes
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.use((req: any, res: any, next: any) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/ws')) return next();
+    // If serve-static didn't find the file, serve index.html as SPA fallback
+    res.sendFile(join(__dirname, '..', '..', 'dist', 'index.html'), (err: any) => {
+      if (err) res.status(500).send('Internal Server Error');
+    });
+  });
+
   const port = process.env.PORT || process.env.BACKEND_PORT || 3001;
 
   // Health check endpoint
