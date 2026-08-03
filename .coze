@@ -2,12 +2,14 @@
 requires = [ "nodejs-24" ]
 project_type = "web"
 version = "0.0.32"
-appliedPatches = [ ]
+appliedPatches = [ "vite/validate@0.0.20" ]
+template = "vite"
 
 [dev]
 build = [ "bash", "./scripts/prepare.sh" ]
 run = [ "bash", "./scripts/dev.sh" ]
 deps = [ "git" ]
+validate = [ "bash", "./scripts/validate.sh" ]
 
 [deploy]
 build = [ "bash", "./scripts/build.sh" ]
