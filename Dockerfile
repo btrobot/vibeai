@@ -13,13 +13,6 @@ ARG BUILD_DATE
 ARG GIT_COMMIT
 ARG DEPLOY_REGION=auto  # auto | cn | global
 
-# ─── OCI 标准标签 ───
-LABEL org.opencontainers.image.title="${PROJECT_NAME}"
-LABEL org.opencontainers.image.description="VibeAI 内容创作平台 — AI 视频/图片生成 + 电商内容工具"
-LABEL org.opencontainers.image.version="${PROJECT_VERSION}"
-LABEL org.opencontainers.image.created="${BUILD_DATE}"
-LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
-
 # ============================================
 # 阶段 1: 安装依赖 (deps)
 # ============================================
@@ -48,7 +41,8 @@ COPY server/package.json server/pnpm-lock.yaml ./server/
 RUN cd server && HUSKY=0 pnpm install --frozen-lockfile
 
 # 归档 node_modules（避免 COPY 数千小文件超时）
-RUN tar cf /tmp/server_node_modules.tar server/node_modules
+RUN tar cf /tmp/frontend_node_modules.tar node_modules && \
+    tar cf /tmp/server_node_modules.tar server/node_modules
 
 # ============================================
 # 阶段 2: 构建应用 (builder)
@@ -59,9 +53,11 @@ WORKDIR /app
 # 安装 pnpm（不继承 deps 阶段的全局安装）
 RUN npm install -g pnpm@9
 
-# 解压前端依赖
-COPY --from=deps /app/node_modules ./node_modules
-# 解压后端依赖
+# 解压前端依赖（tar 归档传输）
+COPY --from=deps /tmp/frontend_node_modules.tar /tmp/
+RUN tar xf /tmp/frontend_node_modules.tar -C /app --no-same-owner && \
+    rm /tmp/frontend_node_modules.tar
+# 解压后端依赖（tar 归档传输）
 COPY --from=deps /tmp/server_node_modules.tar /tmp/
 RUN tar xf /tmp/server_node_modules.tar -C /app --no-same-owner && \
     rm /tmp/server_node_modules.tar
@@ -84,6 +80,13 @@ RUN tar cf /tmp/dist.tar dist && \
 # ============================================
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
+
+# ─── OCI 标准标签（放在最终阶段确保生效）───
+LABEL org.opencontainers.image.title="${PROJECT_NAME}"
+LABEL org.opencontainers.image.description="VibeAI 内容创作平台 — AI 视频/图片生成 + 电商内容工具"
+LABEL org.opencontainers.image.version="${PROJECT_VERSION}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 
 # 安装运行时必需工具（curl 用于 HEALTHCHECK，bash 用于启动脚本）
 RUN apt-get update && \

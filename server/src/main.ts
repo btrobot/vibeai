@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { join } from 'path';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
@@ -54,8 +55,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || process.env.BACKEND_PORT || 3001;
 
-  // Health check endpoint
-  const expressApp = app.getHttpAdapter().getInstance();
+  // Health check endpoint (复用上面已声明的 expressApp)
   expressApp.get('/api/health', (_req: any, res: any) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });

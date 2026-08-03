@@ -38,7 +38,8 @@ tsconfig.*.json
 Dockerfile*
 docker-compose*
 scripts/docker-*.sh
-scripts/detect-mirror.sh
+scripts/validate-docker.sh
+# 注意: scripts/detect-mirror.sh 不能排除，Dockerfile 构建时需要 COPY
 
 # IDE & OS
 .DS_Store
