@@ -6,6 +6,21 @@ DEPLOY_RUN_PORT="${DEPLOY_RUN_PORT:-5000}"
 
 cd "${COZE_WORKSPACE_PATH}"
 
+# Run database migrations
+echo "Running database migrations..."
+cd server && node -e "
+const { drizzle } = require('drizzle-orm/node-postgres');
+const { migrate } = require('drizzle-orm/node-postgres/migrator');
+const { Pool } = require('pg');
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL || 'postgres://postgres:postgres@db:5432/vibeai' });
+const db = drizzle(pool);
+migrate(db, { migrationsFolder: './drizzle' })
+  .then(() => { console.log('Migrations completed'); process.exit(0); })
+  .catch((err) => { console.error('Migration failed:', err.message); process.exit(1); });
+" 2>&1
+cd "${COZE_WORKSPACE_PATH}"
+
 echo "Starting NestJS (API + static files) on port ${DEPLOY_RUN_PORT}..."
 export PORT="${DEPLOY_RUN_PORT}"
 cd server && node dist/main.js &
