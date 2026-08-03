@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, type ElementType } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,10 +37,10 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function getFileIcon(mimeType: string) {
+function getFileIcon(mimeType: string): ElementType {
   if (mimeType.startsWith('image/')) return Image;
   if (mimeType.startsWith('video/')) return Video;
-  if (mimeType.startsWith('audio/')) return Audio;
+  if (mimeType.startsWith('audio/')) return Music;
   return FileText;
 }
 

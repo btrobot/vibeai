@@ -32,7 +32,7 @@ export function useStorage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getAuthHeaders = useCallback(() => {
+  const getAuthHeaders = useCallback((): Record<string, string> => {
     const stored = localStorage.getItem('auth_tokens');
     if (!stored) return {};
     const { accessToken } = JSON.parse(stored);

@@ -32,7 +32,7 @@ export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const getAuthHeaders = () => {
+  const getAuthHeaders = (): Record<string, string> => {
     const stored = localStorage.getItem('auth_tokens');
     if (!stored) return {};
     const { accessToken } = JSON.parse(stored);

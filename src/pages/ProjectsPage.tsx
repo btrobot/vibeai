@@ -39,7 +39,7 @@ export default function ProjectsPage() {
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
 
-  const getAuthHeaders = () => {
+  const getAuthHeaders = (): Record<string, string> => {
     const stored = localStorage.getItem('auth_tokens');
     if (!stored) return {};
     const { accessToken } = JSON.parse(stored);

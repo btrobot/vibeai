@@ -285,16 +285,16 @@ export default function BillingPage() {
                           <span>全部能力</span>
                         </div>
                       )}
-                      {plan.features.apiAccess && (
+                      {!!(plan.features as Record<string, unknown>).apiAccess && (
                         <div className="flex items-center gap-2">
                           <Check className="w-4 h-4 text-[hsl(160,40%,40%)]" />
                           <span>API 访问</span>
                         </div>
                       )}
-                      {plan.features.teamSeats && (
+                      {!!(plan.features as Record<string, unknown>).teamSeats && (
                         <div className="flex items-center gap-2">
                           <Check className="w-4 h-4 text-[hsl(160,40%,40%)]" />
-                          <span>{plan.features.teamSeats as number} 个团队席位</span>
+                          <span>{String(plan.features.teamSeats)} 个团队席位</span>
                         </div>
                       )}
                     </div>
@@ -307,7 +307,7 @@ export default function BillingPage() {
                       {subscribing === plan.slug ? (
                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
                       ) : null}
-                      {isCurrent ? '当前套餐' : plan.priceMonthly === '0' ? '免费使用' : '升级'}
+                      {isCurrent ? '当前套餐' : plan.priceMonthly === 0 ? '免费使用' : '升级'}
                     </Button>
                   </CardContent>
                 </Card>

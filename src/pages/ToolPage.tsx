@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Upload,
@@ -45,8 +45,10 @@ const toolConfig: Record<string, { name: string; description: string; icon: any;
   },
 };
 
-export default function ToolPage({ toolSlug }: { toolSlug: string }) {
+export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } = {}) {
   const navigate = useNavigate();
+  const params = useParams<{ toolType?: string }>();
+  const toolSlug = _toolSlug ?? params.toolType ?? '';
   const config = toolConfig[toolSlug];
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export default function ToolPage({ toolSlug }: { toolSlug: string }) {
   }
 
   const Icon = config.icon;
-  const getAuthHeaders = () => {
+  const getAuthHeaders = (): Record<string, string> => {
     const stored = localStorage.getItem('auth_tokens');
     if (!stored) return {};
     const { accessToken } = JSON.parse(stored);

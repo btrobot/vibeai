@@ -1,18 +1,20 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('画廊浏览', () => {
-  // 画廊页面需要登录（AuthGuard），先统一登录
   test.beforeEach(async ({ page }) => {
+    // 画廊需要登录，先登录
     await page.goto('/login');
-    await page.fill('input#email', 'admin@vibeai.com');
-    await page.fill('input#password', 'admin123456');
-    await page.click('button:has-text("登录")');
+    await page.locator('#email').fill('admin@vibeai.com');
+    await page.locator('#password').fill('admin123456');
+    await page.getByRole('button', { name: '登录' }).click();
     await page.waitForURL(/\/dashboard/);
   });
 
   test('公开画廊页面加载', async ({ page }) => {
     await page.goto('/gallery');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    // 等待画廊数据加载完成
+    await page.waitForTimeout(2000);
 
     // 应该显示标签页
     await expect(page.getByRole('button', { name: '热门' })).toBeVisible();
@@ -22,7 +24,9 @@ test.describe('画廊浏览', () => {
 
   test('切换画廊标签', async ({ page }) => {
     await page.goto('/gallery');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    // 等待画廊数据加载完成
+    await page.waitForTimeout(2000);
 
     // 点击最新标签
     await page.getByRole('button', { name: '最新' }).click();
@@ -37,7 +41,9 @@ test.describe('画廊浏览', () => {
 
   test('已登录用户可访问画廊', async ({ page }) => {
     await page.goto('/gallery');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    // 等待画廊数据加载完成
+    await page.waitForTimeout(2000);
     await expect(page.getByRole('heading', { name: '社区画廊' })).toBeVisible();
   });
 });

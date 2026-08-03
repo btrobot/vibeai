@@ -91,6 +91,12 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **Drizzle Mock** (3 tests) — 链式调用的 thenable 协议与 NestJS 兼容性
 - **Storage Service** (12 tests) — 上传/列表/详情/删除/签名URL/统计
 
+### E2E 测试 (Playwright) ✅ (11/11 tests passing)
+- **认证流程** (3 tests) — 注册/登出重登录/登录失败
+- **仪表盘** (3 tests) — 统计信息/侧边导航/跳转画廊
+- **画廊浏览** (3 tests) — 公开页面/标签切换/登录访问
+- **项目流程** (2 tests) — 创建项目/项目列表
+
 ### 测试基础设施
 - `server/src/test/drizzle-mock.ts` — Drizzle ORM 链式调用 Mock
 - `server/src/test/ws-mock.ts` — WebSocket Mock
