@@ -2,7 +2,7 @@
 FROM node:24-alpine AS deps
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
 # Frontend dependencies
 COPY package.json pnpm-lock.yaml ./
@@ -29,20 +29,19 @@ RUN cd server && npx tsc
 FROM node:24-alpine AS production
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@9 --activate && \
+    pnpm add -g serve
 
-# Copy production dependencies only
+# Copy production dependencies only (ignore scripts to avoid husky in prepare)
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prefer-offline --prod
+RUN pnpm install --frozen-lockfile --prefer-offline --prod --ignore-scripts
 
 COPY server/package.json server/pnpm-lock.yaml ./server/
-RUN cd server && pnpm install --frozen-lockfile --prefer-offline --prod
+RUN cd server && pnpm install --frozen-lockfile --prefer-offline --prod --ignore-scripts
 
 # Copy built artifacts
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server/dist ./server/dist
-COPY --from=build /app/server/node_modules ./server/node_modules
-COPY --from=build /app/node_modules ./node_modules
 
 # Copy startup scripts
 COPY scripts/start.sh ./scripts/start.sh
