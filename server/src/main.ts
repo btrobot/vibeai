@@ -2,6 +2,9 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { ExpressAdapter } from '@nestjs/platform-express';
+import express from 'express';
+import { join } from 'path';
 import { AppModule } from './app.module';
 import { WsService } from './modules/ws/ws.service';
 
@@ -23,13 +26,24 @@ async function bootstrap() {
     }),
   );
 
-  const port = process.env.BACKEND_PORT || 3001;
+  const port = process.env.PORT || process.env.BACKEND_PORT || 3001;
 
   // Health check endpoint (raw Express route before listen)
   const expressApp = app.getHttpAdapter().getInstance();
   expressApp.get('/api/health', (_req: any, res: any) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
+
+  // Serve static files from root dist/ (Vite build output)
+  // Only in production — in dev, Vite handles it with HMR
+  if (process.env.NODE_ENV === 'production') {
+    const distPath = join(__dirname, '..', '..', 'dist');
+    expressApp.use(express.static(distPath));
+    // SPA fallback: all non-API routes serve index.html
+    expressApp.get('*', (_req: any, res: any) => {
+      res.sendFile(join(distPath, 'index.html'));
+    });
+  }
 
   await app.listen(port);
 
