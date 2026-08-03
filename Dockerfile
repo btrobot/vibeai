@@ -2,7 +2,7 @@
 FROM node:24-alpine AS deps
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN npm install -g pnpm@9.0.0
 
 # Frontend dependencies
 COPY package.json pnpm-lock.yaml ./
@@ -29,8 +29,7 @@ RUN cd server && npx tsc
 FROM node:24-alpine AS production
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@9 --activate && \
-    pnpm add -g serve
+RUN npm install -g pnpm@9.0.0 serve
 
 # Copy production dependencies only (ignore scripts to avoid husky in prepare)
 COPY package.json pnpm-lock.yaml ./
