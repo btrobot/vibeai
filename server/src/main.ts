@@ -39,8 +39,9 @@ async function bootstrap() {
   if (process.env.NODE_ENV === 'production') {
     const distPath = join(__dirname, '..', '..', 'dist');
     expressApp.use(express.static(distPath));
-    // SPA fallback: all non-API routes serve index.html
-    expressApp.get('*', (_req: any, res: any) => {
+    // SPA fallback: non-API routes serve index.html
+    expressApp.use((req: any, res: any, next: any) => {
+      if (req.path.startsWith('/api')) return next();
       res.sendFile(join(distPath, 'index.html'));
     });
   }
