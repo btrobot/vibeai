@@ -2,10 +2,29 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
 import { AppModule } from './app.module';
 import { WsService } from './modules/ws/ws.service';
 
 async function bootstrap() {
+  // Run database migrations before starting the app
+  try {
+    const databaseUrl = process.env.DATABASE_URL;
+    if (databaseUrl) {
+      const pool = new Pool({ connectionString: databaseUrl });
+      await migrate(drizzle(pool), { migrationsFolder: './drizzle' });
+      await pool.end();
+      console.log('Database migrations completed successfully');
+    } else {
+      console.log('DATABASE_URL not set, skipping migrations');
+    }
+  } catch (e) {
+    console.error('Migration failed:', (e as Error).message);
+    // Don't exit - allow app to start even if migration fails (dev mode)
+  }
+
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api');
