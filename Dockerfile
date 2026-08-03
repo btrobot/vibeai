@@ -63,6 +63,9 @@ COPY --from=deps /app/server/node_modules /app/server/node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server/dist ./server/dist
 
+# Copy database migration files
+COPY --from=build /app/server/drizzle ./server/drizzle
+
 # Copy startup scripts
 COPY scripts/start.sh ./scripts/start.sh
 RUN chmod +x ./scripts/start.sh
