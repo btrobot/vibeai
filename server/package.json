@@ -27,6 +27,7 @@
     "cookie-parser": "^1.4.7",
     "coze-coding-dev-sdk": "^0.7.24",
     "drizzle-orm": "^0.38.0",
+    "express": "^5.2.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "postgres": "^3.4.0",
