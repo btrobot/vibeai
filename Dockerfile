@@ -52,7 +52,7 @@ WORKDIR /app
 ARG NPM_REGISTRY
 ARG PNPM_VERSION
 
-RUN npm install -g pnpm@${PNPM_VERSION} serve
+RUN apk add --no-cache bash curl && npm install -g pnpm@${PNPM_VERSION} serve
 RUN pnpm config set registry ${NPM_REGISTRY}
 
 # Copy production dependencies only (ignore scripts to avoid husky in prepare)

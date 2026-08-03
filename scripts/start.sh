@@ -14,7 +14,7 @@ cd "${COZE_WORKSPACE_PATH}"
 
 # Wait for backend to be ready
 echo "Waiting for backend on port ${BACKEND_PORT}..."
-for i in $(seq 1 30); do
+for ((i=1; i<=30; i++)); do
   if curl -s -o /dev/null -w '%{http_code}' "http://localhost:${BACKEND_PORT}/api/health" 2>/dev/null | grep -q 200; then
     echo "Backend is ready."
     break
