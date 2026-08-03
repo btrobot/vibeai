@@ -1,0 +1,512 @@
+# ============================================================
+# VibeAI — 认证域规格 (Auth Domain)
+# ============================================================
+domain: auth
+version: "1.0"
+last_updated: "2025-04-06"
+
+# ============================================================
+# 实体定义
+# ============================================================
+entities:
+  - name: User
+    table: users
+    description: "平台用户"
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: email
+        type: varchar(255)
+        notNull: true
+        unique: true
+      - name: passwordHash
+        type: text
+        notNull: true
+      - name: name
+        type: varchar(100)
+        notNull: true
+      - name: avatar
+        type: text
+        nullable: true
+      - name: role
+        type: varchar(20)
+        notNull: true
+        default: user
+        enum: ["user", "admin", "vip"]
+      - name: credits
+        type: integer
+        notNull: true
+        default: 100
+      - name: isActive
+        type: boolean
+        notNull: true
+        default: true
+      - name: isEmailVerified
+        type: boolean
+        notNull: true
+        default: false
+      - name: lastLoginAt
+        type: timestamp
+        nullable: true
+      - name: failedLoginAttempts
+        type: integer
+        notNull: true
+        default: 0
+      - name: lockedUntil
+        type: timestamp
+        nullable: true
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - fields: ["email"]
+        name: users_email_idx
+    relations:
+      - type: hasMany
+        target: Session
+        via: userId
+      - type: hasMany
+        target: OAuthAccount
+        via: userId
+      - type: hasMany
+        target: LoginLog
+        via: userId
+      - type: hasMany
+        target: File
+        via: userId
+      - type: hasMany
+        target: Project
+        via: userId
+      - type: hasMany
+        target: Task
+        via: userId
+      - type: hasMany
+        target: Subscription
+        via: userId
+      - type: hasMany
+        target: GalleryWork
+        via: userId
+
+  - name: Session
+    table: sessions
+    description: "用户登录会话（refresh token 存储）"
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk: { table: "users", field: "id", onDelete: "cascade" }
+      - name: refreshToken
+        type: text
+        notNull: true
+        unique: true
+      - name: deviceInfo
+        type: text
+        nullable: true
+      - name: ipAddress
+        type: varchar(45)
+        nullable: true
+      - name: expiresAt
+        type: timestamp
+        notNull: true
+      - name: isRevoked
+        type: boolean
+        notNull: true
+        default: false
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - fields: ["userId"]
+        name: sessions_user_id_idx
+      - fields: ["refreshToken"]
+        name: sessions_refresh_token_idx
+
+  - name: OAuthAccount
+    table: oauth_accounts
+    description: "第三方 OAuth 账号绑定"
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk: { table: "users", field: "id", onDelete: "cascade" }
+      - name: provider
+        type: varchar(50)
+        notNull: true
+      - name: providerAccountId
+        type: varchar(255)
+        notNull: true
+      - name: providerData
+        type: text
+        nullable: true
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - fields: ["userId"]
+        name: oauth_accounts_user_id_idx
+      - fields: ["provider", "providerAccountId"]
+        name: oauth_accounts_provider_idx
+
+  - name: LoginLog
+    table: login_logs
+    description: "登录日志审计"
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        nullable: true
+        fk: { table: "users", field: "id", onDelete: "set null" }
+      - name: email
+        type: varchar(255)
+        notNull: true
+      - name: action
+        type: varchar(50)
+        notNull: true
+        enum: ["login", "logout", "failed", "refresh"]
+      - name: ipAddress
+        type: varchar(45)
+        nullable: true
+      - name: deviceInfo
+        type: text
+        nullable: true
+      - name: success
+        type: boolean
+        notNull: true
+      - name: failReason
+        type: text
+        nullable: true
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - fields: ["userId"]
+        name: login_logs_user_id_idx
+      - fields: ["createdAt"]
+        name: login_logs_created_at_idx
+
+# ============================================================
+# 操作定义
+# ============================================================
+operations:
+  - name: register
+    summary: "用户注册"
+    method: POST
+    path: /api/auth/register
+    auth: none
+    input:
+      email: { type: "string", format: "email", desc: "邮箱地址" }
+      password: { type: "string", minLength: 8, desc: "密码（需含字母和数字）" }
+      name: { type: "string", minLength: 2, maxLength: 50, desc: "昵称" }
+    output:
+      success: boolean
+      data:
+        id: uuid
+        email: string
+        name: string
+        role: string
+        credits: number
+        createdAt: string
+      message: string
+    pre:
+      - "邮箱未被注册"
+    post:
+      - "创建用户记录，角色为 user，信用额度 100"
+      - "不返回 passwordHash"
+      - "不自动登录（无 token 返回）"
+    effect:
+      - "INSERT INTO users"
+    errors:
+      - status: 409
+        condition: "邮箱已存在"
+        message: "该邮箱已被注册"
+        test: "register_duplicate_email"
+
+  - name: login
+    summary: "用户登录"
+    method: POST
+    path: /api/auth/login
+    auth: none
+    input:
+      email: { type: "string", format: "email", desc: "邮箱地址" }
+      password: { type: "string", minLength: 1, desc: "密码" }
+    output:
+      success: boolean
+      data:
+        user:
+          id: uuid
+          email: string
+          name: string
+          avatar: { type: "string", nullable: true }
+          role: string
+          credits: number
+          createdAt: string
+        tokens:
+          accessToken: string
+          refreshToken: string
+          expiresIn: number
+      message: string
+    pre:
+      - "用户存在且 isActive = true"
+      - "账户未被锁定（lockedUntil < now）"
+    post:
+      - "清除 failedLoginAttempts，更新 lastLoginAt"
+      - "生成 accessToken（15min）和 refreshToken（7d）"
+      - "记录 session 到 sessions 表"
+      - "记录 login_log（action=login, success=true）"
+    effect:
+      - "UPDATE users SET failedLoginAttempts=0, lockedUntil=null, lastLoginAt=now()"
+      - "INSERT INTO sessions"
+      - "INSERT INTO login_logs"
+    errors:
+      - status: 401
+        condition: "邮箱不存在"
+        message: "邮箱或密码错误"
+        test: "login_wrong_email"
+      - status: 401
+        condition: "密码错误"
+        message: "邮箱或密码错误"
+        test: "login_wrong_password"
+      - status: 403
+        condition: "账户被禁用"
+        message: "账户已被禁用"
+        test: "login_disabled_user"
+      - status: 403
+        condition: "账户被锁定（连续5次失败）"
+        message: "账户已被锁定，请 ${remaining} 分钟后重试"
+        test: "login_locked_user"
+
+  - name: refresh
+    summary: "刷新 Token"
+    method: POST
+    path: /api/auth/refresh
+    auth: none
+    input:
+      refreshToken: { type: "string", minLength: 1, desc: "刷新令牌" }
+    output:
+      success: boolean
+      data:
+        user: { id: uuid, email: string, name: string, avatar: { type: "string", nullable: true }, role: string, credits: number, createdAt: string }
+        tokens: { accessToken: string, refreshToken: string, expiresIn: number }
+    pre:
+      - "refreshToken 在 sessions 表中存在且 isRevoked = false"
+      - "refreshToken 未过期"
+      - "对应用户存在且 isActive = true"
+    post:
+      - "吊销旧 session"
+      - "生成新 token 对"
+      - "创建新 session 记录"
+    effect:
+      - "UPDATE sessions SET isRevoked=true WHERE refreshToken=old"
+      - "INSERT INTO sessions"
+    errors:
+      - status: 401
+        condition: "refreshToken 无效或已过期"
+        message: "refreshToken 无效或已过期"
+        test: "refresh_expired_token"
+      - status: 401
+        condition: "用户不存在或已被禁用"
+        message: "用户不存在或已被禁用"
+
+  - name: logout
+    summary: "登出"
+    method: POST
+    path: /api/auth/logout
+    auth: jwt
+    input:
+      refreshToken: { type: "string", desc: "刷新令牌（从 cookie 或 body 获取）" }
+    output:
+      success: boolean
+      message: string
+    post:
+      - "吊销 refreshToken 对应的 session"
+    effect:
+      - "UPDATE sessions SET isRevoked=true WHERE refreshToken=token"
+    errors:
+      - status: 401
+        condition: "缺少 refreshToken"
+        message: "缺少 refreshToken"
+
+  - name: getProfile
+    summary: "获取当前用户信息"
+    method: GET
+    path: /api/auth/me
+    auth: jwt
+    output:
+      success: boolean
+      data:
+        id: uuid
+        email: string
+        name: string
+        avatar: { type: "string", nullable: true }
+        role: string
+        credits: number
+        createdAt: string
+    pre:
+      - "JWT token 有效且用户存在"
+    post:
+      - "不返回 passwordHash"
+    errors:
+      - status: 401
+        condition: "用户不存在"
+        message: "用户不存在"
+
+  - name: updateProfile
+    summary: "更新用户信息"
+    method: PATCH
+    path: /api/auth/me
+    auth: jwt
+    input:
+      name: { type: "string", minLength: 2, maxLength: 50, optional: true, desc: "昵称" }
+      avatar: { type: "string", optional: true, desc: "头像 URL" }
+    output:
+      success: boolean
+      data: { id: uuid, email: string, name: string, avatar: { type: "string", nullable: true }, role: string, credits: number, createdAt: string }
+    pre:
+      - "JWT token 有效且用户存在"
+    post:
+      - "更新用户 name/avatar 字段"
+      - "更新 updatedAt"
+
+  - name: changePassword
+    summary: "修改密码"
+    method: POST
+    path: /api/auth/change-password
+    auth: jwt
+    input:
+      currentPassword: { type: "string", minLength: 1, desc: "当前密码" }
+      newPassword: { type: "string", minLength: 8, desc: "新密码（需含字母和数字）" }
+    output:
+      success: boolean
+      message: string
+    pre:
+      - "当前密码验证通过"
+    post:
+      - "更新 passwordHash"
+    effect:
+      - "UPDATE users SET passwordHash=hash, updatedAt=now()"
+    errors:
+      - status: 400
+        condition: "当前密码错误"
+        message: "当前密码错误"
+        test: "change_password_wrong_current"
+
+# ============================================================
+# 业务规则
+# ============================================================
+rules:
+  - id: AUTH-001
+    description: "密码必须包含字母和数字"
+    severity: error
+    enforcement: zod_schema + class_validator
+    test: "register_password_without_letter or register_password_without_digit"
+
+  - id: AUTH-002
+    description: "连续 5 次登录失败锁定账户 30 分钟"
+    severity: error
+    enforcement: service_logic
+    test: "login_locked_after_5_failures"
+
+  - id: AUTH-003
+    description: "accessToken 有效期 15 分钟（900 秒）"
+    severity: warning
+    enforcement: jwt_config
+
+  - id: AUTH-004
+    description: "refreshToken 有效期 7 天"
+    severity: warning
+    enforcement: jwt_config
+
+  - id: AUTH-005
+    description: "注册时默认赠送 100 信用额度"
+    severity: error
+    enforcement: service_logic
+    test: "register_credits_default"
+
+  - id: AUTH-006
+    description: "登录时密码比较使用 bcrypt（saltRounds=12）"
+    severity: error
+    enforcement: service_logic
+
+  - id: AUTH-007
+    description: "refreshToken 使用一次即失效（rotation）"
+    severity: error
+    enforcement: service_logic
+    test: "refresh_token_rotation"
+
+  - id: AUTH-008
+    description: "昵称长度 2-50 字符"
+    severity: error
+    enforcement: zod_schema + class_validator
+
+  - id: AUTH-009
+    description: "非活跃账户（isActive=false）禁止登录"
+    severity: error
+    enforcement: service_logic
+    test: "login_disabled_user"
+
+  - id: AUTH-010
+    description: "用户删除级联删除关联的 session/oauth/project/task/subscription"
+    severity: error
+    enforcement: db_schema_on_delete_cascade
+
+# ============================================================
+# 错误码汇总
+# ============================================================
+errors:
+  - code: AUTH_EMAIL_EXISTS
+    status: 409
+    message: "该邮箱已被注册"
+  - code: AUTH_INVALID_CREDENTIALS
+    status: 401
+    message: "邮箱或密码错误"
+  - code: AUTH_USER_DISABLED
+    status: 403
+    message: "账户已被禁用"
+  - code: AUTH_USER_LOCKED
+    status: 403
+    message: "账户已被锁定，请 ${remaining} 分钟后重试"
+  - code: AUTH_TOKEN_INVALID
+    status: 401
+    message: "refreshToken 无效或已过期"
+  - code: AUTH_TOKEN_MISSING
+    status: 401
+    message: "缺少 refreshToken"
+  - code: AUTH_USER_NOT_FOUND
+    status: 401
+    message: "用户不存在"
+  - code: AUTH_PASSWORD_WRONG
+    status: 400
+    message: "当前密码错误"

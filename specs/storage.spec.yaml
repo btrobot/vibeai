@@ -1,0 +1,299 @@
+# ============================================================
+# VibeAI — 存储域规格 (Storage Domain)
+# ============================================================
+domain: storage
+version: "1.0"
+last_updated: "2025-04-06"
+
+# ============================================================
+# 实体定义
+# ============================================================
+entities:
+  - name: File
+    table: files
+    description: "用户上传的文件记录"
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk: { table: "users", field: "id", onDelete: "cascade" }
+      - name: originalName
+        type: varchar(255)
+        notNull: true
+      - name: mimeType
+        type: varchar(100)
+        notNull: true
+      - name: size
+        type: integer
+        notNull: true
+      - name: storageKey
+        type: text
+        notNull: true
+        unique: true
+      - name: provider
+        type: varchar(20)
+        notNull: true
+        default: local
+        enum: ["local", "s3", "oss"]
+      - name: bucket
+        type: varchar(255)
+        nullable: true
+      - name: width
+        type: integer
+        nullable: true
+      - name: height
+        type: integer
+        nullable: true
+      - name: duration
+        type: integer
+        nullable: true
+      - name: thumbnailKey
+        type: text
+        nullable: true
+      - name: checksum
+        type: varchar(64)
+        nullable: true
+      - name: isPublic
+        type: boolean
+        notNull: true
+        default: false
+      - name: category
+        type: varchar(50)
+        nullable: true
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - fields: ["userId"]
+        name: files_user_id_idx
+      - fields: ["mimeType"]
+        name: files_mime_type_idx
+      - fields: ["category"]
+        name: files_category_idx
+      - fields: ["createdAt"]
+        name: files_created_at_idx
+
+# ============================================================
+# 操作定义
+# ============================================================
+operations:
+  - name: uploadFile
+    summary: "上传文件"
+    method: POST
+    path: /api/storage/upload
+    auth: jwt
+    input:
+      file: { type: "file", desc: "上传的文件（multipart/form-data）" }
+      category: { type: "string", optional: true, desc: "文件分类" }
+    output:
+      data:
+        id: uuid
+        originalName: string
+        mimeType: string
+        size: number
+        url: string
+    pre:
+      - "用户已认证"
+      - "文件大小 ≤ 套餐限制（maxFileSize）"
+      - "文件类型在允许列表内"
+    post:
+      - "文件保存到存储后端（local 或 S3）"
+      - "创建文件记录"
+      - "如果是图片/视频，提取宽高信息"
+    errors:
+      - status: 413
+        condition: "文件大小超限"
+        message: "文件大小超过限制"
+        test: "upload_file_size_exceeded"
+      - status: 415
+        condition: "文件类型不支持"
+        message: "不支持的文件类型"
+
+  - name: listFiles
+    summary: "获取文件列表"
+    method: GET
+    path: /api/storage/files
+    auth: jwt
+    input:
+      category: { type: "string", optional: true, desc: "按分类筛选" }
+      mimeType: { type: "string", optional: true, desc: "按 MIME 类型筛选" }
+      page: { type: "number", optional: true, default: 1 }
+      limit: { type: "number", optional: true, default: 20 }
+      sortBy: { type: "string", optional: true, default: "createdAt", enum: ["createdAt", "size", "originalName"] }
+      sortOrder: { type: "string", optional: true, default: "desc", enum: ["asc", "desc"] }
+    output:
+      data: { items: "array", total: "number", page: "number", limit: "number" }
+    post:
+      - "仅返回当前用户的文件"
+      - "签名 URL 在返回时生成（有效期 1 小时）"
+
+  - name: getFileDetail
+    summary: "获取文件详情"
+    method: GET
+    path: /api/storage/files/:id
+    auth: jwt
+    output:
+      data:
+        id: uuid
+        originalName: string
+        mimeType: string
+        size: number
+        url: string
+        thumbnailUrl: { type: "string", nullable: true }
+        width: { type: "number", nullable: true }
+        height: { type: "number", nullable: true }
+        createdAt: string
+    pre:
+      - "文件存在"
+      - "当前用户是文件所有者或文件已公开"
+    post:
+      - "返回文件完整元数据"
+      - "生成临时签名 URL"
+    errors:
+      - status: 404
+        condition: "文件不存在"
+        message: "文件不存在"
+      - status: 403
+        condition: "非文件所有者且文件非公开"
+        message: "无权访问此文件"
+
+  - name: deleteFile
+    summary: "删除文件"
+    method: DELETE
+    path: /api/storage/files/:id
+    auth: jwt
+    pre:
+      - "文件存在"
+      - "当前用户是文件所有者"
+    post:
+      - "从存储后端删除文件"
+      - "删除文件记录"
+    errors:
+      - status: 404
+        condition: "文件不存在"
+        message: "文件不存在"
+      - status: 403
+        condition: "非文件所有者"
+        message: "无权删除此文件"
+
+  - name: getSignedUrl
+    summary: "获取文件签名 URL"
+    method: GET
+    path: /api/storage/files/:id/url
+    auth: jwt
+    output:
+      data: { url: string, expiresAt: number }
+    pre:
+      - "文件存在"
+      - "当前用户是文件所有者或文件已公开"
+    post:
+      - "生成带有效期的签名 URL"
+      - "记录签名 URL 生成事件"
+    errors:
+      - status: 404
+        condition: "文件不存在"
+        message: "文件不存在"
+
+  - name: getStorageStats
+    summary: "获取存储统计"
+    method: GET
+    path: /api/storage/stats
+    auth: jwt
+    output:
+      data:
+        totalFiles: number
+        totalSize: number
+        byCategory: { type: "object", desc: "按分类统计" }
+    pre:
+      - "用户已认证"
+    post:
+      - "返回当前用户的存储使用统计"
+      - status: 401
+        condition: "未认证"
+        message: "未认证"
+
+  - name: getPublicFileUrl
+    summary: "获取公开文件 URL（无需认证）"
+    method: GET
+    path: /api/storage/public/:id
+    auth: none
+    output:
+      data: { url: string }
+    pre:
+      - "文件存在且 isPublic=true"
+    errors:
+      - status: 404
+        condition: "文件不存在或非公开"
+        message: "文件不存在"
+
+# ============================================================
+# 业务规则
+# ============================================================
+rules:
+  - id: STOR-001
+    description: "文件大小限制依据用户套餐配置"
+    severity: error
+    enforcement: service_logic
+    test: "upload_file_size_exceeded"
+
+  - id: STOR-002
+    description: "仅文件所有者可删除文件"
+    severity: error
+    enforcement: service_logic
+    test: "delete_file_unauthorized"
+
+  - id: STOR-003
+    description: "签名 URL 有效期 1 小时"
+    severity: warning
+    enforcement: service_logic
+
+  - id: STOR-004
+    description: "文件列表仅返回当前用户文件"
+    severity: error
+    enforcement: service_logic
+    test: "list_files_scoped_to_user"
+
+  - id: STOR-005
+    description: "存储 key 全局唯一"
+    severity: error
+    enforcement: db_unique_constraint
+
+  - id: STOR-006
+    description: "可公开分享的文件（isPublic=true）无需认证即可访问"
+    severity: error
+    enforcement: service_logic
+    test: "public_file_no_auth"
+
+  - id: STOR-007
+    description: "上传时自动检测图片/视频尺寸"
+    severity: warning
+    enforcement: service_logic
+
+# ============================================================
+# 错误码
+# ============================================================
+errors:
+  - code: STOR_FILE_NOT_FOUND
+    status: 404
+    message: "文件不存在"
+  - code: STOR_FILE_ACCESS_DENIED
+    status: 403
+    message: "无权访问此文件"
+  - code: STOR_FILE_DELETE_DENIED
+    status: 403
+    message: "无权删除此文件"
+  - code: STOR_FILE_SIZE_EXCEEDED
+    status: 413
+    message: "文件大小超过限制"
+  - code: STOR_FILE_TYPE_UNSUPPORTED
+    status: 415
+    message: "不支持的文件类型"

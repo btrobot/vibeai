@@ -1,0 +1,363 @@
+# ============================================================
+# VibeAI — 画廊域规格 (Gallery Domain)
+# ============================================================
+domain: gallery
+version: "1.0"
+last_updated: "2025-04-06"
+
+# ============================================================
+# 实体定义
+# ============================================================
+entities:
+  - name: GalleryWork
+    table: gallery_works
+    description: "社区画廊作品"
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk: { table: "users", field: "id", onDelete: "cascade" }
+      - name: taskId
+        type: uuid
+        nullable: true
+        fk: { table: "tasks", field: "id", onDelete: "set null" }
+      - name: title
+        type: varchar(255)
+        notNull: true
+      - name: description
+        type: text
+        nullable: true
+      - name: type
+        type: varchar(50)
+        notNull: true
+        enum: ["image", "video", "audio"]
+      - name: url
+        type: text
+        notNull: true
+      - name: thumbnailUrl
+        type: text
+        nullable: true
+      - name: tags
+        type: "text[]"
+        nullable: true
+        default: "[]"
+      - name: width
+        type: integer
+        nullable: true
+      - name: height
+        type: integer
+        nullable: true
+      - name: duration
+        type: integer
+        nullable: true
+      - name: prompt
+        type: text
+        nullable: true
+      - name: modelUsed
+        type: varchar(100)
+        nullable: true
+      - name: likeCount
+        type: integer
+        notNull: true
+        default: 0
+      - name: commentCount
+        type: integer
+        notNull: true
+        default: 0
+      - name: isFeatured
+        type: boolean
+        notNull: true
+        default: false
+      - name: isPublic
+        type: boolean
+        notNull: true
+        default: true
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - fields: ["userId"]
+        name: gallery_works_user_id_idx
+      - fields: ["type"]
+        name: gallery_works_type_idx
+      - fields: ["tags"]
+        name: gallery_works_tags_idx
+      - fields: ["createdAt"]
+        name: gallery_works_created_at_idx
+      - fields: ["likeCount"]
+        name: gallery_works_like_count_idx
+      - fields: ["isFeatured"]
+        name: gallery_works_featured_idx
+
+  - name: GalleryLike
+    table: gallery_likes
+    description: "作品点赞记录"
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: workId
+        type: uuid
+        notNull: true
+        fk: { table: "gallery_works", field: "id", onDelete: "cascade" }
+      - name: userId
+        type: uuid
+        notNull: true
+        fk: { table: "users", field: "id", onDelete: "cascade" }
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - fields: ["workId", "userId"]
+        name: gallery_likes_work_user_idx
+        unique: true
+
+  - name: GalleryComment
+    table: gallery_comments
+    description: "作品评论"
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: workId
+        type: uuid
+        notNull: true
+        fk: { table: "gallery_works", field: "id", onDelete: "cascade" }
+      - name: userId
+        type: uuid
+        notNull: true
+        fk: { table: "users", field: "id", onDelete: "cascade" }
+      - name: content
+        type: text
+        notNull: true
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - fields: ["workId"]
+        name: gallery_comments_work_id_idx
+      - fields: ["userId"]
+        name: gallery_comments_user_id_idx
+
+# ============================================================
+# 操作定义
+# ============================================================
+operations:
+  - name: listWorks
+    summary: "浏览画廊作品"
+    method: GET
+    path: /api/gallery/works
+    auth: none
+    input:
+      type: { type: "string", optional: true, enum: ["image", "video", "audio"], desc: "按类型筛选" }
+      tag: { type: "string", optional: true, desc: "按标签筛选" }
+      sort: { type: "string", optional: true, default: "latest", enum: ["latest", "popular", "trending"], desc: "排序方式" }
+      page: { type: "number", optional: true, default: 1 }
+      limit: { type: "number", optional: true, default: 20 }
+    output:
+      data: { items: "array", total: "number", page: "number", limit: "number" }
+    pre:
+      - "仅返回 isPublic=true 的作品"
+    post:
+      - "按 sort 参数排序（latest=createdAt desc, popular=likeCount desc）"
+
+  - name: getWorkDetail
+    summary: "获取作品详情"
+    method: GET
+    path: /api/gallery/works/:id
+    auth: none
+    output:
+      data:
+        id: uuid
+        title: string
+        type: string
+        url: string
+        thumbnailUrl: { type: "string", nullable: true }
+        tags: "string[]"
+        likeCount: number
+        commentCount: number
+        user: { id: uuid, name: string, avatar: { type: "string", nullable: true } }
+        createdAt: string
+    pre:
+      - "作品存在且 isPublic=true"
+    post:
+      - "返回作品完整信息及作者信息"
+    errors:
+      - status: 404
+        condition: "作品不存在或非公开"
+        message: "作品不存在"
+
+  - name: publishWork
+    summary: "发布作品到画廊"
+    method: POST
+    path: /api/gallery/works
+    auth: jwt
+    input:
+      title: { type: "string", minLength: 1, maxLength: 255, desc: "作品标题" }
+      type: { type: "string", enum: ["image", "video", "audio"], desc: "作品类型" }
+      url: { type: "string", desc: "作品文件 URL" }
+      thumbnailUrl: { type: "string", optional: true, desc: "缩略图 URL" }
+      tags: { type: "string[]", optional: true, desc: "标签列表" }
+      prompt: { type: "string", optional: true, desc: "生成使用的提示词" }
+      modelUsed: { type: "string", optional: true, desc: "使用的模型" }
+    output:
+      data:
+        id: uuid
+        title: string
+        createdAt: string
+    post:
+      - "创建作品记录，userId 关联到当前用户"
+    errors:
+      - status: 400
+        condition: "参数校验失败"
+        message: "请求参数不合法"
+
+  - name: likeWork
+    summary: "点赞作品"
+    method: POST
+    path: /api/gallery/works/:id/like
+    auth: jwt
+    pre:
+      - "作品存在且 isPublic=true"
+      - "用户未对该作品点赞"
+    post:
+      - "创建点赞记录"
+      - "递增作品 likeCount"
+    effect:
+      - "INSERT INTO gallery_likes"
+      - "UPDATE gallery_works SET likeCount = likeCount + 1"
+    errors:
+      - status: 409
+        condition: "已点赞"
+        message: "已点赞过该作品"
+        test: "like_work_already_liked"
+
+  - name: unlikeWork
+    summary: "取消点赞"
+    method: POST
+    path: /api/gallery/works/:id/unlike
+    auth: jwt
+    pre:
+      - "用户已对该作品点赞"
+    post:
+      - "删除点赞记录"
+      - "递减作品 likeCount"
+    effect:
+      - "DELETE FROM gallery_likes"
+      - "UPDATE gallery_works SET likeCount = likeCount - 1"
+
+  - name: deleteWork
+    summary: "删除作品"
+    method: DELETE
+    path: /api/gallery/works/:id
+    auth: jwt
+    pre:
+      - "作品存在"
+      - "当前用户是作品所有者或用户角色为 admin"
+    post:
+      - "级联删除点赞和评论"
+      - "删除作品记录"
+    errors:
+      - status: 404
+        condition: "作品不存在"
+        message: "作品不存在"
+      - status: 403
+        condition: "非作品所有者且非管理员"
+        message: "无权删除此作品"
+
+  - name: addComment
+    summary: "添加评论"
+    method: POST
+    path: /api/gallery/works/:id/comments
+    auth: jwt
+    input:
+      content: { type: "string", minLength: 1, maxLength: 1000, desc: "评论内容" }
+    output:
+      data:
+        id: uuid
+        content: string
+        user: { id: uuid, name: string, avatar: { type: "string", nullable: true } }
+        createdAt: string
+    pre:
+      - "作品存在且 isPublic=true"
+    post:
+      - "创建评论记录"
+      - "递增作品 commentCount"
+    errors:
+      - status: 404
+        condition: "作品不存在"
+        message: "作品不存在"
+
+# ============================================================
+# 业务规则
+# ============================================================
+rules:
+  - id: GALL-001
+    description: "画廊仅展示 isPublic=true 的作品"
+    severity: error
+    enforcement: service_logic
+    test: "gallery_only_public_works"
+
+  - id: GALL-002
+    description: "用户对同一作品只能点赞一次"
+    severity: error
+    enforcement: db_unique_constraint + service_logic
+    test: "like_work_already_liked"
+
+  - id: GALL-003
+    description: "取消点赞时必须已点赞"
+    severity: error
+    enforcement: service_logic
+    test: "unlike_work_not_liked"
+
+  - id: GALL-004
+    description: "仅作品所有者或管理员可删除作品"
+    severity: error
+    enforcement: service_logic
+    test: "delete_work_unauthorized"
+
+  - id: GALL-005
+    description: "评论内容长度 1-1000 字符"
+    severity: error
+    enforcement: zod_schema
+
+# ============================================================
+# 错误码
+# ============================================================
+errors:
+  - code: GALL_WORK_NOT_FOUND
+    status: 404
+    message: "作品不存在"
+  - code: GALL_LIKE_DUPLICATE
+    status: 409
+    message: "已点赞过该作品"
+  - code: GALL_UNLIKE_NOT_FOUND
+    status: 404
+    message: "未点赞该作品"
+  - code: GALL_DELETE_FORBIDDEN
+    status: 403
+    message: "无权删除此作品"
+  - code: GALL_COMMENT_TOO_LONG
+    status: 400
+    message: "评论内容过长"

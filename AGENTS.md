@@ -15,6 +15,33 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 ## 目录结构
 
 ```
+
+## 域规范治理（Spec Governance）
+
+项目采用 **Spec SOT（Single Source of Truth）** 治理模式，`specs/*.spec.yaml` 是业务语义的唯一真相源。
+
+### 六域覆盖
+
+| 域 | 实体 | 操作 | 规则 | 合规测试 |
+|----|------|------|------|---------|
+| auth | 4 | 7 | 10 | ✅ |
+| billing | 4 | 10 | 8 | ✅ |
+| engine | 3 | 12 | 8 | ✅ |
+| gallery | 3 | 7 | 5 | ✅ |
+| gateway | 3 | 5 | 5 | ✅ |
+| storage | 1 | 7 | 7 | ✅ |
+
+### 核心约束
+
+- **Spec 优先**：新增/修改功能必须先更新 `.spec.yaml`，再更新代码
+- **合规测试**：`server/src/test/spec-compliance.test.ts` 自动验证：
+  - 语法结构（必需字段/格式/唯一性）
+  - 实体定义（主键/timestamps/索引/外键）
+  - 操作定义（pre/post/effect/错误场景）
+  - 业务规则（enforcement/test 覆盖率 ≥ 70%）
+  - 状态机（所有转换合法）
+  - 种子数据（套餐定义等）
+- **测试覆盖**：每条 error 级别规则必须有对应的 test 字段
 ├── scripts/              # 构建与启动脚本
 │   ├── build.sh          # 构建脚本
 │   ├── dev.sh            # 开发环境启动脚本
@@ -45,6 +72,14 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 ├── vite.config.ts        # Vite 配置（含 API 代理）
 ├── tsconfig.json         # TypeScript 配置
 ├── DESIGN.md             # 设计规范
+├── specs/                # 业务域规范（.spec.yaml 六域定义）
+│   ├── SPEC_GUIDE.md     # 规范格式指南
+│   ├── auth.spec.yaml    # 认证域：用户/会话/登录/注册/刷新/登出
+│   ├── engine.spec.yaml  # 任务引擎域：项目/任务/执行状态机
+│   ├── billing.spec.yaml # 计费域：套餐/订阅/信用/用量
+│   ├── storage.spec.yaml # 存储域：文件上传/管理/签名URL
+│   ├── gateway.spec.yaml # AI Gateway 域：能力/模型/路由/生成
+│   └── gallery.spec.yaml # 画廊域：作品/评论/点赞/标签
 └── .coze                 # 项目配置文件
 ```
 
