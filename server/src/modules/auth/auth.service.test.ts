@@ -18,8 +18,8 @@ import { createMockJwtService } from '../../test/nest-test-utils';
 import { buildUser } from '../../test/factories';
 import { DRIZZLE } from '../../common/drizzle.constants';
 
-// 模拟 bcrypt
-vi.mock('bcrypt', () => ({
+// 模拟 bcryptjs
+vi.mock('bcryptjs', () => ({
   default: {
     hash: vi.fn().mockResolvedValue('hashed-password'),
     compare: vi.fn().mockResolvedValue(true),
@@ -102,7 +102,7 @@ describe('AuthService', () => {
       });
       mockSingle(db, user);
       // 模拟 bcrypt.compare 返回 true
-      const bcrypt = await import('bcrypt');
+      const bcrypt = await import('bcryptjs');
       vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
 
       const result = await authService.login(loginDto, '127.0.0.1', 'test-agent');
@@ -126,7 +126,7 @@ describe('AuthService', () => {
 
     it('应该拒绝错误密码', async () => {
       mockSingle(db, buildUser({ email: loginDto.email }));
-      const bcrypt = await import('bcrypt');
+      const bcrypt = await import('bcryptjs');
       vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
 
       await expect(
@@ -198,7 +198,7 @@ describe('AuthService', () => {
         lockedUntil: null,
       });
       mockSingle(db, user);
-      const bcrypt = await import('bcrypt');
+      const bcrypt = await import('bcryptjs');
       vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
 
       await expect(
@@ -217,7 +217,7 @@ describe('AuthService', () => {
         lockedUntil: new Date(Date.now() + 30 * 60 * 1000),
       });
       mockSingle(db, user);
-      const bcrypt = await import('bcrypt');
+      const bcrypt = await import('bcryptjs');
       vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
 
       await expect(
@@ -268,7 +268,7 @@ describe('AuthService', () => {
         isActive: false,
       });
       mockSingle(db, user);
-      const bcrypt = await import('bcrypt');
+      const bcrypt = await import('bcryptjs');
       vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
 
       await expect(

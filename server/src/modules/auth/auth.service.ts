@@ -7,7 +7,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE } from '../../common/drizzle.constants';
 import { users, sessions, loginLogs } from '../../db/schema';
