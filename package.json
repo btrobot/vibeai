@@ -17,7 +17,9 @@
     "test:coverage": "vitest run --coverage",
     "lint:build": "eslint . --quiet",
     "test:e2e": "npx playwright test",
-    "validate": "pnpm run --parallel '/^(ts-check|lint:build)$/'",
+    "validate": "pnpm ts-check && pnpm lint:build && pnpm test && cd server && pnpm test",
+    "gate:precommit": "pnpm validate",
+    "gate:deploy": "pnpm validate && pnpm test:coverage && cd server && pnpm test:coverage",
     "prepare": "husky"
   },
   "dependencies": {
@@ -52,6 +54,7 @@
     "@typescript-eslint/eslint-plugin": "^8.65.0",
     "@typescript-eslint/parser": "^8.65.0",
     "@vitejs/plugin-react": "^4",
+    "@vitest/coverage-v8": "^3.2.0",
     "coze-coding-dev-sdk": "^0.7.24",
     "eslint": "^10.8.0",
     "husky": "^9.1.7",

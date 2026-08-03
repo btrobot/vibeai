@@ -1,9 +1,9 @@
 # VibeAI 内容创作平台 — 测试治理规范
 
-> 版本: v1.1
+> 版本: v2.0
 > 基于测试金字塔 + 质量门禁（Quality Gate）体系，适配 VibeAI 全栈架构
 > 
-> 当前状态: 28 测试通过 (Auth 9 + Storage 12 + Drizzle Mock 3 + Zod Schema 26 + debug 3)
+> 基线状态 (2025-04): 259 测试通过, 后端 49.29% 行覆盖率 / 前端 48.82% 行覆盖率
 
 ---
 
@@ -77,15 +77,18 @@
 
 | 模块 | 当前覆盖率 | 目标覆盖率 | 测试策略 |
 |------|-----------|-----------|----------|
-| **AuthService** | **9 tests** | **≥ 90%** 行, **≥ 80%** 分支 | 注册/登录/登出/刷新/令牌生成 |
-| **StorageService** | **12 tests** | **≥ 90%** 行, **≥ 80%** 分支 | Provider 抽象层 + S3/Local 实现 |
-| **GatewayService** | — | **≥ 85%** 行, **≥ 75%** 分支 | 能力注册/模型路由/生成任务 |
-| **TaskService** | — | **≥ 85%** 行, **≥ 75%** 分支 | 任务队列/状态机/取消/超时 |
-| **BillingService** | — | **≥ 90%** 行, **≥ 80%** 分支 | 套餐/订阅/扣费/用量统计 |
-| **ProjectService** | — | **≥ 90%** 行, **≥ 80%** 分支 | CRUD + 权限校验 |
-| **WS Gateway** | — | **≥ 80%** 行, **≥ 70%** 分支 | 连接/消息/广播/心跳 |
-| **工具函数** | — | **≥ 95%** 行 | 输入输出边界测试 |
-| **Zod Schema** | **26 tests** | **≥ 100%** 行 | 有效数据通过 + 无效数据拒绝 |
+| **AuthService** | **13 tests, 89.43%** 行 | **≥ 90%** 行, **≥ 80%** 分支 | 注册/登录/登出/刷新/令牌生成/密码策略/管理员角色 |
+| **StorageService** | **15 tests, 97.18%** 行 | **≥ 90%** 行, **≥ 80%** 分支 | Provider 抽象层 + S3/Local 实现 |
+| **GatewayService** | **26 tests, 85.71%** 行 | **≥ 85%** 行, **≥ 75%** 分支 | 能力注册/模型路由/生成任务 |
+| **TaskService** | **23 tests, 100%** 行 | **≥ 85%** 行, **≥ 75%** 分支 | 任务队列/状态机/取消/超时 |
+| **BillingService** | **19 tests, 67.86%** 行 | **≥ 90%** 行, **≥ 80%** 分支 | 套餐/订阅/扣费/用量统计 |
+| **ProjectService** | **12 tests, 100%** 行 | **≥ 90%** 行, **≥ 80%** 分支 | CRUD + 权限校验 |
+| **WS Gateway** | **14 tests, 98.82%** 行 | **≥ 80%** 行, **≥ 70%** 分支 | 连接/消息/广播/心跳 |
+| **GalleryService** | **7 tests, 60.16%** 行 | **≥ 85%** 行, **≥ 75%** 分支 | 作品发布/点赞/浏览 |
+| **AdminService** | **0 tests, 0%** 行 | **≥ 60%** 行 | 系统统计/用户管理 |
+| **UserService** | **0 tests, 0%** 行 | **≥ 80%** 行 | 用户信息查询 |
+| **工具函数** | **0 tests** | **≥ 95%** 行 | 输入输出边界测试 |
+| **Zod Schema** | **26 tests, 100%** 行 | **≥ 100%** 行 | 有效数据通过 + 无效数据拒绝 |
 
 **目录结构**:
 ```
@@ -279,13 +282,17 @@ e2e/
 
 ### 4.2 整体目标
 
-| 指标 | 当前 | 短期目标 (v1.0) | 长期目标 (v2.0) |
-|------|------|-----------------|-----------------|
-| **语句覆盖率** | 待测量 | **≥ 60%** | **≥ 80%** |
-| **分支覆盖率** | 待测量 | **≥ 55%** | **≥ 75%** |
-| **函数覆盖率** | 待测量 | **≥ 50%** | **≥ 70%** |
-| **行覆盖率** | 待测量 | **≥ 60%** | **≥ 80%** |
-| **测试总数** | **28** | **≥ 150** | **≥ 400** |
+| 指标 | 当前 (基线) | 短期目标 (v2.0) | 长期目标 (v3.0) |
+|------|------------|-----------------|-----------------|
+| **后端语句覆盖率** | **49.29%** | **≥ 65%** | **≥ 80%** |
+| **后端分支覆盖率** | **74.58%** | **≥ 70%** | **≥ 80%** |
+| **后端函数覆盖率** | **57.48%** | **≥ 65%** | **≥ 75%** |
+| **后端行覆盖率** | **49.29%** | **≥ 65%** | **≥ 80%** |
+| **前端语句覆盖率** | **48.82%** | **≥ 60%** | **≥ 75%** |
+| **前端分支覆盖率** | **64%** | **≥ 60%** | **≥ 70%** |
+| **前端函数覆盖率** | **43.75%** | **≥ 50%** | **≥ 65%** |
+| **前端行覆盖率** | **48.82%** | **≥ 60%** | **≥ 75%** |
+| **测试总数** | **259** | **≥ 300** | **≥ 500** |
 
 ---
 
@@ -304,10 +311,10 @@ E2E 测试       5%  ###
 
 | 阶段 | 单元测试 | 组件测试 | 集成测试 | E2E 测试 | 总计 |
 |------|---------|---------|---------|---------|------|
-| **当前** | 28 | 0 | 0 | 0 | **28** |
-| **v1.0 短期** | 100 | 20 | 20 | 10 | 150 |
-| **v1.5 中期** | 200 | 40 | 40 | 20 | 300 |
-| **v2.0 长期** | 300 | 60 | 50 | 25 | 435 |
+| **当前 (基线)** | 160 (后端) + 66 (前端) | 0 (内嵌于组件) | 10 (需手动构建) | 11 | **259 + 10 集成** |
+| **v2.0 短期** | 180 | 30 | 20 | 15 | 245 |
+| **v2.5 中期** | 250 | 50 | 40 | 20 | 360 |
+| **v3.0 长期** | 350 | 80 | 50 | 25 | 505 |
 
 ---
 
@@ -504,21 +511,28 @@ const files = buildMany(buildFile, 3, { category: 'image' });
 | **@testing-library/react** | 组件测试 | ✅ 安装 |
 | **@testing-library/jest-dom** | DOM 断言 | ✅ 安装 |
 | **@testing-library/user-event** | 用户交互模拟 | ✅ 安装 |
-| **MSW** | Mock Service Worker | ✅ 安装 |
 | **jsdom** | DOM 环境 | ✅ 配置 |
-| **@vitest/coverage-v8** | 覆盖率报告 | ✅ 安装 |
+| **@vitest/coverage-v8** | 覆盖率报告 | ✅ 安装并配置阈值 |
 | **Drizzle Mock** | 链式调用 Mock 模板 | ✅ `server/src/test/drizzle-mock.ts` |
 | **WebSocket Mock** | WS 测试 Mock | ✅ `server/src/test/ws-mock.ts` |
 | **测试数据工厂** | 测试数据生成 | ✅ `server/src/test/factories.ts` (8 个工厂) |
 | **NestJS 测试工具** | JwtService/AuthGuard Mock | ✅ `server/src/test/nest-test-utils.ts` |
+| **Playwright** | E2E 测试 | ✅ 已安装, 11 测试通过 |
+| **Husky + lint-staged** | Git hooks | ✅ 已配置 pre-commit |
+| **Spec 合规测试** | Spec ↔ 代码一致性 | ✅ `server/src/test/spec-compliance.test.ts` (22 断言) |
 
-### 9.2 需要补充
+### 9.2 覆盖率缺口 (需补充测试的模块)
 
-| 工具 | 用途 | 优先级 | 安装命令 |
-|------|------|--------|----------|
-| **Playwright** | E2E 测试 | P1 | `pnpm add -D @playwright/test` |
-| **Supertest** | HTTP 集成测试 | P1 | `pnpm add -D supertest @types/supertest` |
-| **Husky** | Git hooks (pre-commit) | P2 | `pnpm add -D husky lint-staged` |
+| 模块 | 当前覆盖率 | 目标 | 缺口 | 优先级 |
+|------|-----------|------|------|--------|
+| **BillingService** | 67.86% 行 | ≥ 90% | **22.14%** | P0 |
+| **GalleryService** | 60.16% 行 | ≥ 85% | **24.84%** | P0 |
+| **AdminService** | 0% 行 | ≥ 60% | **60%** | P1 |
+| **UserService** | 0% 行 | ≥ 80% | **80%** | P1 |
+| **ProjectsPage (前端)** | 0% 行 | ≥ 30% | **30%** | P1 |
+| **StoragePage (前端)** | 0% 行 | ≥ 30% | **30%** | P1 |
+| **AppLayout (前端)** | 0% 行 | ≥ 30% | **30%** | P1 |
+| **AuthContext (前端)** | 57.14% 行 | ≥ 60% | **2.86%** | P2 |
 
 ### 9.3 安装命令（待补充）
 
@@ -540,86 +554,28 @@ echo "pnpm validate" > .husky/pre-commit
 
 ## 十、Vitest 配置模板
 
-### 10.1 前端测试配置
+### 10.1 前端测试配置（实际已配置）
 
-```typescript
-// vitest.config.ts
-import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
-import path from 'path';
+当前配置位于 `vitest.config.ts`，已包含：
+- `@vitejs/plugin-react` + `@tailwindcss/vite` 插件
+- `@/` → `./src`, `@shared` → `./shared` 别名
+- `jsdom` 环境 + `src/test/setup.ts` 初始化
+- 覆盖率阈值：statements 60%, branches 50%, functions 50%, lines 60%
+- **当前实际**: 48.82% lines ⚠️ 低于阈值
 
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@shared': path.resolve(__dirname, './shared'),
-    },
-  },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: ['./src/__tests__/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      include: ['src/**/*.{ts,tsx}'],
-      exclude: [
-        'src/**/*.test.*',
-        'src/**/*.d.ts',
-        'src/components/ui/**',
-        'src/main.tsx',
-        'src/vite-env.d.ts',
-      ],
-      thresholds: {
-        statements: 60,
-        branches: 55,
-        functions: 50,
-        lines: 60,
-      },
-    },
-  },
-});
-```
+### 10.2 后端测试配置（实际已配置）
 
-### 10.2 后端测试配置
-
-```typescript
-// server/vitest.config.ts
-import { defineConfig } from 'vitest/config';
-
-export default defineConfig({
-  test: {
-    globals: true,
-    environment: 'node',
-    include: ['src/**/*.test.{ts,tsx}'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      include: ['src/**/*.ts'],
-      exclude: [
-        'src/**/*.test.*',
-        'src/**/*.d.ts',
-        'src/main.ts',
-        'src/app.module.ts',
-      ],
-      thresholds: {
-        statements: 80,
-        branches: 70,
-        functions: 80,
-        lines: 80,
-      },
-    },
-  },
-});
-```
+当前配置位于 `server/vitest.config.ts`，已包含：
+- `node` 环境 + `src/test/setup.ts` 初始化
+- 排除 `src/test/integration/`（集成测试需手动构建）
+- 覆盖率阈值：statements 65%, branches 50%, functions 50%, lines 65%
+- **当前实际**: 49.29% lines ⚠️ 低于阈值（因 controllers/infra 0%）
 
 ---
 
 ## 十一、测试脚本配置
 
-### 11.1 package.json 脚本
+### 11.1 package.json 脚本（实际已配置）
 
 ```json
 {
@@ -627,17 +583,16 @@ export default defineConfig({
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
     "ts-check": "tsc --noEmit",
-    "validate": "pnpm dlx concurrently --group --names ts-check,test \"pnpm ts-check\" \"pnpm test\"",
-    "gate:commit": "pnpm validate",
-    "gate:deploy": "pnpm test:coverage && pnpm test:e2e"
+    "lint:build": "eslint src --max-warnings 0",
+    "validate": "pnpm ts-check && pnpm test && cd server && pnpm test",
+    "gate:precommit": "pnpm ts-check && pnpm test"
   }
 }
 ```
 
-### 11.2 server/package.json 脚本
+### 11.2 server/package.json 脚本（实际已配置）
 
 ```json
 {
@@ -645,7 +600,7 @@ export default defineConfig({
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "node scripts/test-integration.js"
   }
 }
 ```

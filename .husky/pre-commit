@@ -1,1 +1,3 @@
+# 快速门禁: 仅检查已变更文件
+# 完整门禁: pnpm gate:precommit
 npx lint-staged
