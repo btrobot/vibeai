@@ -1,13 +1,26 @@
+# Dependencies
 node_modules
 **/node_modules
+
+# Build output
+dist
+server/dist
+.vite
+
+# Version control
 .git
 .gitignore
+
+# Documentation
 *.md
-.vite
-server/dist
-dist
+LICENSE
+
+# Environment
 .env
+.env.*
 .env.local
+
+# Test & coverage
 coverage
 test-results
 playwright-report
@@ -20,3 +33,20 @@ vitest.config.ts
 vitest.config.*.ts
 tsconfig.json
 tsconfig.*.json
+
+# Docker (避免递归)
+Dockerfile*
+docker-compose*
+scripts/docker-*.sh
+scripts/detect-mirror.sh
+
+# IDE & OS
+.DS_Store
+.idea
+.vscode
+*.swp
+*.swo
+
+# Misc
+.husky
+.github
