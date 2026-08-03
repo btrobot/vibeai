@@ -1,17 +1,10 @@
-# ============================================================
-# VibeAI — 存储域规格 (Storage Domain)
-# ============================================================
 domain: storage
-version: "1.0"
-last_updated: "2025-04-06"
-
-# ============================================================
-# 实体定义
-# ============================================================
+version: '1.0'
+last_updated: '2025-04-06'
 entities:
   - name: File
     table: files
-    description: "用户上传的文件"
+    description: 用户上传的文件
     fields:
       - name: id
         type: uuid
@@ -20,7 +13,10 @@ entities:
       - name: userId
         type: uuid
         notNull: true
-        fk: { table: "users", field: "id", onDelete: "cascade" }
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
       - name: originalName
         type: varchar(1024)
         notNull: true
@@ -72,168 +68,152 @@ entities:
         default: now()
     indexes:
       - name: files_user_id_idx
-        fields: [userId]
+        fields:
+          - userId
       - name: files_category_idx
-        fields: [category]
+        fields:
+          - category
       - name: files_storage_key_idx
-        fields: [storageKey]
+        fields:
+          - storageKey
       - name: files_created_at_idx
-        fields: [createdAt]
+        fields:
+          - createdAt
     timestamps: true
-
-# ============================================================
-# 操作定义
-# ============================================================
 operations:
   - name: uploadFile
     method: POST
     path: /storage/upload
-    description: "上传文件"
+    description: 上传文件
     auth: jwt
     pre:
-      - "用户已登录"
-      - "文件大小不超过套餐限制"
-      - "存储空间不超过套餐限制"
+      - 用户已登录
+      - 文件大小不超过套餐限制
+      - 存储空间不超过套餐限制
     effect:
-      - "创建 File 记录"
-      - "将文件写入存储 Provider"
+      - 创建 File 记录
+      - 将文件写入存储 Provider
     errors:
       - status: 413
-        condition: "文件大小超限"
-        message: "文件大小超出套餐限制"
+        condition: 文件大小超限
+        message: 文件大小超出套餐限制
       - status: 413
-        condition: "存储空间不足"
-        message: "存储空间不足"
+        condition: 存储空间不足
+        message: 存储空间不足
     test: true
-
   - name: listFiles
     method: GET
     path: /storage/files
-    description: "获取文件列表"
+    description: 获取文件列表
     auth: jwt
     pre:
-      - "用户已登录"
+      - 用户已登录
     post:
-      - "返回用户文件列表（分页）"
+      - 返回用户文件列表（分页）
     test: true
-
   - name: getFileDetail
     method: GET
     path: /storage/files/:id
-    description: "获取文件详情"
+    description: 获取文件详情
     auth: jwt
     pre:
-      - "用户已登录"
-      - "文件存在且属于当前用户（或为公开文件）"
+      - 用户已登录
+      - 文件存在且属于当前用户（或为公开文件）
     test: true
-
   - name: deleteFile
     method: DELETE
     path: /storage/files/:id
-    description: "删除文件"
+    description: 删除文件
     auth: jwt
     pre:
-      - "用户已登录"
-      - "文件存在且属于当前用户"
+      - 用户已登录
+      - 文件存在且属于当前用户
     effect:
-      - "删除 File 记录"
-      - "从存储 Provider 删除文件"
+      - 删除 File 记录
+      - 从存储 Provider 删除文件
     errors:
       - status: 404
-        condition: "文件不存在"
-        message: "文件不存在"
+        condition: 文件不存在
+        message: 文件不存在
     test: true
-
   - name: getSignedUrl
     method: GET
     path: /storage/files/:id/signed-url
-    description: "获取签名 URL（用于前端下载/预览）"
+    description: 获取签名 URL（用于前端下载/预览）
     auth: jwt
     pre:
-      - "用户已登录"
-      - "文件存在且属于当前用户"
+      - 用户已登录
+      - 文件存在且属于当前用户
     post:
-      - "返回签名 URL（有时效）"
+      - 返回签名 URL（有时效）
     errors:
       - status: 404
-        condition: "文件不存在"
-        message: "文件不存在"
+        condition: 文件不存在
+        message: 文件不存在
     test: true
-
   - name: getStorageStats
     method: GET
     path: /storage/stats
-    description: "获取存储统计"
+    description: 获取存储统计
     auth: jwt
     pre:
-      - "用户已登录"
+      - 用户已登录
     post:
-      - "返回总文件数、总大小、各分类用量"
+      - 返回总文件数、总大小、各分类用量
     test: true
-
   - name: getPublicFileUrl
     method: N/A
     auth: internal
     path: /storage/public/:id
-    description: "获取公开文件的访问 URL（已通过 signedUrl 覆盖）"
+    description: 获取公开文件的访问 URL（已通过 signedUrl 覆盖）
     test: true
-
-# ============================================================
-# 业务规则
-# ============================================================
 rules:
   - name: file_owner_only
     id: STR-001
     severity: error
     level: error
-    description: "只有文件所有者可查看/删除文件"
-    enforcement: "文件操作检查 userId = jwt.userId"
-    test: "server/src/test/storage.service.test.ts"
-
+    description: 只有文件所有者可查看/删除文件
+    enforcement: 文件操作检查 userId = jwt.userId
+    test: "文件大小超过限制时抛出错误"
   - name: storage_quota
     id: STR-002
     severity: error
     level: error
-    description: "用户存储空间受套餐限制"
-    enforcement: "上传前检查总大小 < maxStorageBytes"
-    test: "server/src/test/storage.service.test.ts"
-
+    description: 用户存储空间受套餐限制
+    enforcement: 上传前检查总大小 < maxStorageBytes
+    test: "文件类型不在白名单时抛出错误"
   - name: file_size_limit
     id: STR-003
     severity: error
     level: error
-    description: "单文件大小受套餐限制"
-    enforcement: "上传前检查文件大小"
-    test: "server/src/test/storage.service.test.ts"
-
+    description: 单文件大小受套餐限制
+    enforcement: 上传前检查文件大小
+    test: should return null when file not found
   - name: signed_url_expiry
     id: STR-004
     severity: error
     level: error
-    description: "签名 URL 有时效（默认 1 小时）"
-    enforcement: "生成签名 URL 时设置过期时间"
-    test: "server/src/test/storage.service.test.ts"
-
+    description: 签名 URL 有时效（默认 1 小时）
+    enforcement: 生成签名 URL 时设置过期时间
+    test: should return signed URL for existing file
   - name: provider_abstraction
     id: STR-005
     severity: error
     level: error
-    description: "存储操作通过 Provider 抽象层完成"
-    enforcement: "StorageProvider 接口 + S3/Local 实现"
-    test: "server/src/test/storage.service.test.ts"
-
+    description: 存储操作通过 Provider 抽象层完成
+    enforcement: StorageProvider 接口 + S3/Local 实现
+    test: "存储空间超过配额时抛出错误"
   - name: file_cleanup
     id: STR-006
     severity: error
     level: error
-    description: "删除文件记录时同步删除存储中的文件"
-    enforcement: "deleteFile 调用 provider.delete"
-    test: "server/src/test/storage.service.test.ts"
-
+    description: 删除文件记录时同步删除存储中的文件
+    enforcement: deleteFile 调用 provider.delete
+    test: should delete file from provider and database
   - name: category_enum
     id: STR-007
     severity: error
     level: error
-    description: "文件分类限定在已知范围内"
-    enforcement: "category 字段限制"
-    test: "server/src/test/storage.service.test.ts"
+    description: 文件分类限定在已知范围内
+    enforcement: category 字段限制
+    test: 'should use default category "temp" when not provided'

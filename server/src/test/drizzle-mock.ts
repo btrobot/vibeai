@@ -143,3 +143,15 @@ export function createDrizzleMockForNestJS(): DrizzleMock {
   }
   return proxy as DrizzleMock;
 }
+/**
+ * 创建一个可 thenable 的 mock 对象，用于模拟 Drizzle 链式调用返回的 promise
+ */
+export function createThenableMock<T>(result: T): { then: (onfulfilled: (value: T) => any) => Promise<any> } {
+  return {
+    then(onfulfilled: (value: T) => any) {
+      return Promise.resolve(result).then(onfulfilled);
+    },
+  };
+}
+
+export type TestDrizzle = DrizzleMock;

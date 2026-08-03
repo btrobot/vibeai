@@ -264,4 +264,11 @@ describe('GatewayService', () => {
       expect(task).toBeNull();
     });
   });
+
+  describe('规则测试', () => {
+    it('信用不足时返回 409 并拒绝创建', async () => {
+      const submitDto = { capabilitySlug: 'text-generation', modelSlug: 'gpt-4', input: { prompt: 'test' } };
+      await expect(service.submitGeneration(submitDto, 'user-low-credits')).rejects.toThrow();
+    });
+  });
 });

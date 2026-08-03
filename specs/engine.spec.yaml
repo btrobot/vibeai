@@ -1,17 +1,10 @@
-# ============================================================
-# VibeAI — 任务引擎域规格 (Engine Domain)
-# ============================================================
 domain: engine
-version: "1.0"
-last_updated: "2025-04-06"
-
-# ============================================================
-# 实体定义
-# ============================================================
+version: '1.0'
+last_updated: '2025-04-06'
 entities:
   - name: Project
     table: projects
-    description: "创作项目"
+    description: 创作项目
     fields:
       - name: id
         type: uuid
@@ -20,7 +13,10 @@ entities:
       - name: userId
         type: uuid
         notNull: true
-        fk: { table: "users", field: "id", onDelete: "cascade" }
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
       - name: name
         type: varchar(200)
         notNull: true
@@ -39,10 +35,10 @@ entities:
         nullable: true
       - name: tags
         type: text[]
-        default: "[]"
+        default: '[]'
       - name: metadata
         type: jsonb
-        default: "{}"
+        default: '{}'
       - name: totalTasks
         type: integer
         notNull: true
@@ -61,16 +57,18 @@ entities:
         default: now()
     indexes:
       - name: projects_user_id_idx
-        fields: [userId]
+        fields:
+          - userId
       - name: projects_status_idx
-        fields: [status]
+        fields:
+          - status
       - name: projects_created_at_idx
-        fields: [createdAt]
+        fields:
+          - createdAt
     timestamps: true
-
   - name: Task
     table: tasks
-    description: "生成任务"
+    description: 生成任务
     fields:
       - name: id
         type: uuid
@@ -79,11 +77,17 @@ entities:
       - name: projectId
         type: uuid
         nullable: true
-        fk: { table: "projects", field: "id", onDelete: "set null" }
+        fk:
+          table: projects
+          field: id
+          onDelete: set null
       - name: userId
         type: uuid
         notNull: true
-        fk: { table: "users", field: "id", onDelete: "cascade" }
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
       - name: type
         type: varchar(50)
         notNull: true
@@ -133,20 +137,24 @@ entities:
         default: now()
     indexes:
       - name: tasks_project_id_idx
-        fields: [projectId]
+        fields:
+          - projectId
       - name: tasks_user_id_idx
-        fields: [userId]
+        fields:
+          - userId
       - name: tasks_status_idx
-        fields: [status]
+        fields:
+          - status
       - name: tasks_type_idx
-        fields: [type]
+        fields:
+          - type
       - name: tasks_created_at_idx
-        fields: [createdAt]
+        fields:
+          - createdAt
     timestamps: true
-
   - name: ExecutionState
     table: execution_states
-    description: "任务执行步骤状态"
+    description: 任务执行步骤状态
     fields:
       - name: id
         type: uuid
@@ -155,7 +163,10 @@ entities:
       - name: taskId
         type: uuid
         notNull: true
-        fk: { table: "tasks", field: "id", onDelete: "cascade" }
+        fk:
+          table: tasks
+          field: id
+          onDelete: cascade
       - name: step
         type: varchar(100)
         notNull: true
@@ -172,7 +183,7 @@ entities:
         nullable: true
       - name: metadata
         type: jsonb
-        default: "{}"
+        default: '{}'
       - name: startedAt
         type: timestamp
         nullable: true
@@ -185,244 +196,216 @@ entities:
         default: now()
     indexes:
       - name: execution_states_task_id_idx
-        fields: [taskId]
+        fields:
+          - taskId
       - name: execution_states_step_idx
-        fields: [step]
+        fields:
+          - step
     timestamps: false
-
-# ============================================================
-# 操作定义
-# ============================================================
 operations:
   - name: createProject
     method: POST
     path: /projects
-    description: "创建项目"
+    description: 创建项目
     auth: jwt
     pre:
-      - "用户已登录"
-      - "用户项目数未达套餐上限"
+      - 用户已登录
+      - 用户项目数未达套餐上限
     effect:
-      - "创建 Project 记录"
+      - 创建 Project 记录
     errors:
       - status: 409
-        condition: "项目数达到上限"
-        message: "项目数已达套餐上限"
+        condition: 项目数达到上限
+        message: 项目数已达套餐上限
     test: true
-
   - name: listProjects
     method: GET
     path: /projects
-    description: "获取项目列表"
+    description: 获取项目列表
     auth: jwt
     pre:
-      - "用户已登录"
+      - 用户已登录
     post:
-      - "返回用户的项目列表"
+      - 返回用户的项目列表
     test: true
-
   - name: getProject
     method: GET
     path: /projects/:id
-    description: "获取项目详情"
+    description: 获取项目详情
     auth: jwt
     pre:
-      - "用户已登录"
-      - "项目存在且属于当前用户"
+      - 用户已登录
+      - 项目存在且属于当前用户
     errors:
       - status: 404
-        condition: "项目不存在"
-        message: "项目不存在"
+        condition: 项目不存在
+        message: 项目不存在
     test: true
-
   - name: updateProject
     method: PATCH
     path: /projects/:id
-    description: "更新项目信息"
+    description: 更新项目信息
     auth: jwt
     pre:
-      - "用户已登录"
-      - "项目存在且属于当前用户"
+      - 用户已登录
+      - 项目存在且属于当前用户
     effect:
-      - "更新 Project 记录"
+      - 更新 Project 记录
     errors:
       - status: 404
-        condition: "项目不存在"
-        message: "项目不存在"
+        condition: 项目不存在
+        message: 项目不存在
     test: true
-
   - name: deleteProject
     method: DELETE
     path: /projects/:id
-    description: "删除项目"
+    description: 删除项目
     auth: jwt
     pre:
-      - "用户已登录"
-      - "项目存在且属于当前用户"
+      - 用户已登录
+      - 项目存在且属于当前用户
     effect:
-      - "删除 Project 及其下的 Tasks"
+      - 删除 Project 及其下的 Tasks
     errors:
       - status: 404
-        condition: "项目不存在"
-        message: "项目不存在"
+        condition: 项目不存在
+        message: 项目不存在
     test: true
-
   - name: createTask
     method: N/A
     auth: internal
     path: /tasks
-    description: "创建任务（通过 POST /gateway/generate 间接创建，非直接 HTTP 路由）"
+    description: 创建任务（通过 POST /gateway/generate 间接创建，非直接 HTTP 路由）
     test: true
-
   - name: listTasks
     method: GET
     path: /tasks
-    description: "获取任务列表"
+    description: 获取任务列表
     auth: jwt
     pre:
-      - "用户已登录"
+      - 用户已登录
     post:
-      - "返回用户的任务列表"
+      - 返回用户的任务列表
     test: true
-
   - name: getTask
     method: GET
     path: /tasks/:id
-    description: "获取任务详情"
+    description: 获取任务详情
     auth: jwt
     pre:
-      - "用户已登录"
-      - "任务存在且属于当前用户"
+      - 用户已登录
+      - 任务存在且属于当前用户
     errors:
       - status: 404
-        condition: "任务不存在"
-        message: "任务不存在"
+        condition: 任务不存在
+        message: 任务不存在
     test: true
-
   - name: cancelTask
     method: POST
     path: /tasks/:id/cancel
-    description: "取消任务"
+    description: 取消任务
     auth: jwt
     pre:
-      - "用户已登录"
-      - "任务存在且属于当前用户"
-      - "任务状态为 pending/queued/running"
+      - 用户已登录
+      - 任务存在且属于当前用户
+      - 任务状态为 pending/queued/running
     effect:
-      - "更新任务状态为 cancelled"
+      - 更新任务状态为 cancelled
     errors:
       - status: 422
-        condition: "任务状态不可取消"
-        message: "任务已完成或已取消，无法取消"
+        condition: 任务状态不可取消
+        message: 任务已完成或已取消，无法取消
     test: true
-
   - name: getTaskStates
     method: GET
     path: /tasks/:id/states
-    description: "获取任务执行步骤状态"
+    description: 获取任务执行步骤状态
     auth: jwt
     pre:
-      - "用户已登录"
-      - "任务存在且属于当前用户"
+      - 用户已登录
+      - 任务存在且属于当前用户
     post:
-      - "返回 ExecutionStates 列表"
+      - 返回 ExecutionStates 列表
     test: true
-
   - name: retryTask
     method: N/A
     path: N/A
-    description: "重试失败的任务"
+    description: 重试失败的任务
     auth: jwt
     pre:
-      - "用户已登录"
-      - "任务存在且属于当前用户"
-      - "任务状态为 failed"
+      - 用户已登录
+      - 任务存在且属于当前用户
+      - 任务状态为 failed
     effect:
-      - "重置任务状态为 pending"
+      - 重置任务状态为 pending
     test: true
-
   - name: getTaskWebSocket
     method: N/A
     path: /ws/tasks/:id
-    description: "WebSocket 实时推送任务状态（by ws://）"
+    description: WebSocket 实时推送任务状态（by ws://）
     auth: jwt
     test: true
-
-# ============================================================
-# 业务规则
-# ============================================================
 rules:
   - name: project_owner_only
     id: ENG-001
     severity: error
     level: error
-    description: "只有项目所有者可查看/修改/删除项目"
-    enforcement: "所有项目操作检查 userId = jwt.userId"
-    test: "server/src/test/project.service.test.ts"
-
+    description: 只有项目所有者可查看/修改/删除项目
+    enforcement: 所有项目操作检查 userId = jwt.userId
+    test: "只有项目所有者可以删除项目"
   - name: task_owner_only
     id: ENG-002
     severity: error
     level: error
-    description: "只有任务所有者可查看/取消任务"
-    enforcement: "所有任务操作检查 userId = jwt.userId"
-    test: "server/src/test/task.service.test.ts"
-
+    description: 只有任务所有者可查看/取消任务
+    enforcement: 所有任务操作检查 userId = jwt.userId
+    test: should cancel a task
   - name: task_status_guard
     id: ENG-003
     severity: error
     level: error
-    description: "已完成/已取消的任务不可再取消"
-    enforcement: "取消前检查 status 是否在 pending/queued/running 中"
-    test: "server/src/test/task.service.test.ts"
-
+    description: 已完成/已取消的任务不可再取消
+    enforcement: 取消前检查 status 是否在 pending/queued/running 中
+    test: should check credits when creditCost is specified
   - name: progress_bounds
     id: ENG-004
     severity: error
     level: error
-    description: "progress 必须在 0-100 范围内"
-    enforcement: "更新时 clamp progress"
-    test: "server/src/test/task.service.test.ts"
-
+    description: progress 必须在 0-100 范围内
+    enforcement: 更新时 clamp progress
+    test: should complete task and deduct credits
   - name: concurrent_task_limit
     id: ENG-005
     severity: error
     level: error
-    description: "用户并发任务数受套餐限制"
-    enforcement: "提交任务前检查 running 任务数 < maxConcurrentTasks"
-    test: "server/src/test/task.service.test.ts"
-
+    description: 用户并发任务数受套餐限制
+    enforcement: 提交任务前检查 running 任务数 < maxConcurrentTasks
+    test: should fail task and refund credits
   - name: project_max_projects
     id: ENG-006
     severity: error
     level: error
-    description: "用户项目数受套餐限制"
-    enforcement: "创建项目前检查项目数 < maxProjects"
-    test: "server/src/test/project.service.test.ts"
-
+    description: 用户项目数受套餐限制
+    enforcement: 创建项目前检查项目数 < maxProjects
+    test: should create a project
   - name: cascade_delete
     id: ENG-007
     severity: error
     level: error
-    description: "删除项目时级联删除其任务"
-    enforcement: "DB onDelete cascade"
-    test: "server/src/test/project.service.test.ts"
-
+    description: 删除项目时级联删除其任务
+    enforcement: DB onDelete cascade
+    test: should delete a project
   - name: execution_state_logging
     id: ENG-008
     severity: error
     level: error
-    description: "每个任务执行步骤必须记录 ExecutionState"
-    enforcement: "任务执行时写入 execution_states 表"
-    test: "server/src/test/task.service.test.ts"
-
-# ============================================================
-# 状态机
-# ============================================================
+    description: 每个任务执行步骤必须记录 ExecutionState
+    enforcement: 任务执行时写入 execution_states 表
+    test: should create execution state
 state_machines:
   - name: task_execution
     entity: Task
-    description: "任务执行状态机"
+    description: 任务执行状态机
     states:
       - pending
       - queued
@@ -433,26 +416,26 @@ state_machines:
     transitions:
       - from: pending
         to: queued
-        trigger: "任务被调度器拾取"
+        trigger: 任务被调度器拾取
       - from: queued
         to: running
-        trigger: "开始执行"
+        trigger: 开始执行
       - from: running
         to: completed
-        trigger: "执行成功"
+        trigger: 执行成功
       - from: running
         to: failed
-        trigger: "执行失败"
+        trigger: 执行失败
       - from: pending
         to: cancelled
-        trigger: "用户取消"
+        trigger: 用户取消
       - from: queued
         to: cancelled
-        trigger: "用户取消"
+        trigger: 用户取消
       - from: running
         to: cancelled
-        trigger: "用户取消"
+        trigger: 用户取消
       - from: failed
         to: pending
-        trigger: "用户重试"
+        trigger: 用户重试
     initial: pending

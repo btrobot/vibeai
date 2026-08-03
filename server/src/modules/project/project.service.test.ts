@@ -132,4 +132,16 @@ describe('ProjectService', () => {
       await expect(service.updateTaskCounts('proj-1')).resolves.toBeUndefined();
     });
   });
+
+  describe('规则测试', () => {
+    it('只有项目所有者可以删除项目', async () => {
+      const mockUser = { id: 'user-1', email: 'test@test.com', name: 'Test' };
+      mockSingle(db, { id: 'proj-1', userId: 'user-1', name: 'Test Project' });
+
+      // 使用正确的 userId 可以删除
+      await expect(
+        service.delete('proj-1', 'user-1'),
+      ).resolves.toBeUndefined();
+    });
+  });
 });

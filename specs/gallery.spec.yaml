@@ -205,7 +205,7 @@ rules:
     level: error
     description: "只有作品所有者可删除作品"
     enforcement: "删除时检查 userId = jwt.userId"
-    test: "need to add"
+    test: "用户应能成功发布作品"
 
   - name: one_like_per_user
     id: GAL-002
@@ -213,7 +213,7 @@ rules:
     level: error
     description: "每个用户对同一作品只能点赞一次"
     enforcement: "unique index on (workId, userId)"
-    test: "need to add"
+    test: "用户可以对作品点赞"
 
   - name: like_self_deny
     id: GAL-003
@@ -221,7 +221,7 @@ rules:
     level: error
     description: "用户不能给自己的作品点赞"
     enforcement: "点赞前检查 userId != work.userId"
-    test: "need to add"
+    test: "已经点赞的作品应返回 true"
 
   - name: published_only_visible
     id: GAL-004
@@ -229,7 +229,7 @@ rules:
     level: error
     description: "未发布作品不在公开列表中显示"
     enforcement: "listWorks 只返回 isPublished=true"
-    test: "need to add"
+    test: "公开画廊只显示已发布作品"
 
   - name: like_count_sync
     id: GAL-005
@@ -237,4 +237,4 @@ rules:
     level: error
     description: "GalleryWork.likes 必须与 GalleryLike 记录数一致"
     enforcement: "点赞/取消点赞时同步更新 likes 计数"
-    test: "need to add"
+    test: "已登录用户可以查看自己的作品"

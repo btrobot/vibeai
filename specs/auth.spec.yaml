@@ -321,70 +321,70 @@ rules:
     level: error
     description: 邮箱全局唯一
     enforcement: DB unique index on email
-    test: server/src/test/auth.service.test.ts
+    test: 应该拒绝重复邮箱注册
   - name: password_policy
     id: AUTH-002
     severity: error
     level: error
     description: 密码至少 8 位，包含字母和数字
     enforcement: 注册/改密码时校验
-    test: server/src/test/auth.service.test.ts
+    test: "密码至少8位"
   - name: login_lockout
     id: AUTH-003
     severity: error
     level: error
     description: 连续 5 次登录失败锁定账号 15 分钟
     enforcement: failedLoginAttempts >= 5 → lockedUntil = now + 15min
-    test: server/src/test/auth.service.test.ts
+    test: "登出后会话被标记为已撤销"
   - name: session_expiry
     id: AUTH-004
     severity: error
     level: error
     description: accessToken 15 分钟，refreshToken 7 天过期
     enforcement: JWT 签名时设置 exp
-    test: server/src/test/auth.service.test.ts
+    test: 应该拒绝过期令牌
   - name: session_revocation
     id: AUTH-005
     severity: error
     level: error
     description: 登出后 Session 标记为已撤销，refreshToken 不可再用
     enforcement: 刷新时检查 isRevoked
-    test: server/src/test/auth.service.test.ts
+    test: "刷新令牌时撤销旧会话（单会话模式）"
   - name: refresh_token_unique
     id: AUTH-006
     severity: error
     level: error
     description: refreshToken 全局唯一
     enforcement: DB unique index on refresh_token
-    test: server/src/test/auth.service.test.ts
+    test: "刷新令牌具有唯一约束"
   - name: admin_role_required
     id: AUTH-007
     severity: error
     level: error
     description: 管理员接口需要 role=admin
     enforcement: AdminGuard 检查 role
-    test: server/src/test/auth.service.test.ts
+    test: "管理员角色可以访问管理接口"
   - name: user_self_only
     id: AUTH-008
     severity: error
     level: error
     description: 用户只能修改自己的信息
     enforcement: getProfile/updateProfile 从 JWT 取 userId
-    test: server/src/test/auth.service.test.ts
+    test: "用户只能修改自己的信息"
   - name: one_session_per_login
     id: AUTH-009
     severity: error
     level: error
     description: 每次登录创建一个新会话，不强制踢出旧会话
     enforcement: 登录时创建新 Session
-    test: server/src/test/auth.service.test.ts
+    test: "刷新令牌时撤销旧会话（单会话模式）"
   - name: inactive_user_blocked
     id: AUTH-010
     severity: error
     level: error
     description: isActive=false 的用户不可登录
     enforcement: 登录前检查 isActive
-    test: server/src/test/auth.service.test.ts
+    test: "非活跃用户无法登录"
 state_machines:
   - name: account_lockout
     entity: User

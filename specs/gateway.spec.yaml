@@ -1,17 +1,10 @@
-# ============================================================
-# VibeAI — AI Gateway 域规格 (Gateway Domain)
-# ============================================================
 domain: gateway
-version: "1.0"
-last_updated: "2025-04-06"
-
-# ============================================================
-# 实体定义
-# ============================================================
+version: '1.0'
+last_updated: '2025-04-06'
 entities:
   - name: AICapability
     table: ai_capabilities
-    description: "AI 能力定义"
+    description: AI 能力定义
     fields:
       - name: id
         type: uuid
@@ -35,13 +28,13 @@ entities:
         nullable: true
       - name: inputSchema
         type: jsonb
-        default: "{}"
+        default: '{}'
       - name: outputSchema
         type: jsonb
-        default: "{}"
+        default: '{}'
       - name: config
         type: jsonb
-        default: "{}"
+        default: '{}'
       - name: isActive
         type: boolean
         notNull: true
@@ -60,12 +53,12 @@ entities:
         default: now()
     indexes:
       - name: ai_capabilities_slug_idx
-        fields: [slug]
+        fields:
+          - slug
     timestamps: true
-
   - name: AIModel
     table: ai_models
-    description: "AI 模型定义"
+    description: AI 模型定义
     fields:
       - name: id
         type: uuid
@@ -90,7 +83,7 @@ entities:
         default: []
       - name: config
         type: jsonb
-        default: "{}"
+        default: '{}'
       - name: inputTypes
         type: jsonb
         default: []
@@ -115,12 +108,12 @@ entities:
         default: now()
     indexes:
       - name: ai_models_slug_idx
-        fields: [slug]
+        fields:
+          - slug
     timestamps: true
-
   - name: GenerationTask
     table: generation_tasks
-    description: "AI 生成任务记录"
+    description: AI 生成任务记录
     fields:
       - name: id
         type: uuid
@@ -129,7 +122,10 @@ entities:
       - name: userId
         type: uuid
         notNull: true
-        fk: { table: "users", field: "id", onDelete: "cascade" }
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
       - name: capabilitySlug
         type: varchar(100)
         notNull: true
@@ -168,154 +164,150 @@ entities:
         default: now()
     indexes:
       - name: generation_tasks_user_idx
-        fields: [userId]
+        fields:
+          - userId
       - name: generation_tasks_status_idx
-        fields: [status]
+        fields:
+          - status
     timestamps: true
-
-# ============================================================
-# 操作定义
-# ============================================================
 operations:
   - name: listCapabilities
     method: GET
     path: /gateway/capabilities
     auth: jwt
-    description: "获取所有 AI 能力列表"
+    description: 获取所有 AI 能力列表
     pre: []
-    post: [返回能力列表]
+    post:
+      - 返回能力列表
     effect: []
     errors:
       - status: 401
         condition: 未认证
-        message: "未登录"
-
+        message: 未登录
   - name: getCapabilityDetail
     method: GET
     path: /gateway/capabilities/:slug
     auth: jwt
-    description: "获取单个 AI 能力详情"
-    pre: [能力存在]
-    post: [返回能力详情]
+    description: 获取单个 AI 能力详情
+    pre:
+      - 能力存在
+    post:
+      - 返回能力详情
     effect: []
     errors:
       - status: 404
         condition: 能力不存在
-        message: "能力不存在"
-
+        message: 能力不存在
   - name: getCapabilityModels
     method: GET
     path: /gateway/capabilities/:slug/models
     auth: jwt
-    description: "获取能力支持的模型列表"
-    pre: [能力存在]
-    post: [返回模型列表]
+    description: 获取能力支持的模型列表
+    pre:
+      - 能力存在
+    post:
+      - 返回模型列表
     effect: []
     errors:
       - status: 404
         condition: 能力不存在
-        message: "能力不存在"
-
+        message: 能力不存在
   - name: listModels
     method: GET
     path: /gateway/models
     auth: jwt
-    description: "获取所有模型列表"
+    description: 获取所有模型列表
     pre: []
-    post: [返回模型列表]
+    post:
+      - 返回模型列表
     effect: []
     errors:
       - status: 401
         condition: 未认证
-        message: "未登录"
-
+        message: 未登录
   - name: getModelDetail
     method: GET
     path: /gateway/models/:slug
     auth: jwt
-    description: "获取单个模型详情"
-    pre: [模型存在]
-    post: [返回模型详情]
+    description: 获取单个模型详情
+    pre:
+      - 模型存在
+    post:
+      - 返回模型详情
     effect: []
     errors:
       - status: 404
         condition: 模型不存在
-        message: "模型不存在"
-
+        message: 模型不存在
   - name: submitGeneration
     method: POST
     path: /gateway/generate
     auth: jwt
-    description: "提交 AI 生成任务"
-    pre: [能力存在, 模型存在, 信用充足]
-    post: [创建生成任务记录]
-    effect: [扣减信用额度]
+    description: 提交 AI 生成任务
+    pre:
+      - 能力存在
+      - 模型存在
+      - 信用充足
+    post:
+      - 创建生成任务记录
+    effect:
+      - 扣减信用额度
     errors:
       - status: 400
         condition: 输入参数无效
-        message: "请求参数格式错误"
+        message: 请求参数格式错误
       - status: 404
         condition: 能力或模型不存在
-        message: "能力或模型不存在"
+        message: 能力或模型不存在
       - status: 409
         condition: 信用不足
-        message: "信用额度不足"
-
+        message: 信用额度不足
   - name: getGenerationTask
     method: GET
     path: /gateway/tasks/:taskId
     auth: jwt
-    description: "查询生成任务状态和结果"
-    pre: [任务存在, 属于当前用户]
-    post: [返回任务状态和结果]
+    description: 查询生成任务状态和结果
+    pre:
+      - 任务存在
+      - 属于当前用户
+    post:
+      - 返回任务状态和结果
     effect: []
     errors:
       - status: 404
         condition: 任务不存在
-        message: "任务不存在"
-
-# ============================================================
-# 业务规则
-# ============================================================
+        message: 任务不存在
 rules:
   - name: 能力 slug 唯一
     id: GTW-001
     severity: error
-    description: "AI 能力的 slug 字段必须全局唯一"
+    description: AI 能力的 slug 字段必须全局唯一
     enforcement: DB unique constraint
-    test: "slug 重复时写入失败"
-
+    test: getCapability 对不存在的 slug 返回 null
   - name: 模型 slug 唯一
     id: GTW-002
     severity: error
-    description: "AI 模型的 slug 字段必须全局唯一"
+    description: AI 模型的 slug 字段必须全局唯一
     enforcement: DB unique constraint
-    test: "slug 重复时写入失败"
-
+    test: getModel 对不存在的 slug 返回 null
   - name: 生成任务必有所属用户
     id: GTW-003
     severity: error
-    description: "每个生成任务必须关联一个有效用户"
+    description: 每个生成任务必须关联一个有效用户
     enforcement: FK 约束 + 外键验证
-    test: "任务创建时 userId 必须存在"
-
+    test: 提交有效能力时创建任务并返回 queued 状态
   - name: 生成任务必须关联有效能力和模型
     id: GTW-004
     severity: error
-    description: "生成任务必须指定 gateway 中已注册的能力和模型 slug"
+    description: 生成任务必须指定 gateway 中已注册的能力和模型 slug
     enforcement: 路由层校验
-    test: "不存在的能力/模型 slug 应返回 404"
-
+    test: 不存在的能力抛出 NotFoundException
   - name: 生成前检查信用余额
     id: GTW-005
     severity: error
-    description: "提交生成任务前必须检查用户信用余额是否充足"
+    description: 提交生成任务前必须检查用户信用余额是否充足
     enforcement: 服务层预检
     test: "信用不足时返回 409 并拒绝创建"
-
-# ============================================================
-# 状态机
-# ============================================================
 state_machines:
   - entity: GenerationTask
     field: status
@@ -328,10 +320,20 @@ state_machines:
       - cancelled
     transitions:
       - from: pending
-        to: [queued, cancelled]
+        to:
+          - queued
+          - cancelled
       - from: queued
-        to: [running, failed]
+        to:
+          - running
+          - failed
       - from: running
-        to: [completed, failed, cancelled]
+        to:
+          - completed
+          - failed
+          - cancelled
     initial: pending
-    terminal: [completed, failed, cancelled]
+    terminal:
+      - completed
+      - failed
+      - cancelled

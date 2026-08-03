@@ -24,11 +24,11 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 
 | 域 | 实体 | 操作 | 规则 | 合规测试 |
 |----|------|------|------|---------|
-| auth | 4 | 7 | 10 | ✅ |
+| auth | 4 | 8 | 10 | ✅ |
 | billing | 4 | 10 | 8 | ✅ |
 | engine | 3 | 12 | 8 | ✅ |
-| gallery | 3 | 7 | 5 | ✅ |
-| gateway | 3 | 5 | 5 | ✅ |
+| gallery | 2 | 7 | 5 | ✅ |
+| gateway | 3 | 7 | 5 | ✅ |
 | storage | 1 | 7 | 7 | ✅ |
 
 ### 核心约束
@@ -120,11 +120,10 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 
 ## 测试进展
 
-### Phase 1: 认证系统 ✅ (28/28 tests passing)
+### Phase 1: 认证系统 ✅ (42 tests)
+- **Auth Service** (13 tests) — 注册/登录/刷新/用户信息/登出/密码策略/管理员角色
 - **Zod Schema** (26 tests) — 全部通过
-- **Auth Service** (9 tests) — 注册/登录/刷新/用户信息/登出
 - **Drizzle Mock** (3 tests) — 链式调用的 thenable 协议与 NestJS 兼容性
-- **Storage Service** (12 tests) — 上传/列表/详情/删除/签名URL/统计
 
 ### E2E 测试 (Playwright) ✅ (11/11 tests passing)
 - **认证流程** (3 tests) — 注册/登出重登录/登录失败
@@ -133,10 +132,11 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **项目流程** (2 tests) — 创建项目/项目列表
 
 ### 测试基础设施
-- `server/src/test/drizzle-mock.ts` — Drizzle ORM 链式调用 Mock
+- `server/src/test/drizzle-mock.ts` — Drizzle ORM 链式调用 Mock（含 `createThenableMock`）
 - `server/src/test/ws-mock.ts` — WebSocket Mock
 - `server/src/test/nest-test-utils.ts` — NestJS 测试工具（JwtService mock, AuthGuard mock）
 - `server/src/test/factories.ts` — 测试数据工厂（8 个工厂）
+- `server/src/test/spec-compliance.test.ts` — Spec 合规测试（22 条断言，覆盖 6 域）
 - `vitest.config.ts` (前端) + `server/vitest.config.ts` (后端)
 - `src/test/setup.ts` + `server/src/test/setup.ts` — 测试环境初始化
 
@@ -144,15 +144,17 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 
 | 模块 | 测试文件 | 测试数 | 状态 |
 |------|---------|-------|------|
-| Phase 1: Auth | `auth.service.test.ts` | 9 | ✅ |
+| Phase 1: Auth | `auth.service.test.ts` | 13 | ✅ |
 | Phase 1: Zod Schema | `schema.test.ts` | 26 | ✅ |
 | Phase 1: Drizzle Mock | `drizzle-mock.test.ts` | 3 | ✅ |
-| Phase 2: Storage | `storage.service.test.ts` | 12 | ✅ |
-| Phase 3: Gateway | `gateway.service.test.ts` | 25 | ✅ |
+| Phase 2: Storage | `storage.service.test.ts` | 15 | ✅ |
+| Phase 3: Gateway | `gateway.service.test.ts` | 26 | ✅ |
 | Phase 4: Task Engine | `task.service.test.ts` | 23 | ✅ |
-| Phase 4: Project | `project.service.test.ts` | 11 | ✅ |
+| Phase 4: Project | `project.service.test.ts` | 12 | ✅ |
 | Phase 4: WebSocket | `ws.service.test.ts` | 14 | ✅ |
 | Phase 5: Billing | `billing.service.test.ts` | 19 | ✅ |
+| Phase 6: Gallery Service | `gallery.service.test.ts` | 7 | ✅ |
+| Phase 6: Spec Compliance | `spec-compliance.test.ts` | 22 | ✅ |
 | Phase 6: Dashboard Page | `DashboardPage.test.tsx` | 4 | ✅ |
 | Phase 6: Billing Page | `BillingPage.test.tsx` | 4 | ✅ |
 | Phase 6: Workspace Page | `WorkspacePage.test.tsx` | 4 | ✅ |
@@ -162,16 +164,17 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 6: Settings Page | `SettingsPage.test.tsx` | 7 | ✅ |
 | Phase 6: Admin Page | `AdminPage.test.tsx` | 4 | ✅ |
 | Phase 6: Gallery Page | `GalleryPage.test.tsx` | 4 | ✅ |
-| **合计（单元测试）** | | **182** | **✅ 全部通过** |
-| Phase 7: Auth Integration | `test-integration.js` | 10 | ✅ |
-
-### 下一阶段目标
-- Phase 7: E2E 测试（Playwright）
-- Husky + lint-staged 质量门禁
+| **合计（后端）** | | **160** | **✅ 全部通过** |
+| **合计（前端）** | | **66** | **✅ 全部通过** |
+| **合计（合规）** | | **22** | **✅ 全部通过** |
+| **合计（E2E）** | | **11** | **✅ 全部通过** |
+| **总计** | | **259** | **✅ 全部通过** |
+| Phase 7: Auth Integration | `test-integration.js` | 10 | ⏹️ 需手动构建后运行 |
 
 ### 已知问题
 - **tsx ESM loader 与 NestJS 装饰器不兼容**：集成测试无法通过 vitest 运行（`NestFactory.create` 在 tsx 环境下导致 `authService` 为 undefined）。解决方案：先 `pnpm build` 编译为 JavaScript，再通过 `node scripts/test-integration.js` 运行。
 - **JWT 重复 token 问题**：`generateTokens` 方法在相同秒内调用会生成相同的 JWT（`iat` 相同），导致 `sessions.refreshToken` 唯一约束冲突。已通过添加 `jti` 随机值修复。
+- **DrizzleMock 多查询限制**：`mockSingle` 在服务方法需要多次查询（如注册时先查询再插入）时只能返回第一个结果。解决方案：使用 `mockResolvedValueOnce([])` + `mockReturning` 组合模式。
 
 ## 关键架构决策
 

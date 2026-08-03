@@ -26,6 +26,70 @@ export interface TestUser {
   updatedAt: Date;
 }
 
+// ========== 画廊工厂 ==========
+
+export interface TestGalleryWork {
+  id: string;
+  userId: string;
+  title: string;
+  imageUrl: string | null;
+  videoUrl: string | null;
+  type: string;
+  prompt: string | null;
+  modelSlug: string | null;
+  capabilitySlug: string | null;
+  thumbnailUrl: string | null;
+  likes: number;
+  views: number;
+  isPublished: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+let galleryWorkCounter = 1;
+
+export function buildGalleryWork(partial?: Partial<TestGalleryWork>): TestGalleryWork {
+  const counter = galleryWorkCounter++;
+  return {
+    id: `work-${counter}`,
+    userId: 'user-1',
+    title: `Test Work ${counter}`,
+    imageUrl: `https://example.com/work-${counter}.png`,
+    videoUrl: null,
+    type: 'image',
+    prompt: `test prompt ${counter}`,
+    modelSlug: 'test-model',
+    capabilitySlug: 'test-capability',
+    thumbnailUrl: null,
+    likes: 0,
+    views: 0,
+    isPublished: true,
+    createdAt: new Date('2026-01-01'),
+    updatedAt: new Date('2026-01-01'),
+    ...partial,
+  };
+}
+
+export interface TestGalleryLike {
+  id: string;
+  workId: string;
+  userId: string;
+  createdAt: Date;
+}
+
+let likeCounter = 1;
+
+export function buildGalleryLike(partial?: Partial<TestGalleryLike>): TestGalleryLike {
+  const counter = likeCounter++;
+  return {
+    id: `like-${counter}`,
+    workId: `work-${counter}`,
+    userId: 'user-1',
+    createdAt: new Date('2026-01-01'),
+    ...partial,
+  };
+}
+
 let userCounter = 1;
 
 export function buildUser(partial?: Partial<TestUser>): TestUser {

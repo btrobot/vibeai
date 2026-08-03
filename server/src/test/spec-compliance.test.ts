@@ -351,7 +351,66 @@ describe('4. 业务规则 → 代码执行', () => {
 });
 
 // ================================================================
-// 5. 状态机合规
+// 5. 规则测试覆盖率
+// ================================================================
+describe('5. 规则测试覆盖率', () => {
+  let _testCases: Map<string, string[]> = new Map();
+
+  beforeAll(() => {
+    // 扫描测试文件，提取所有 it/test 名称
+    const testDir = path.resolve(__dirname, '../../src/modules');
+    const files = fs.readdirSync(testDir, { recursive: true } as any)
+      .filter((f: string) => f.endsWith('.test.ts') || f.endsWith('.spec.ts')) as string[];
+
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(testDir, file), 'utf-8');
+      const regex = /(?:it|test)\(['\`]([^'\`]+)['\`]/g;
+      let match;
+      while ((match = regex.exec(content)) !== null) {
+        const existing = _testCases.get(file) || [];
+        existing.push(match[1]);
+        _testCases.set(file, existing);
+      }
+    }
+  });
+
+  it('每条 error 级规则的 test 字段对应实际测试用例', () => {
+    const allTestNames = [..._testCases.values()].flat();
+    let total = 0, covered = 0;
+
+    for (const spec of _specs) {
+      for (const rule of spec.rules) {
+        if (rule.severity !== 'error') continue;
+        total++;
+        if (!rule.test) {
+          expect(rule.test).toBeTruthy(
+            `${rule.id} 缺少 test 字段`,
+          );
+          continue;
+        }
+
+        // 精确匹配：test 字段等于测试用例名称
+        const exactMatch = allTestNames.includes(rule.test);
+        // 模糊匹配：test 字段是测试用例名称的子串
+        const fuzzyMatch = allTestNames.some(tc => tc.includes(rule.test) || rule.test.includes(tc));
+
+        expect(exactMatch || fuzzyMatch).toBe(true,
+          `${rule.id} test="${rule.test}" 在测试文件中未找到匹配的测试用例`,
+        );
+        if (exactMatch || fuzzyMatch) covered++;
+      }
+    }
+
+    // 覆盖率 >= 70%
+    const rate = total > 0 ? covered / total : 1;
+    expect(rate).toBeGreaterThanOrEqual(0.7,
+      `error 级规则测试覆盖率 ${(rate * 100).toFixed(0)}% 低于 70%`,
+    );
+  });
+});
+
+// ================================================================
+// 6. 状态机合规
 // ================================================================
 describe('5. 状态机', () => {
   beforeAll(() => {
