@@ -30,12 +30,14 @@ FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 
 ARG NPM_REGISTRY
+ARG PNPM_VERSION
+
+# pnpm is not inherited from deps stage (global install)
+RUN npm install -g pnpm@${PNPM_VERSION}
+RUN pnpm config set registry ${NPM_REGISTRY}
 
 COPY --from=deps /app /app
 COPY . .
-
-# Ensure registry is set for build tools
-RUN pnpm config set registry ${NPM_REGISTRY}
 
 # Build frontend
 RUN pnpm vite build
