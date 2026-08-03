@@ -83,9 +83,8 @@
     "pnpm": ">=9.0.0"
   },
   "pnpm": {
-    "overrides": {
-      "esbuild": "^0.27.2",
-      "is-generator-function": "1.0.10"
-    }
+    "onlyBuiltDependencies": [
+      "bcrypt"
+    ]
   }
 }

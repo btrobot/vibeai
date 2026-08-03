@@ -1,6 +1,6 @@
 # ===== Build Arguments =====
 # Default: international (npmjs.org)
-# China: docker build --build-arg NODE_IMAGE=node:24-alpine --build-arg NPM_REGISTRY=https://registry.npmmirror.com ...
+# China: docker compose build --build-arg NPM_REGISTRY=https://registry.npmmirror.com
 ARG NODE_IMAGE=node:24-alpine
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG PNPM_VERSION=9.0.0
@@ -12,18 +12,17 @@ WORKDIR /app
 ARG NPM_REGISTRY
 ARG PNPM_VERSION
 
+# Corepack not available in Alpine, use npm
 RUN npm install -g pnpm@${PNPM_VERSION}
-
-# Configure registry
 RUN pnpm config set registry ${NPM_REGISTRY}
 
-# Frontend dependencies
+# Frontend dependencies (compile native addons, skip husky prepare)
 COPY package.json pnpm-lock.yaml .npmrc ./
-RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN HUSKY=0 pnpm install --frozen-lockfile
 
 # Backend dependencies
 COPY server/package.json server/pnpm-lock.yaml ./server/
-RUN cd server && pnpm install --frozen-lockfile --ignore-scripts
+RUN cd server && HUSKY=0 pnpm install --frozen-lockfile
 
 # ===== Stage 2: Build =====
 FROM ${NODE_IMAGE} AS build
@@ -55,12 +54,12 @@ ARG PNPM_VERSION
 RUN apk add --no-cache bash curl && npm install -g pnpm@${PNPM_VERSION} serve
 RUN pnpm config set registry ${NPM_REGISTRY}
 
-# Copy production dependencies only (ignore scripts to avoid husky in prepare)
-COPY package.json pnpm-lock.yaml .npmrc ./
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts
+# Copy full node_modules from deps (native addons pre-compiled)
+COPY --from=deps /app/node_modules /app/node_modules
+COPY --from=deps /app/server/node_modules /app/server/node_modules
 
-COPY server/package.json server/pnpm-lock.yaml ./server/
-RUN cd server && pnpm install --frozen-lockfile --prod --ignore-scripts
+# Remove devDependencies to reduce image size
+RUN pnpm prune --prod --ignore-scripts 2>/dev/null || true
 
 # Copy built artifacts
 COPY --from=build /app/dist ./dist
