@@ -24,6 +24,13 @@ async function bootstrap() {
   );
 
   const port = process.env.BACKEND_PORT || 3001;
+
+  // Health check endpoint (raw Express route before listen)
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.get('/api/health', (_req: any, res: any) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   await app.listen(port);
 
   // Initialize WebSocket server on the same HTTP server
