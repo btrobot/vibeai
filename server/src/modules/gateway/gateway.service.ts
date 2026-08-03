@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { DrizzleService } from '../../common/drizzle.service';
 import { generationTasks } from '../../db/schema/gateway';
@@ -8,6 +8,7 @@ import { routeCapability, getModelsForCapability } from './router/index';
 import type { CapabilityDefinition } from './capabilities/index';
 import type { ModelDefinition } from './models/index';
 import { eq } from 'drizzle-orm';
+import { TaskExecutionService } from './task-execution.service';
 
 // ===== Gateway Types =====
 export interface GenerationTaskResponse {
@@ -23,7 +24,10 @@ export interface GenerationTaskResponse {
 export class GatewayService {
   private readonly logger = new Logger(GatewayService.name);
 
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(
+    private readonly drizzle: DrizzleService,
+    private readonly taskExecution: TaskExecutionService,
+  ) {}
 
   // ===== Capabilities =====
 
@@ -94,6 +98,11 @@ export class GatewayService {
     }
 
     this.logger.log(`Generation task ${taskId}: ${capabilitySlug} → ${route.modelSlug}`);
+
+    // Trigger async execution
+    this.taskExecution.executeTask(taskId, userId, capabilitySlug, input).catch((err) => {
+      this.logger.error(`Async execution failed for task ${taskId}: ${err.message}`);
+    });
 
     return {
       taskId,

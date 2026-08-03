@@ -22,7 +22,10 @@ describe('GatewayService', () => {
 
   beforeEach(() => {
     db = createDrizzleMockForNestJS();
-    service = new GatewayService({ db } as any);
+    service = new GatewayService(
+      { db } as any,
+      { executeTask: vi.fn().mockResolvedValue(undefined) } as any,
+    );
   });
 
   // ===== Capabilities =====
