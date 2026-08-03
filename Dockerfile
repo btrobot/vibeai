@@ -77,4 +77,5 @@ ENV DEPLOY_RUN_PORT=5000
 
 EXPOSE 5000
 
-CMD ["bash", "./scripts/start.sh"]
+# Override node:24-alpine default ENTRYPOINT ["node"]
+ENTRYPOINT ["bash", "./scripts/start.sh"]
