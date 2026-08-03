@@ -55,11 +55,9 @@ RUN apk add --no-cache bash curl && npm install -g pnpm@${PNPM_VERSION} serve
 RUN pnpm config set registry ${NPM_REGISTRY}
 
 # Copy full node_modules from deps (native addons pre-compiled)
+# Note: keep full node_modules — pnpm prune breaks .pnpm store hardlinks
 COPY --from=deps /app/node_modules /app/node_modules
 COPY --from=deps /app/server/node_modules /app/server/node_modules
-
-# Remove devDependencies to reduce image size
-RUN pnpm prune --prod --ignore-scripts 2>/dev/null || true
 
 # Copy built artifacts
 COPY --from=build /app/dist ./dist
