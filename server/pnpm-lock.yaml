@@ -32,6 +32,9 @@ importers:
       '@types/multer':
         specifier: ^2.2.0
         version: 2.2.0
+      '@types/pg':
+        specifier: ^8.20.3
+        version: 8.20.3
       bcrypt:
         specifier: ^5.1.1
         version: 5.1.1
@@ -49,7 +52,7 @@ importers:
         version: 0.7.24(openai@6.49.0(ws@8.21.1)(zod@3.25.76))(ws@8.21.1)
       drizzle-orm:
         specifier: ^0.38.0
-        version: 0.38.4(pg@8.22.0)(postgres@3.4.9)
+        version: 0.38.4(@types/pg@8.20.3)(pg@8.22.0)(postgres@3.4.9)
       express:
         specifier: ^5.2.1
         version: 5.2.1
@@ -59,6 +62,9 @@ importers:
       passport-jwt:
         specifier: ^4.0.1
         version: 4.0.1
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
       postgres:
         specifier: ^3.4.0
         version: 3.4.9
@@ -982,6 +988,9 @@ packages:
 
   '@types/passport@1.0.17':
     resolution: {integrity: sha512-aciLyx+wDwT2t2/kJGJR2AEeBz0nJU4WuRX04Wu9Dqc5lSUtwu0WERPHYsLhF9PtseiAMPBGNUOtFjxZ56prsg==}
+
+  '@types/pg@8.20.3':
+    resolution: {integrity: sha512-4Tvg+HO6+oQaAkpT8GTYoSExzpGGZz532GXgbbCElWJQeQdMozBWxEKNBhJJpHFjWXsMxqPbyypvj/89FWNoSQ==}
 
   '@types/phoenix@1.6.7':
     resolution: {integrity: sha512-oN9ive//QSBkf19rfDv45M7eZPi0eEXylht2OLEXicu5b4KoQ1OzXIw+xDSGWxSxe1JmepRR/ZH283vsu518/Q==}
@@ -3018,6 +3027,12 @@ snapshots:
     dependencies:
       '@types/express': 5.0.6
 
+  '@types/pg@8.20.3':
+    dependencies:
+      '@types/node': 22.20.1
+      pg-protocol: 1.15.0
+      pg-types: 2.2.0
+
   '@types/phoenix@1.6.7': {}
 
   '@types/qs@6.15.1': {}
@@ -3364,8 +3379,9 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.4
 
-  drizzle-orm@0.38.4(pg@8.22.0)(postgres@3.4.9):
+  drizzle-orm@0.38.4(@types/pg@8.20.3)(pg@8.22.0)(postgres@3.4.9):
     optionalDependencies:
+      '@types/pg': 8.20.3
       pg: 8.22.0
       postgres: 3.4.9
 
