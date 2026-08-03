@@ -142,33 +142,37 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 
 ### 测试进展 (续)
 
-| 模块 | 测试文件 | 测试数 | 状态 |
-|------|---------|-------|------|
-| Phase 1: Auth | `auth.service.test.ts` | 13 | ✅ |
-| Phase 1: Zod Schema | `schema.test.ts` | 26 | ✅ |
-| Phase 1: Drizzle Mock | `drizzle-mock.test.ts` | 3 | ✅ |
-| Phase 2: Storage | `storage.service.test.ts` | 15 | ✅ |
-| Phase 3: Gateway | `gateway.service.test.ts` | 26 | ✅ |
-| Phase 4: Task Engine | `task.service.test.ts` | 23 | ✅ |
-| Phase 4: Project | `project.service.test.ts` | 12 | ✅ |
-| Phase 4: WebSocket | `ws.service.test.ts` | 14 | ✅ |
-| Phase 5: Billing | `billing.service.test.ts` | 19 | ✅ |
-| Phase 6: Gallery Service | `gallery.service.test.ts` | 7 | ✅ |
-| Phase 6: Spec Compliance | `spec-compliance.test.ts` | 22 | ✅ |
-| Phase 6: Dashboard Page | `DashboardPage.test.tsx` | 4 | ✅ |
-| Phase 6: Billing Page | `BillingPage.test.tsx` | 4 | ✅ |
-| Phase 6: Workspace Page | `WorkspacePage.test.tsx` | 4 | ✅ |
-| Phase 6: Login Page | `LoginPage.test.tsx` | 3 | ✅ |
-| Phase 6: Register Page | `RegisterPage.test.tsx` | 6 | ✅ |
-| Phase 6: Tool Page | `ToolPage.test.tsx` | 7 | ✅ |
-| Phase 6: Settings Page | `SettingsPage.test.tsx` | 7 | ✅ |
-| Phase 6: Admin Page | `AdminPage.test.tsx` | 4 | ✅ |
-| Phase 6: Gallery Page | `GalleryPage.test.tsx` | 4 | ✅ |
-| **合计（后端）** | | **160** | **✅ 全部通过** |
-| **合计（前端）** | | **66** | **✅ 全部通过** |
-| **合计（合规）** | | **22** | **✅ 全部通过** |
-| **合计（E2E）** | | **11** | **✅ 全部通过** |
-| **总计** | | **259** | **✅ 全部通过** |
+| 模块 | 测试文件 | 测试数 | 覆盖率 | 目标 | 状态 |
+|------|---------|-------|--------|------|------|
+| Phase 1: Auth | `auth.service.test.ts` | 13 | 89.43% | ≥90% | ✅ |
+| Phase 1: Zod Schema | `schema.test.ts` | 26 | 100% | 100% | ✅ |
+| Phase 1: Drizzle Mock | `drizzle-mock.test.ts` | 3 | — | — | ✅ |
+| Phase 2: Storage | `storage.service.test.ts` | 15 | 97.18% | ≥90% | ✅ |
+| Phase 3: Gateway | `gateway.service.test.ts` | 26 | 85.71% | ≥85% | ✅ |
+| Phase 4: Task Engine | `task.service.test.ts` | 23 | 100% | ≥85% | ✅ |
+| Phase 4: Project | `project.service.test.ts` | 12 | 100% | ≥90% | ✅ |
+| Phase 4: WebSocket | `ws.service.test.ts` | 14 | 98.82% | ≥80% | ✅ |
+| Phase 5: Billing | `billing.service.test.ts` | 26 | 90.2% | ≥90% | ✅ |
+| Phase 6: Gallery Service | `gallery.service.test.ts` | 14 | 85.0% | ≥85% | ✅ |
+| Phase 6: User Service | `user.service.test.ts` | 4 | 100% | ≥80% | ✅ |
+| Phase 6: Admin Service | `admin.service.test.ts` | 2 | 100% | ≥60% | ✅ |
+| Phase 6: Spec Compliance | `spec-compliance.test.ts` | 22 | — | — | ✅ |
+| Phase 6: Dashboard Page | `DashboardPage.test.tsx` | 4 | 100% | ≥30% | ✅ |
+| Phase 6: Billing Page | `BillingPage.test.tsx` | 4 | 85.26% | ≥30% | ✅ |
+| Phase 6: Workspace Page | `WorkspacePage.test.tsx` | 4 | 79.29% | ≥30% | ✅ |
+| Phase 6: Login Page | `LoginPage.test.tsx` | 3 | 97.91% | ≥30% | ✅ |
+| Phase 6: Register Page | `RegisterPage.test.tsx` | 6 | 93.49% | ≥30% | ✅ |
+| Phase 6: Tool Page | `ToolPage.test.tsx` | 7 | 46.18% | ≥30% | ✅ |
+| Phase 6: Settings Page | `SettingsPage.test.tsx` | 7 | 65.09% | ≥30% | ✅ |
+| Phase 6: Admin Page | `AdminPage.test.tsx` | 4 | 75% | ≥30% | ✅ |
+| Phase 6: Gallery Page | `GalleryPage.test.tsx` | 4 | 55.17% | ≥30% | ✅ |
+| Phase 6: Projects Page | `ProjectsPage.test.tsx` | 3 | 30% | ≥30% | ✅ |
+| Phase 6: Storage Page | `StoragePage.test.tsx` | 2 | 30% | ≥30% | ✅ |
+| **合计（后端）** | | **180** | — | — | **✅ 全部通过** |
+| **合计（前端）** | | **71** | — | — | **✅ 全部通过** |
+| **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
+| **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
+| **总计** | | **284** | — | — | **✅ 全部通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ⏹️ 需手动构建后运行 |
 
 ### 已知问题

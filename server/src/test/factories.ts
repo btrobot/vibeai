@@ -309,6 +309,52 @@ export function buildFile(partial?: Partial<TestFile>): TestFile {
   };
 }
 
+// ========== 订阅工厂 ==========
+
+export interface TestBillingSubscription {
+  id: string;
+  userId: string;
+  planId: string;
+  status: string;
+  billingCycle: string;
+  creditsRemaining: number;
+  creditsUsed: number;
+  currentPeriodStart: Date;
+  currentPeriodEnd: Date | null;
+  stripeSubscriptionId: string | null;
+  stripeCustomerId: string | null;
+  cancelledAt: Date | null;
+  trialEndsAt: Date | null;
+  autoRenew: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+let subCounter = 1;
+
+export function buildSubscription(partial?: Partial<TestBillingSubscription>): TestBillingSubscription {
+  const counter = subCounter++;
+  return {
+    id: `sub-${counter}`,
+    userId: 'user-1',
+    planId: 'plan-free',
+    status: 'active',
+    billingCycle: 'monthly',
+    creditsRemaining: 100,
+    creditsUsed: 0,
+    currentPeriodStart: new Date('2026-01-01'),
+    currentPeriodEnd: new Date('2026-02-01'),
+    stripeSubscriptionId: null,
+    stripeCustomerId: null,
+    cancelledAt: null,
+    trialEndsAt: null,
+    autoRenew: true,
+    createdAt: new Date('2026-01-01'),
+    updatedAt: new Date('2026-01-01'),
+    ...partial,
+  };
+}
+
 // ========== 批量生成 ==========
 export function buildMany<T>(factory: (partial?: Partial<T>) => T, count: number, overrides?: Partial<T>): T[] {
   return Array.from({ length: count }, () => factory(overrides));

@@ -96,4 +96,75 @@ describe('GalleryService', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  describe('作品详情', () => {
+    it('应返回作品详情并增加浏览量', async () => {
+      const work = buildGalleryWork({ views: 10 });
+      db._result = [work];
+
+      const result = await service.getWork('work-1');
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(result.data.views).toBe(11); // 10 + 1
+    });
+
+    it('作品不存在时应返回错误', async () => {
+      db._result = [];
+      const result = await service.getWork('nonexistent');
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('作品不存在');
+    });
+  });
+
+  describe('作品删除', () => {
+    it('作品作者应能删除自己的作品', async () => {
+      const work = buildGalleryWork({ userId: 'user-1' });
+      db._result = [work];
+
+      const result = await service.deleteWork('work-1', 'user-1');
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('已删除');
+    });
+
+    it('非作者删除作品应返回无权操作', async () => {
+      const work = buildGalleryWork({ userId: 'user-1' });
+      db._result = [work];
+
+      const result = await service.deleteWork('work-1', 'user-2');
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('无权删除此作品');
+    });
+
+    it('删除不存在的作品应返回错误', async () => {
+      db._result = [];
+      const result = await service.deleteWork('nonexistent', 'user-1');
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('作品不存在');
+    });
+  });
+
+  describe('点赞功能', () => {
+    it('已点赞的作品应能取消点赞', async () => {
+      const work = buildGalleryWork({ likes: 5 });
+      const like = buildGalleryLike({ workId: 'work-1', userId: 'user-1' });
+      // First query: check work exists → work
+      // Second query: check existing like → like (found!)
+      // Since _result is shared, use work for both queries
+      // work is truthy for both checks
+      db._result = [work];
+      // Second query returns same _result → work → truthy → unlike path
+      const result = await service.toggleLike('work-1', 'user-1');
+      expect(result).toBeDefined();
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('作品列表', () => {
+    it('空列表应返回成功响应', async () => {
+      db._result = [];
+
+      const result = await service.listWorks({});
+      expect(result.success).toBe(true);
+    });
+  });
 });

@@ -223,4 +223,84 @@ describe('BillingService', () => {
       expect(records).toHaveLength(0);
     });
   });
+
+  // ===== Subscription Management =====
+
+  describe('getSubscription', () => {
+    it('should return subscription with plan when user has active subscription', async () => {
+      // First query: subscriptions → subRecord (has id, userId, status, etc.)
+      // Second query: subscriptionPlans (inside getSubscription) → planRecord
+      // Third query: getPlanBySlug(slug) → planRecord
+      // Since _result is shared, use subRecord - it's truthy for all paths
+      db._result = [subRecord];
+      const result = await service.getSubscription('user-1');
+      expect(result).not.toBeNull();
+      if (result) {
+        expect(result.creditsRemaining).toBe(subRecord.creditsRemaining);
+        expect(result.plan).toBeDefined();
+      }
+    });
+
+    it('should return null when no active subscription', async () => {
+      db._result = [];
+      const result = await service.getSubscription('user-1');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('createOrUpdateSubscription', () => {
+    it('should create new subscription for user', async () => {
+      // getPlanBySlug needs a record with slug → use subRecord (has id, currentPeriodStart)
+      // returning() also gets subRecord → toSubscriptionResponse works
+      db._result = [subRecord];
+      const result = await service.createOrUpdateSubscription('user-1', { planSlug: 'pro' });
+      expect(result).toBeDefined();
+      expect(result.id).toBe(subRecord.id);
+      expect(result.plan).toBeDefined();
+    });
+  });
+
+  describe('getUsageStats', () => {
+    it('should return usage statistics for user with subscription', async () => {
+      // 6 queries share the same _result. Need a record that has:
+      // - credits (for user lookup), currentPeriodStart (for toSubscriptionResponse)
+      const combinedRecord = {
+        ...userRecord,
+        ...subRecord,
+        // Ensure credits from userRecord survives spread
+        credits: userRecord.credits,
+        currentPeriodStart: new Date('2026-01-01'),
+        currentPeriodEnd: new Date('2026-02-01'),
+      };
+      db._result = [combinedRecord];
+      const stats = await service.getUsageStats('user-1');
+      expect(stats).toBeDefined();
+      expect(stats.creditsRemaining).toBe(userRecord.credits);
+      expect(stats.creditsUsedThisMonth).toBe(0);
+      expect(stats.totalTasksCompleted).toBe(0);
+    });
+
+    it('should throw NotFoundException when user not found', async () => {
+      db._result = [];
+      await expect(service.getUsageStats('nonexistent')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('deductCredits', () => {
+    it('should handle user with no subscription gracefully', async () => {
+      // User lookup returns userRecord, subscription lookup returns empty
+      mockSingle(db, userRecord);
+      const result = await service.deductCredits('user-1', 'task-1', 50);
+      expect(result).toBe(true);
+      expect(db.transaction).toHaveBeenCalled();
+    });
+  });
+
+  describe('refundCredits', () => {
+    it('should handle user with no subscription gracefully', async () => {
+      mockSingle(db, userRecord);
+      await service.refundCredits('user-1', 'task-1', 50);
+      expect(db.transaction).toHaveBeenCalled();
+    });
+  });
 });
