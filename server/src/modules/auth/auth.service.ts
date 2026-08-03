@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
+  BadRequestException,
   Inject,
   ForbiddenException,
 } from '@nestjs/common';
@@ -10,7 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE } from '../../common/drizzle.constants';
 import { users, sessions, loginLogs } from '../../db/schema';
-import { RegisterDto, LoginDto } from './dto';
+import { RegisterDto, LoginDto, UpdateProfileDto, ChangePasswordDto } from './dto';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 
@@ -249,6 +250,41 @@ export class AuthService {
         createdAt: user.createdAt,
       },
     };
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    if (dto.name !== undefined) updateData.name = dto.name;
+    if (dto.avatar !== undefined) updateData.avatar = dto.avatar;
+
+    await this.db.update(users).set(updateData).where(eq(users.id, userId));
+
+    return this.getProfile(userId);
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!user) {
+      throw new UnauthorizedException('用户不存在');
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!isCurrentPasswordValid) {
+      throw new BadRequestException('当前密码错误');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, this.saltRounds);
+    await this.db
+      .update(users)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+
+    return { success: true, message: '密码已修改' };
   }
 
   private async generateTokens(userId: string, email: string, role: string) {
