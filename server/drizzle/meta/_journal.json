@@ -8,6 +8,13 @@
       "when": 1785695441796,
       "tag": "0000_spicy_wallow",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785722506742,
+      "tag": "0001_hot_dragon_man",
+      "breakpoints": true
     }
   ]
 }

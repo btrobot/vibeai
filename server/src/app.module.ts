@@ -8,6 +8,7 @@ import { ProjectModule } from './modules/project/project.module';
 import { TaskModule } from './modules/task/task.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { GalleryModule } from './modules/gallery/gallery.module';
 import { DrizzleModule } from './common/drizzle.module';
 
 @Module({
@@ -25,6 +26,7 @@ import { DrizzleModule } from './common/drizzle.module';
     TaskModule,
     BillingModule,
     AdminModule,
+    GalleryModule,
   ],
 })
 export class AppModule {}

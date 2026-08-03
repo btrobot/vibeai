@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Image as ImageIcon,
   Heart,
@@ -8,6 +8,7 @@ import {
   TrendingUp,
   Clock,
   Flame,
+  Loader2,
 } from 'lucide-react';
 
 interface GalleryItem {
@@ -24,13 +25,39 @@ interface GalleryItem {
 
 export default function GalleryPage() {
   const [activeTab, setActiveTab] = useState<'trending' | 'latest' | 'following'>('trending');
-  const [items] = useState<GalleryItem[]>([]);
+  const [items, setItems] = useState<GalleryItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const tabs = [
     { key: 'trending', label: '热门', icon: Flame },
     { key: 'latest', label: '最新', icon: Clock },
     { key: 'following', label: '关注', icon: User },
   ];
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/gallery/works?sort=${activeTab}`)
+      .then((r) => r.json())
+      .then((res) => {
+        if (res.success) {
+          setItems((res.data ?? []).map((w: any) => ({
+            id: w.id,
+            title: w.title || '未命名作品',
+            imageUrl: w.imageUrl || '',
+            authorName: w.authorName || '匿名',
+            likes: w.likes ?? 0,
+            comments: w.comments ?? 0,
+            views: w.views ?? 0,
+            type: w.type || 'image',
+            createdAt: w.createdAt,
+          })));
+        } else {
+          setItems([]);
+        }
+      })
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, [activeTab]);
 
   return (
     <div className="p-6 space-y-6">
@@ -63,8 +90,13 @@ export default function GalleryPage() {
         })}
       </div>
 
-      {/* Empty State */}
-      {items.length === 0 ? (
+      {/* Loading */}
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 text-muted animate-spin" />
+        </div>
+      ) : items.length === 0 ? (
+        /* Empty State */
         <div className="flex flex-col items-center gap-4 py-20">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-hover">
             <ImageIcon className="h-8 w-8 text-muted" />
@@ -86,11 +118,17 @@ export default function GalleryPage() {
               className="group cursor-pointer rounded-lg border border-border bg-surface overflow-hidden transition-colors hover:border-emerald-600/30"
             >
               <div className="aspect-square bg-background">
-                <img
-                  src={item.imageUrl}
-                  alt={item.title}
-                  className="h-full w-full object-cover"
-                />
+                {item.imageUrl ? (
+                  <img
+                    src={item.imageUrl}
+                    alt={item.title}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <ImageIcon className="h-12 w-12 text-muted" />
+                  </div>
+                )}
               </div>
               <div className="p-3">
                 <h3 className="text-sm font-medium text-foreground truncate">{item.title}</h3>

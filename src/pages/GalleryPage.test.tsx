@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import GalleryPage from './GalleryPage';
 
@@ -20,27 +20,27 @@ describe('GalleryPage', () => {
     vi.restoreAllMocks();
   });
 
-  it('应该渲染分类标签', () => {
+  it('应该渲染分类标签', async () => {
     renderGalleryPage();
-    expect(screen.getByText('热门')).toBeInTheDocument();
+    expect(await screen.findByText('热门')).toBeInTheDocument();
     expect(screen.getByText('最新')).toBeInTheDocument();
     expect(screen.getByText('关注')).toBeInTheDocument();
   });
 
-  it('应该默认选中热门标签', () => {
+  it('应该默认选中热门标签', async () => {
     renderGalleryPage();
-    const hotTab = screen.getByText('热门').closest('button');
+    const hotTab = (await screen.findByText('热门')).closest('button');
     expect(hotTab).toHaveClass('border-emerald-500');
   });
 
-  it('应该支持切换标签', () => {
+  it('应该支持切换标签', async () => {
     renderGalleryPage();
-    const latestTab = screen.getByText('最新').closest('button');
+    const latestTab = (await screen.findByText('最新')).closest('button');
     expect(latestTab).toBeInTheDocument();
   });
 
-  it('应该显示空状态', () => {
+  it('应该显示空状态', async () => {
     renderGalleryPage();
-    expect(screen.getByText('暂无作品')).toBeInTheDocument();
+    expect(await screen.findByText('暂无作品')).toBeInTheDocument();
   });
 });
