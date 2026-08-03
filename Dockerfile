@@ -1,23 +1,41 @@
+# ===== Build Arguments =====
+# Default: international (npmjs.org)
+# China: docker build --build-arg NODE_IMAGE=node:24-alpine --build-arg NPM_REGISTRY=https://registry.npmmirror.com ...
+ARG NODE_IMAGE=node:24-alpine
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG PNPM_VERSION=9.0.0
+
 # ===== Stage 1: Dependencies =====
-FROM node:24-alpine AS deps
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 
-RUN npm install -g pnpm@9.0.0
+ARG NPM_REGISTRY
+ARG PNPM_VERSION
+
+RUN npm install -g pnpm@${PNPM_VERSION}
+
+# Configure registry
+RUN pnpm config set registry ${NPM_REGISTRY}
 
 # Frontend dependencies
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prefer-offline
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Backend dependencies
 COPY server/package.json server/pnpm-lock.yaml ./server/
-RUN cd server && pnpm install --frozen-lockfile --prefer-offline
+RUN cd server && pnpm install --frozen-lockfile --ignore-scripts
 
 # ===== Stage 2: Build =====
-FROM node:24-alpine AS build
+FROM ${NODE_IMAGE} AS build
 WORKDIR /app
+
+ARG NPM_REGISTRY
 
 COPY --from=deps /app /app
 COPY . .
+
+# Ensure registry is set for build tools
+RUN pnpm config set registry ${NPM_REGISTRY}
 
 # Build frontend
 RUN pnpm vite build
@@ -26,17 +44,21 @@ RUN pnpm vite build
 RUN cd server && npx tsc
 
 # ===== Stage 3: Production =====
-FROM node:24-alpine AS production
+FROM ${NODE_IMAGE} AS production
 WORKDIR /app
 
-RUN npm install -g pnpm@9.0.0 serve
+ARG NPM_REGISTRY
+ARG PNPM_VERSION
+
+RUN npm install -g pnpm@${PNPM_VERSION} serve
+RUN pnpm config set registry ${NPM_REGISTRY}
 
 # Copy production dependencies only (ignore scripts to avoid husky in prepare)
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prefer-offline --prod --ignore-scripts
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 COPY server/package.json server/pnpm-lock.yaml ./server/
-RUN cd server && pnpm install --frozen-lockfile --prefer-offline --prod --ignore-scripts
+RUN cd server && pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # Copy built artifacts
 COPY --from=build /app/dist ./dist
