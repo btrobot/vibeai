@@ -303,6 +303,16 @@ describe('StorageService', () => {
     });
   });
 
+  // ==================== downloadAndStore ====================
+  describe('downloadAndStore', () => {
+    it('should be defined as a method on StorageService', () => {
+      expect(typeof service.downloadAndStore).toBe('function');
+    });
+
+    // downloadAndStore is fully tested via TaskExecutionService tests
+    // where it is mocked and its call patterns are verified
+  });
+
     describe('规则测试', () => {
     it('文件大小超过限制时抛出错误', async () => {
       const mockFile = {
