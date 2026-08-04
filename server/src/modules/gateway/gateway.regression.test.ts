@@ -49,6 +49,10 @@ describe('AI Gateway 回归测试', () => {
         incrementTaskCount: vi.fn().mockResolvedValue(undefined),
         syncCreateStatus: vi.fn().mockResolvedValue(undefined),
       } as any,
+      {
+        resolveUrls: vi.fn().mockResolvedValue(new Map<string, string>()),
+        resolveUrl: vi.fn().mockResolvedValue(null),
+      } as any,
     );
   });
 

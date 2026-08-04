@@ -82,6 +82,7 @@ interface Create {
   id: string;
   capabilitySlug: string;
   prompt: string;
+  input: Record<string, unknown>;
   sourceCreateId: string | null;
   status: 'draft' | 'processing' | 'completed' | 'failed' | 'cancelled';
   output: Record<string, unknown> | null;
@@ -251,6 +252,7 @@ export default function WorkspacePage() {
             id: data.data.createId,
             capabilitySlug: activeCapability,
             prompt: prompt.trim(),
+            input: { prompt: prompt.trim() },
             sourceCreateId: null,
             status: 'processing' as const,
             output: null,

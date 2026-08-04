@@ -5,23 +5,94 @@ import * as schema from '../../db/schema';
 import { creates, tasks } from '../../db/schema/task-engine';
 import { eq, and, desc, count, asc, sql } from 'drizzle-orm';
 import type { CreateResponse, CreateStatus, TaskStatus } from '../../shared-types';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class CreateService {
   private readonly logger = new Logger(CreateService.name);
 
-  constructor(@Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>,
+    @Inject('STORAGE_SERVICE') private readonly storageService: StorageService,
+  ) {}
 
-  private toResponse(c: typeof creates.$inferSelect, latestTask?: typeof tasks.$inferSelect | null): CreateResponse {
+  /**
+   * Resolve fileId references in input/output to URLs for API response.
+   * Collects all fileIds from known media fields, batch-resolves, and injects `url` alongside `fileId`.
+   */
+  private async resolveMediaUrls(data: Record<string, unknown> | null): Promise<Record<string, unknown> | null> {
+    if (!data || typeof data !== 'object') return data;
+
+    const fileIds: string[] = [];
+    const arrayFields = ['images', 'referenceImages', 'referenceVideos', 'referenceAudios'];
+    const singleFields = ['firstFrame', 'lastFrame', 'referenceImage', 'imageUrl'];
+
+    // Scan for fileId references
+    for (const field of arrayFields) {
+      const val = data[field];
+      if (Array.isArray(val)) {
+        for (const item of val) {
+          if (typeof item === 'object' && item !== null && 'fileId' in item && !('url' in item)) {
+            fileIds.push((item as { fileId: string }).fileId);
+          }
+        }
+      }
+    }
+    for (const field of singleFields) {
+      const val = data[field];
+      if (typeof val === 'object' && val !== null && 'fileId' in val && !('url' in val)) {
+        fileIds.push((val as { fileId: string }).fileId);
+      }
+    }
+
+    if (fileIds.length === 0) return data;
+
+    // Batch resolve
+    const urlMap = await this.storageService.resolveUrls(fileIds);
+
+    // Inject URLs
+    const resolved = { ...data };
+    for (const field of arrayFields) {
+      const val = resolved[field];
+      if (Array.isArray(val)) {
+        resolved[field] = val.map((item) => {
+          if (typeof item === 'object' && item !== null && 'fileId' in item && !('url' in item)) {
+            return { ...item, url: urlMap.get((item as { fileId: string }).fileId) ?? null };
+          }
+          return item;
+        });
+      }
+    }
+    for (const field of singleFields) {
+      const val = resolved[field];
+      if (typeof val === 'object' && val !== null && 'fileId' in val && !('url' in val)) {
+        resolved[field] = { ...val, url: urlMap.get((val as { fileId: string }).fileId) ?? null };
+      }
+    }
+
+    return resolved;
+  }
+
+  private async toResponse(c: typeof creates.$inferSelect, latestTask?: typeof tasks.$inferSelect | null): Promise<CreateResponse> {
+    const input = (c.input as Record<string, unknown>) ?? {};
+    const output = c.output as Record<string, unknown> | null;
+
+    // Resolve fileId → URL in both input and output
+    const [resolvedInput, resolvedOutput] = await Promise.all([
+      this.resolveMediaUrls(input),
+      this.resolveMediaUrls(output),
+    ]);
+
     return {
       id: c.id,
       projectId: c.projectId,
       userId: c.userId,
       capabilitySlug: c.capabilitySlug,
       prompt: c.prompt,
+      input: resolvedInput ?? {},
       sourceCreateId: c.sourceCreateId,
       status: c.status as CreateStatus,
-      output: c.output as Record<string, unknown> | null,
+      output: resolvedOutput,
       modelSlug: c.modelSlug,
       taskCount: c.taskCount,
       errorMessage: c.errorMessage,
@@ -40,6 +111,7 @@ export class CreateService {
     userId: string;
     capabilitySlug: string;
     prompt: string;
+    input?: Record<string, unknown>;
     modelSlug?: string;
     sourceCreateId?: string | null;
   }): Promise<{ id: string }> {
@@ -50,6 +122,7 @@ export class CreateService {
         userId: params.userId,
         capabilitySlug: params.capabilitySlug,
         prompt: params.prompt,
+        input: params.input ?? {},
         modelSlug: params.modelSlug ?? null,
         sourceCreateId: params.sourceCreateId ?? null,
         status: 'draft',
@@ -151,7 +224,7 @@ export class CreateService {
         .where(eq(tasks.createId, c.id))
         .orderBy(desc(tasks.createdAt))
         .limit(1);
-      result.push(this.toResponse(c, latestTask));
+      result.push(await this.toResponse(c, latestTask));
     }
 
     return {
@@ -215,7 +288,7 @@ export class CreateService {
         .where(eq(tasks.createId, c.id))
         .orderBy(desc(tasks.createdAt))
         .limit(1);
-      result.push(this.toResponse(c, latestTask));
+      result.push(await this.toResponse(c, latestTask));
     }
 
     return {

@@ -123,7 +123,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
         return;
       }
 
-      let imageUrl = '';
+      let uploadedFileId = '';
       if (file) {
         const formData = new FormData();
         formData.append('file', file);
@@ -137,7 +137,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
         const uploadData = await uploadRes.json();
         if (uploadRes.ok) {
           const upload = uploadData.data ?? uploadData;
-          imageUrl = upload.url || upload.key || '';
+          uploadedFileId = upload.id || '';
         }
       }
 
@@ -152,7 +152,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
           capabilitySlug: config.capability,
           input: {
             prompt: prompt.trim() || `使用 ${config.name} 工具处理`,
-            ...(imageUrl ? { imageUrl } : {}),
+            ...(uploadedFileId ? { referenceImage: { fileId: uploadedFileId } } : {}),
           },
         }),
       });

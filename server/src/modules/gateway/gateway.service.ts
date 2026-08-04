@@ -14,6 +14,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { TaskExecutionService } from './task-execution.service';
 import { BillingService } from '../billing/billing.service';
 import { CreateService } from '../create/create.service';
+import { StorageService } from '../storage/storage.service';
 import { SEED_MODELS, SEED_RECIPES } from './seeds/model-seeds';
 import type { AdapterModel } from './adapters/protocol-adapter.interface';
 
@@ -37,6 +38,7 @@ export class GatewayService {
     @Inject('TASK_EXECUTION_SERVICE') private readonly taskExecution: TaskExecutionService,
     @Inject('BILLING_SERVICE') private readonly billingService: BillingService,
     @Inject('CREATE_SERVICE') private readonly createService: CreateService,
+    @Inject('STORAGE_SERVICE') private readonly storageService: StorageService,
   ) {}
 
   // ===== Seed =====
@@ -160,6 +162,71 @@ export class GatewayService {
     };
   }
 
+  // ===== Input Media Resolution (fileId → URL, at system boundary) =====
+
+  /**
+   * Resolve fileId references in input to URLs before passing to AI adapter.
+   * Supports both new format ({ fileId: "uuid" }) and legacy format (plain URL strings).
+   *
+   * Array fields: images, referenceImages, referenceVideos, referenceAudios
+   * Single fields: firstFrame, lastFrame, referenceImage, imageUrl
+   */
+  private async resolveInputForAdapter(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const resolved = { ...input };
+
+    // Collect all fileIds to resolve in batch
+    const fileIds: string[] = [];
+
+    const arrayFields = ['images', 'referenceImages', 'referenceVideos', 'referenceAudios'];
+    for (const field of arrayFields) {
+      const val = resolved[field];
+      if (Array.isArray(val)) {
+        for (const item of val) {
+          if (typeof item === 'object' && item !== null && 'fileId' in item) {
+            fileIds.push((item as { fileId: string }).fileId);
+          }
+        }
+      }
+    }
+
+    const singleFields = ['firstFrame', 'lastFrame', 'referenceImage', 'imageUrl'];
+    for (const field of singleFields) {
+      const val = resolved[field];
+      if (typeof val === 'object' && val !== null && 'fileId' in val) {
+        fileIds.push((val as { fileId: string }).fileId);
+      }
+    }
+
+    if (fileIds.length === 0) return resolved;
+
+    // Batch resolve
+    const urlMap = await this.storageService.resolveUrls(fileIds);
+
+    // Replace in resolved input
+    for (const field of arrayFields) {
+      const val = resolved[field];
+      if (Array.isArray(val)) {
+        resolved[field] = val
+          .map((item) => {
+            if (typeof item === 'object' && item !== null && 'fileId' in item) {
+              return urlMap.get((item as { fileId: string }).fileId) ?? null;
+            }
+            return item; // already a string URL (legacy)
+          })
+          .filter((v) => v !== null);
+      }
+    }
+
+    for (const field of singleFields) {
+      const val = resolved[field];
+      if (typeof val === 'object' && val !== null && 'fileId' in val) {
+        resolved[field] = urlMap.get((val as { fileId: string }).fileId) ?? null;
+      }
+    }
+
+    return resolved;
+  }
+
   // ===== Generation =====
 
   async submitGeneration(
@@ -240,16 +307,20 @@ export class GatewayService {
       throw new BadRequestException('信用额度不足');
     }
 
-    // Create Create record (user's creative intent)
+    // Create Create record (user's creative intent) — stores original input with fileIds
     const prompt = (input.prompt as string) || JSON.stringify(input);
     const { id: createId } = await this.createService.createCreate({
       projectId,
       userId,
       capabilitySlug,
       prompt,
+      input,
       modelSlug: model.slug,
       sourceCreateId: sourceCreateId ?? null,
     });
+
+    // Resolve fileId references to URLs for adapter consumption (boundary: system → external API)
+    const resolvedInput = await this.resolveInputForAdapter(input);
 
     // Create task record linked to the Create
     const taskId = uuidv4();
@@ -265,7 +336,7 @@ export class GatewayService {
         type: capabilitySlug,
         capabilitySlug,
         modelSlug: model.slug,
-        input,
+        input, // store original input with fileIds
         status: 'queued',
         creditsCost: model.costCredits,
         expiresAt,
@@ -286,8 +357,8 @@ export class GatewayService {
 
     this.logger.log(`Generation task ${taskId}: ${capabilitySlug} → ${model.slug} (credits: ${model.costCredits})`);
 
-    // Trigger async execution
-    this.taskExecution.executeTask(taskId, userId, capabilitySlug, input, model).catch((err) => {
+    // Trigger async execution with resolved input (URLs, not fileIds)
+    this.taskExecution.executeTask(taskId, userId, capabilitySlug, resolvedInput, model).catch((err) => {
       this.logger.error(`Async execution failed for task ${taskId}: ${err.message}`);
     });
 

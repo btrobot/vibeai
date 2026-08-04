@@ -8,8 +8,14 @@ export const files = pgTable('files', {
   mimeType: varchar('mime_type', { length: 255 }).notNull().default('application/octet-stream'),
   size: bigint('size', { mode: 'number' }).notNull().default(0),
   category: varchar('category', { length: 20 }).notNull().default('temp'),
-  storageKey: text('storage_key').notNull().unique(),
-  url: text('url').notNull(),
+  // source: 'storage' = physical file in local/S3; 'external' = virtual, only externalUrl
+  source: varchar('source', { length: 20 }).notNull().default('storage'),
+  // storage: physical path (nullable for external files)
+  storageKey: text('storage_key'),
+  // external: the original URL (nullable for storage files)
+  externalUrl: text('external_url'),
+  // legacy url column (deprecated — use resolveUrl() at runtime instead)
+  url: text('url'),
   isPublic: boolean('is_public').notNull().default(false),
   width: integer('width'),
   height: integer('height'),

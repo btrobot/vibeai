@@ -244,6 +244,13 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
   - Task 代表执行单元（当前 1:1，未来支持多步能力时 1:N）
   - `sourceCreateId` 自引用 FK：null=原创，非 null=基于之前创作的修改
   - `syncCreateStatus`（ENG-012）：Task 完成或失败时自动同步 Create 状态
+- **媒体文件统一引用模型**（Migration 0003）
+  - 所有外部进入系统的媒体文件（用户上传、AI 生成、外部 URL）统一注册到 `files` 表
+  - `files.source`：`'storage'`（实文件，有 storageKey）或 `'external'`（虚文件，只有 externalUrl）
+  - 系统内所有引用使用 `fileId`（UUID），不存 URL。URL 在运行时通过 `resolveUrl()` 解析
+  - `creates.input`（JSONB）保存用户完整输入快照（prompt + fileId 引用）
+  - **进出口转换**：generate API 收到 `{ fileId }` → `resolveInputForAdapter()` 解析为 URL → 传给 AI 适配器；适配器返回外部 URL → `transferResult()` 下载转存 → fileId
+  - 前端提交时传 `{ fileId: "uuid" }` 而非裸 URL
 
 ## 数据库迁移与种子数据
 
@@ -256,6 +263,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | `0000_spicy_wallow.sql` | 初始 schema（users/sessions/files/ai_models/projects/tasks 等） |
 | `0001_hot_dragon_man.sql` | Gallery 表（gallery_works/gallery_likes） |
 | `0002_create_entity_schema.sql` | Create 实体层 + ai_models 新 schema + provider_attempts |
+| `0003_file_source_and_creates_input.sql` | files 表加 source/external_url；creates 表加 input JSONB |
 
 ### 独立脚本
 

@@ -3,7 +3,7 @@ import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { files } from '../../db/schema/files';
-import { eq, and, like, desc, count, sql } from 'drizzle-orm';
+import { eq, and, like, desc, count, sql, inArray } from 'drizzle-orm';
 import { IStorageProvider } from './interfaces/storage-provider.interface';
 import type { UploadFileInput, ListFilesQuery, FileResponse } from './dto';
 import axios from 'axios';
@@ -16,6 +16,86 @@ export class StorageService {
     @Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>,
     @Inject('STORAGE_PROVIDER') private readonly provider: IStorageProvider,
   ) {}
+
+  // ===== URL Resolution (runtime, not persisted) =====
+
+  /**
+   * Resolve a single fileId to a URL.
+   * storage → /api/storage/serve/{storageKey}
+   * external → externalUrl
+   */
+  async resolveUrl(fileId: string): Promise<string | null> {
+    const [record] = await this.db
+      .select()
+      .from(files)
+      .where(eq(files.id, fileId))
+      .limit(1);
+
+    if (!record) return null;
+    return this.resolveUrlFromRecord(record);
+  }
+
+  /**
+   * Batch resolve multiple fileIds to URLs.
+   * Returns a Map<fileId, url>.
+   */
+  async resolveUrls(fileIds: string[]): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    if (fileIds.length === 0) return result;
+
+    const records = await this.db
+      .select()
+      .from(files)
+      .where(inArray(files.id, fileIds));
+
+    for (const record of records) {
+      const url = this.resolveUrlFromRecord(record);
+      if (url) result.set(record.id, url);
+    }
+    return result;
+  }
+
+  private resolveUrlFromRecord(record: typeof files.$inferSelect): string | null {
+    // External files: return externalUrl
+    if (record.source === 'external') {
+      return record.externalUrl;
+    }
+    // Storage files: prefer explicit url (e.g. signed URL), fallback to serve URL from storageKey
+    if (record.url) return record.url;
+    if (record.storageKey) return `/api/storage/serve/${record.storageKey}`;
+    return null;
+  }
+
+  // ===== External File Registration (virtual file) =====
+
+  /**
+   * Register an external URL as a virtual file record.
+   * No physical download — just a metadata entry with source='external'.
+   */
+  async registerExternalFile(
+    userId: string,
+    externalUrl: string,
+    options?: { originalName?: string; mimeType?: string; category?: string },
+  ): Promise<{ fileId: string; url: string }> {
+    const [record] = await this.db
+      .insert(files)
+      .values({
+        userId,
+        originalName: options?.originalName || externalUrl.split('/').pop()?.split('?')[0] || 'external',
+        mimeType: options?.mimeType || 'application/octet-stream',
+        size: 0,
+        category: options?.category || 'temp',
+        source: 'external',
+        storageKey: null,
+        externalUrl,
+        url: null,
+        isPublic: true,
+      })
+      .returning();
+
+    this.logger.log(`External file registered: ${record.id} → ${externalUrl}`);
+    return { fileId: record.id, url: externalUrl };
+  }
 
   async uploadFile(
     userId: string,
@@ -40,7 +120,9 @@ export class StorageService {
         mimeType: file.mimetype,
         size: file.size,
         category,
+        source: 'storage',
         storageKey: uploadResult.key,
+        externalUrl: null,
         url: uploadResult.url,
         isPublic: input.isPublic ?? false,
       })
@@ -98,7 +180,15 @@ export class StorageService {
 
     if (!record) return null;
 
-    const signedUrl = await this.provider.getSignedUrl(record.storageKey);
+    // External files: URL is the externalUrl directly
+    if (record.source === 'external') {
+      return this.toResponse(record);
+    }
+
+    // Storage files: resolve signed URL
+    const signedUrl = record.storageKey
+      ? await this.provider.getSignedUrl(record.storageKey)
+      : record.url;
     return this.toResponse({ ...record, url: signedUrl });
   }
 
@@ -111,7 +201,10 @@ export class StorageService {
 
     if (!record) return false;
 
-    await this.provider.delete(record.storageKey);
+    // Only delete physical file for storage source
+    if (record.source === 'storage' && record.storageKey) {
+      await this.provider.delete(record.storageKey);
+    }
 
     await this.db.delete(files).where(eq(files.id, fileId));
 
@@ -128,6 +221,13 @@ export class StorageService {
 
     if (!record) return null;
 
+    // External files: return externalUrl directly
+    if (record.source === 'external') {
+      return record.externalUrl;
+    }
+
+    // Storage files: get signed URL from provider
+    if (!record.storageKey) return record.url;
     return this.provider.getSignedUrl(record.storageKey);
   }
 
@@ -204,7 +304,9 @@ export class StorageService {
         mimeType: contentType,
         size: buffer.length,
         category,
+        source: 'storage',
         storageKey: uploadResult.key,
+        externalUrl: null,
         url: uploadResult.url,
         isPublic: false,
       })
@@ -243,6 +345,8 @@ export class StorageService {
   private toResponse(
     record: typeof files.$inferSelect,
   ): FileResponse {
+    // Resolve URL at response time
+    const url = this.resolveUrlFromRecord(record) ?? record.url ?? null;
     return {
       id: record.id,
       userId: record.userId,
@@ -250,8 +354,10 @@ export class StorageService {
       mimeType: record.mimeType,
       size: record.size,
       category: record.category as FileResponse['category'],
+      source: (record.source as 'storage' | 'external') ?? 'storage',
       storageKey: record.storageKey,
-      url: record.url,
+      externalUrl: record.externalUrl,
+      url,
       isPublic: record.isPublic,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),

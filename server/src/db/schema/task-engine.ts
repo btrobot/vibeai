@@ -30,6 +30,7 @@ export const creates = pgTable('creates', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   capabilitySlug: varchar('capability_slug', { length: 100 }).notNull(),
   prompt: text('prompt').notNull(),
+  input: jsonb('input').default({}),
   sourceCreateId: uuid('source_create_id'), // null=原创, 非null=基于该创作的修改（自引用 FK 在下方处理）
   status: varchar('status', { length: 20 }).notNull().default('draft'), // draft | processing | completed | failed | cancelled
   output: jsonb('output'),

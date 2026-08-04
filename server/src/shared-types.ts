@@ -292,6 +292,7 @@ export interface CreateResponse {
   userId: string;
   capabilitySlug: string;
   prompt: string;
+  input: Record<string, unknown>;
   sourceCreateId: string | null;
   status: CreateStatus;
   output: Record<string, unknown> | null;

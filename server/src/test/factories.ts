@@ -275,8 +275,10 @@ export interface TestFile {
   mimeType: string;
   size: number;
   category: string;
-  storageKey: string;
-  url: string;
+  source: string;
+  storageKey: string | null;
+  externalUrl: string | null;
+  url: string | null;
   isPublic: boolean;
   width: number | null;
   height: number | null;
@@ -295,7 +297,9 @@ export function buildFile(partial?: Partial<TestFile>): TestFile {
     mimeType: 'image/png',
     size: 102400,
     category: 'image',
+    source: 'storage',
     storageKey: 'uploads/test.png',
+    externalUrl: null,
     url: 'https://cdn.vibeai.com/uploads/test.png',
     isPublic: false,
     width: 1024,
