@@ -21,8 +21,7 @@
     "validate": "pnpm ts-check && pnpm lint:build && pnpm test && cd server && pnpm test",
     "validate:docker": "bash scripts/docker-validate.sh",
     "gate:precommit": "pnpm validate",
-    "gate:deploy": "pnpm validate && pnpm test:coverage && cd server && pnpm test:coverage",
-    "prepare": "husky"
+    "gate:deploy": "pnpm validate && pnpm test:coverage && cd server && pnpm test:coverage"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1",
@@ -83,10 +82,5 @@
   "packageManager": "pnpm@9.0.0",
   "engines": {
     "pnpm": ">=9.0.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "bcrypt"
-    ]
   }
 }
