@@ -327,6 +327,6 @@ export class GatewayService {
   // ===== Recipes =====
 
   listRecipes() {
-    return SEED_RECIPES.sort((a, b) => a.sortOrder - b.sortOrder);
+    return [...SEED_RECIPES].sort((a, b) => a.sortOrder - b.sortOrder);
   }
 }
