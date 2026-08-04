@@ -567,4 +567,250 @@ describe('AI Gateway 回归测试', () => {
       expect(result.taskId).toBeDefined();
     });
   });
+
+  // ============================================================
+  // REG-011: SSE 流式 deducCredits 只在成功时调用
+  //
+  // Bug 场景: 适配器执行失败时，deductCredits 不应被调用
+  // 期望: 失败时不扣信用，成功时仅扣一次
+  // ============================================================
+  describe('REG-011: SSE 流式 deducCredits 只在成功时调用', () => {
+    let execService: TaskExecutionService;
+    const mockWsService = { sendToUser: vi.fn() };
+    const mockStorageService = { downloadAndStore: vi.fn() };
+    const mockAdapter = {
+      execute: vi.fn(),
+      protocolKind: 'SYNC_STREAMING' as const,
+      modality: 'llm' as const,
+    };
+    const mockAdapterRegistry = {
+      getAdapter: vi.fn().mockReturnValue(mockAdapter),
+    };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      db = createDrizzleMockForNestJS();
+      execService = new TaskExecutionService(
+        db as any,
+        mockWsService as any,
+        mockStorageService as any,
+        mockBillingService as any,
+        mockAdapterRegistry as any,
+      );
+    });
+
+    it('LLM 适配器成功时调用 settleCredits（不额外扣信用）', async () => {
+      mockAdapter.execute.mockResolvedValue({
+        output: { content: 'Hello' },
+        providerTaskId: 'provider-1',
+      });
+
+      await execService.executeTask('task-1', 'user-1', 'text-generation', {}, {
+        slug: 'test-llm',
+        name: 'Test LLM',
+        sdkModelId: 'test',
+        modality: 'llm',
+        constraints: {},
+        defaultParams: {},
+        costCredits: 5,
+        sortOrder: 0,
+      });
+
+      // LLM 成功: 调用 settleCredits 确认扣减
+      expect(mockBillingService.settleCredits).toHaveBeenCalledWith('task-1');
+      // 不额外扣
+      expect(mockBillingService.deductCredits).not.toHaveBeenCalled();
+    });
+
+    it('LLM 适配器失败时调用 refundCredits 不调用 settleCredits', async () => {
+      mockAdapter.execute.mockRejectedValue(new Error('LLM generation failed'));
+
+      await execService.executeTask('task-1', 'user-1', 'text-generation', {}, {
+        slug: 'test-llm',
+        name: 'Test LLM',
+        sdkModelId: 'test',
+        modality: 'llm',
+        constraints: {},
+        defaultParams: {},
+        costCredits: 5,
+        sortOrder: 0,
+      });
+
+      expect(mockBillingService.refundCredits).toHaveBeenCalledWith(
+        'user-1', 'task-1', 5, expect.any(String),
+      );
+      expect(mockBillingService.settleCredits).not.toHaveBeenCalled();
+    });
+
+    it('成功时恰好调用一次 settleCredits', async () => {
+      mockAdapter.execute.mockResolvedValue({
+        output: { content: 'Hello' },
+        providerTaskId: 'provider-1',
+      });
+
+      await execService.executeTask('task-1', 'user-1', 'text-generation', {}, {
+        slug: 'test-llm',
+        name: 'Test LLM',
+        sdkModelId: 'test',
+        modality: 'llm',
+        constraints: {},
+        defaultParams: {},
+        costCredits: 5,
+        sortOrder: 0,
+      });
+
+      expect(mockBillingService.settleCredits).toHaveBeenCalledTimes(1);
+      expect(mockBillingService.refundCredits).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // REG-012: 种子数据 invariant 一致性
+  //
+  // Bug 场景: SEED_MODELS 中 sdkClient 与 modality 的映射关系
+  // 期望: llm ↔ 'llm', image ↔ 'image', video ↔ 'video' 一一对应
+  // ============================================================
+  describe('REG-012: 种子数据 invariant 一致性', () => {
+    it('LLM 模型 sdkClient 为 "llm"', () => {
+      const llmModels = SEED_MODELS.filter(m => m.modality === 'llm');
+      llmModels.forEach(m => {
+        expect(m.sdkClient).toBe('llm');
+      });
+    });
+
+    it('图片模型 sdkClient 为 "image"', () => {
+      const imageModels = SEED_MODELS.filter(m => m.modality === 'image');
+      imageModels.forEach(m => {
+        expect(m.sdkClient).toBe('image');
+      });
+    });
+
+    it('视频模型 sdkClient 为 "video"', () => {
+      const videoModels = SEED_MODELS.filter(m => m.modality === 'video');
+      videoModels.forEach(m => {
+        expect(m.sdkClient).toBe('video');
+      });
+    });
+
+    it('所有模型有 costCredits > 0', () => {
+      SEED_MODELS.forEach(m => {
+        expect(m.costCredits).toBeGreaterThan(0);
+      });
+    });
+
+    it('所有模型有 isActive: true', () => {
+      SEED_MODELS.forEach(m => {
+        expect(m.isActive).toBe(true);
+      });
+    });
+
+    it('每个 recipe 引用的 model 在其 capability 中', () => {
+      SEED_RECIPES.forEach(recipe => {
+        const model = SEED_MODELS.find(m => m.slug === recipe.modelSlug);
+        expect(model).toBeDefined();
+        expect(model!.capabilities).toContain(recipe.capabilitySlug);
+      });
+    });
+
+    it('每个 recipe 引用的 model 的 modality 与 capability 匹配', () => {
+      const capabilityModalityMap: Record<string, string> = {
+        'text-generation': 'llm',
+        'image-generation': 'image',
+        'video-generation': 'video',
+        'prompt-enhance': 'llm',
+        'detail-page-copy': 'llm',
+      };
+      SEED_RECIPES.forEach(recipe => {
+        const model = SEED_MODELS.find(m => m.slug === recipe.modelSlug);
+        expect(model).toBeDefined();
+        if (model && capabilityModalityMap[recipe.capabilitySlug]) {
+          expect(model.modality).toBe(capabilityModalityMap[recipe.capabilitySlug]);
+        }
+      });
+    });
+
+    it('所有 recipe 有 defaultInput 且为有效对象', () => {
+      SEED_RECIPES.forEach(recipe => {
+        expect(recipe.defaultInput).toBeDefined();
+        expect(typeof recipe.defaultInput).toBe('object');
+        // prompt 始终由用户输入提供，defaultInput 只包含可选/高级参数
+      });
+    });
+  });
+
+  // ============================================================
+  // REG-013: GatewayService 异常容错 — DB 异常返回 null 而非抛异常
+  //
+  // Bug 场景: DB 查询抛异常时，getModel/getTask 应返回 null
+  // 期望: 不抛异常，返回 null，让调用方自行处理
+  // ============================================================
+  describe('REG-013: GatewayService DB 异常容错', () => {
+    it('getModel DB 查询抛异常时返回 null', async () => {
+      vi.spyOn(db, 'select').mockImplementation(() => {
+        throw new Error('DB connection lost');
+      });
+
+      // 即使 DB 抛异常，getModel 也应返回 null（不抛异常）
+      const result = await service.getModel('non-existent');
+      expect(result).toBeNull();
+    });
+
+    it('getTask DB 查询抛异常时返回 null', async () => {
+      vi.spyOn(db, 'select').mockImplementation(() => {
+        throw new Error('DB connection lost');
+      });
+
+      // 即使 DB 抛异常，getTask 也应返回 null（不抛异常）
+      const result = await service.getTask('task-1');
+      expect(result).toBeNull();
+    });
+
+    it('listModels DB 查询抛异常时回退到内存模型', async () => {
+      vi.spyOn(db, 'select').mockImplementation(() => {
+        throw new Error('DB connection lost');
+      });
+
+      // 即使 DB 抛异常，listModels 也应返回模型列表（内存回退）
+      const result = await service.listModels();
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('getTask DB 结果为空时返回 null', async () => {
+      // mockEmpty 已经设置 select 返回空数组
+      mockEmpty(db);
+
+      const result = await service.getTask('non-existent-task');
+      expect(result).toBeNull();
+    });
+  });
+
+  // ============================================================
+  // REG-014: GatewayService 模型不存在时返回 null 而非抛异常
+  //
+  // Bug 场景: getModel 传入不存在的 slug
+  // 期望: 返回 null，让 Controller 层决定是否抛 404
+  // ============================================================
+  describe('REG-014: 模型不存在时返回 null', () => {
+    it('getModel 传入不存在的 slug 返回 null', async () => {
+      mockEmpty(db);
+
+      const result = await service.getModel('non-existent-model');
+      expect(result).toBeNull();
+    });
+
+    it('submitGeneration 传入不存在的 preferredModel 应回退到默认', async () => {
+      const result = await service.submitGeneration(
+        'user-1', 'text-generation', { prompt: 'test' }, 'non-existent-model',
+      );
+      // 回退到默认模型，任务仍然创建成功
+      expect(result.taskId).toBeDefined();
+      expect(result.status).toBe('queued');
+    });
+
+    it('quickCreate 传入不存在的 recipeId 应抛异常', async () => {
+      await expect(
+        service.quickCreate('user-1', 'non-existent-recipe', { prompt: 'test' }),
+      ).rejects.toThrow();
+    });
+  });
 });
