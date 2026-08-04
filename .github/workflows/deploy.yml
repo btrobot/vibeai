@@ -1,0 +1,143 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ${{ github.repository }}
+  APP_PORT: 5000
+  CONTAINER_NAME: vibeai-container
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    name: Build & Push to GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -euo pipefail
+
+            IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            CONTAINER_NAME="${{ env.CONTAINER_NAME }}"
+            APP_PORT=${{ env.APP_PORT }}
+            REGISTRY="${{ env.REGISTRY }}"
+            ENV_FILE="/data/vibeai/.env.local"
+
+            echo "=== VibeAI Deploy ==="
+            echo "Image: ${REGISTRY}/${IMAGE_NAME}"
+
+            # 登录 ghcr.io
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # 记录旧容器状态（用于回滚）
+            OLD_IMAGE=""
+            if docker ps -a --format '{{.Names}} {{.ID}}' | grep -q "^${CONTAINER_NAME} "; then
+              OLD_IMAGE=$(docker inspect --format '{{.Image}}' "${CONTAINER_NAME}")
+              echo "旧容器镜像 SHA: ${OLD_IMAGE}"
+            fi
+
+            # 拉取新镜像
+            echo "拉取新镜像..."
+            docker pull "${REGISTRY}/${IMAGE_NAME}:latest"
+
+            # 停止旧容器
+            if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+              echo "停止旧容器..."
+              docker stop "${CONTAINER_NAME}"
+              docker rm "${CONTAINER_NAME}"
+            fi
+
+            # 启动新容器
+            echo "启动新容器..."
+            docker run -d \
+              --name "${CONTAINER_NAME}" \
+              --restart unless-stopped \
+              -p "${APP_PORT}:5000" \
+              -e "PORT=5000" \
+              --env-file "${ENV_FILE}" \
+              "${REGISTRY}/${IMAGE_NAME}:latest"
+
+            # 健康检查
+            echo "=== 健康检查 ==="
+            HEALTH_OK=false
+            for i in $(seq 1 30); do
+              if curl -sf "http://localhost:${APP_PORT}/api/health" > /dev/null 2>&1; then
+                HEALTH_OK=true
+                echo "✓ 服务就绪 (${i}s)"
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "${HEALTH_OK}" != "true" ]; then
+              echo "健康检查失败，回滚..."
+              if [ -n "${OLD_IMAGE}" ]; then
+                docker stop "${CONTAINER_NAME}" 2>/dev/null
+                docker rm "${CONTAINER_NAME}" 2>/dev/null
+                docker run -d \
+                  --name "${CONTAINER_NAME}" \
+                  --restart unless-stopped \
+                  -p "${APP_PORT}:5000" \
+                  --env-file "${ENV_FILE}" \
+                  "${OLD_IMAGE}"
+              fi
+              exit 1
+            fi
+
+            # 清理旧镜像
+            docker image prune -f
+
+            echo "=== 部署成功 ==="
