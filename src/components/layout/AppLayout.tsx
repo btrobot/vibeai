@@ -84,8 +84,8 @@ export default function AppLayout() {
       >
         {/* Logo */}
         <div className="flex h-14 items-center gap-3 border-b border-border px-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15">
-            <Sparkles className="h-4 w-4 text-accent" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand/15">
+            <Sparkles className="h-4 w-4 text-brand" />
           </div>
           {!sidebarCollapsed && (
             <span className="text-sm font-semibold text-foreground">VibeAI</span>
@@ -165,7 +165,7 @@ export default function AppLayout() {
         {/* User Section */}
         <div className="border-t border-border p-2">
           <div className={`flex items-center gap-3 rounded-lg px-3 py-2 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/15 text-xs font-medium text-accent">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/15 text-xs font-medium text-brand">
               {user?.name?.charAt(0)?.toUpperCase() || 'U'}
             </div>
             {!sidebarCollapsed && (
@@ -215,7 +215,7 @@ export default function AppLayout() {
 
           {/* Credits Badge */}
           <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-accent" />
+            <Sparkles className="h-3.5 w-3.5 text-brand" />
             <span className="text-xs font-medium text-foreground">{user?.credits ?? 0}</span>
             <span className="text-xs text-muted-foreground">额度</span>
           </div>
