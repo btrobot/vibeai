@@ -298,4 +298,53 @@ describe('GatewayService', () => {
       expect(true).toBe(true);
     });
   });
+
+  // ===== Coverage gap: in-memory fallback in submitGeneration (lines 215-219) =====
+
+  describe('submitGeneration — 内存模型回退路径', () => {
+    it('DB 查不到模型时应回退到内存 builtInModelMap', async () => {
+      // DB returns empty for getModel (both DB row lookup and fallback)
+      // But builtInModelMap has the model, so it should use that
+      const result = await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+
+      expect(result).toBeDefined();
+      expect(result.status).toBe('queued');
+      expect(result.capabilitySlug).toBe('text-generation');
+      // The model slug should come from the in-memory router
+      expect(result.modelSlug).toBeDefined();
+    });
+
+    it('DB 异常时应回退到内存模型并成功提交', async () => {
+      // Make DB throw on select
+      db.select.mockImplementationOnce(() => {
+        throw new Error('DB connection lost');
+      });
+
+      const result = await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+
+      expect(result).toBeDefined();
+      expect(result.status).toBe('queued');
+    });
+  });
+
+  // ===== Coverage gap: getTask catch block (lines 322-324) =====
+
+  describe('getTask — 异常处理', () => {
+    it('DB 异常时应返回 null 而非抛出', async () => {
+      // Make DB throw on select
+      db.select.mockImplementationOnce(() => {
+        throw new Error('DB error');
+      });
+
+      const result = await service.getTask('task-1');
+      expect(result).toBeNull();
+    });
+
+    it('任务不存在时应返回 null', async () => {
+      mockEmpty(db);
+
+      const result = await service.getTask('nonexistent');
+      expect(result).toBeNull();
+    });
+  });
 });
