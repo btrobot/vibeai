@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
-import { DRIZZLE } from '../../common/drizzle.module';
+import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm';
 import * as schema from '../../db/schema';
 import { tasks } from '../../db/schema/task-engine';
