@@ -96,9 +96,42 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 
 - 使用 Tailwind CSS v4 进行样式开发
 - 使用 shadcn/ui 语义化主题变量（CSS 变量）
-- 暗色模式优先，低饱和翡翠绿强调色
-- 禁止硬编码 Hex/RGB，颜色使用 CSS 变量
+- 明亮主题优先，翡翠绿品牌色（`--brand`）+ 专业蓝主色（`--primary`）
+- 禁止硬编码 Hex/RGB/HSL，颜色使用 CSS 变量
 - 使用 Lucide 图标库
+
+### 设计规范执行机制（DESIGN.md 强制合规）
+
+项目通过**三层防线**确保 DESIGN.md 设计规范被长期贯彻：
+
+| 层级 | 机制 | 文件 | 触发时机 |
+|------|------|------|---------|
+| L1 | ESLint 自定义规则 `design/no-hardcoded-colors` | `eslint-rules/no-hardcoded-colors.js` | `pnpm lint` / IDE 实时检查 |
+| L2 | design-check 脚本（grep 兜底扫描） | `scripts/design-check.sh` | pre-commit (lint-staged) |
+| L3 | 标准组件库（合规积木） | `src/components/ui/` | 开发时直接使用 |
+
+**手动检查**：`pnpm design-check`
+
+**检测项**：Hex 颜色、RGB/RGBA、HSL、Tailwind 原生色盘（`text-blue-500` 等）、方括号颜色值（`bg-[#fff]`）
+
+**允许例外**（DESIGN.md 豁免）：
+- `bg-black/50`、`bg-white/10` — 遮罩层（DESIGN.md 10.6）
+- `text-amber-600`、`bg-amber-500/10` — 警告色徽章（DESIGN.md 10.4，唯一允许的 Tailwind 原生色）
+
+### 标准组件库（src/components/ui/）
+
+| 组件 | DESIGN.md 章节 | 说明 |
+|------|---------------|------|
+| Button | 10.1 | 7 variants: default/brand/destructive/outline/secondary/ghost/link |
+| Card | 10.2 | 无默认阴影, rounded-xl |
+| Input | 10.3 | h-10, rounded-lg, 150ms transition |
+| Label | 16 | text-sm font-medium |
+| Badge | 10.4 | 5 variants: default/primary/brand/warning/destructive |
+| Progress | 10.8 | default/slim 尺寸, default/brand 颜色 |
+| Skeleton | 10.9 | animate-pulse bg-muted |
+| EmptyState | 13.3 | 居中空状态，图标+标题+描述+CTA |
+
+统一导入：`import { Button, Badge, Progress, Skeleton, EmptyState } from '@/components/ui'`
 
 ## 编码规范
 

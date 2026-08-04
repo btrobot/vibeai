@@ -12,6 +12,7 @@
     "preinstall": "npx only-allow pnpm",
     "ts-check": "tsc -p tsconfig.json",
     "lint": "eslint . --quiet",
+    "design-check": "bash scripts/design-check.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -72,6 +73,7 @@
   "lint-staged": {
     "*.{ts,tsx}": [
       "eslint --fix --quiet",
+      "bash scripts/design-check.sh",
       "bash -c 'pnpm ts-check 2>&1 | tail -5'"
     ],
     "*.{js,jsx,mjs,cjs}": [
