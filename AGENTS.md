@@ -188,3 +188,35 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - 异步任务模式，WebSocket 实时进度
 - 存储层 Provider 抽象，支持无缝切换
 - AI Gateway 三层架构: Capability → Router → Model
+
+## CI/CD 流水线
+
+### CI (`.github/workflows/ci.yml`)
+- **触发**: 所有 PR + push to main/release/*
+- **并发控制**: 同一 PR 新提交自动取消旧构建
+- **Jobs**:
+  - `quality` — ESLint + TypeScript 类型检查
+  - `test` — 前端/后端单元测试矩阵（并行，含 Postgres 服务容器）
+  - `build` — Vite + tsc 编译验证
+  - `e2e` — Playwright E2E 测试（启动后端 + Postgres）
+  - `docker-check` — PR 时验证 Dockerfile 可构建（仅 PR）
+  - `ci-pass` — 结果汇总（用于分支保护规则）
+
+### CD (`.github/workflows/cd.yml`)
+- **触发**: push to main (dev 版本) + push tag v* (正式发布)
+- **Jobs**:
+  - `version` — 语义版本推断（tag → 版本号，main → dev.commitSHA）
+  - `docker` — 多架构构建 (amd64 + arm64) → GHCR 发布
+  - `security-scan` — Trivy 漏洞扫描 (CRITICAL/HIGH) → GitHub Security 上传
+  - `release` — 仅 tag push 时创建 GitHub Release（含变更日志）
+- **镜像标签策略**:
+  - Tag push: `v1.2.3` → `1.2.3` + `1.2` + `1` + `latest`
+  - Main push: `dev` + `sha-abc1234`
+
+### Docker
+- **Dockerfile**: 4 阶段构建 (deps → prod-deps → builder → runner)
+- **BuildKit**: 缓存挂载加速 pnpm install
+- **生产隔离**: runner 阶段仅含 production dependencies
+- **安全**: 非 root 运行 (node user) + HEALTHCHECK + OCI 标签
+- **本地开发**: `docker compose up -d`（含 Postgres）
+- **构建参数**: `DEPLOY_REGION=auto|cn|global`（自动选择镜像源）

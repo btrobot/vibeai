@@ -1,22 +1,25 @@
-# ============================================
+# syntax=docker/dockerfile:1
+# ============================================================
 # Dockerfile — VibeAI 内容创作平台
-# Vite SPA + NestJS API + PostgreSQL (外部)
-# ============================================
-# 多阶段构建: deps → builder → runner
-# 基础镜像: node:24-bookworm-slim (glibc 兼容 bcrypt 原生模块)
-# ============================================
+# Vite SPA + NestJS API (monorepo, single image)
+# ============================================================
+# 4 阶段构建: deps → prod-deps → builder → runner
+# 基础镜像: node:24-bookworm-slim
+# 要求: DOCKER_BUILDKIT=1 (Docker 23+ 默认启用)
+# ============================================================
 
 # ─── 构建参数 ───
-ARG PROJECT_NAME="vibeai"
-ARG PROJECT_VERSION="1.0.0"
+ARG NODE_VERSION=24
+ARG PROJECT_NAME=vibeai
+ARG PROJECT_VERSION=1.0.0
 ARG BUILD_DATE
 ARG GIT_COMMIT
-ARG DEPLOY_REGION=auto  # auto | cn | global
+ARG DEPLOY_REGION=auto
 
-# ============================================
-# 阶段 1: 安装依赖 (deps)
-# ============================================
-FROM node:24-bookworm-slim AS deps
+# ============================================================
+# 阶段 1: 全量依赖安装 (deps)
+# ============================================================
+FROM node:${NODE_VERSION}-bookworm-slim AS deps
 WORKDIR /app
 
 ARG DEPLOY_REGION
@@ -29,40 +32,63 @@ RUN if [ "${DEPLOY_REGION}" = "cn" ] || [ "${DEPLOY_REGION}" = "global" ]; then 
       bash /tmp/detect-mirror.sh; \
     fi
 
-# 安装 pnpm（corepack 在 bookworm 中可用，但 npm 安装更稳定）
+# 安装 pnpm（固定大版本，兼容 lockfile）
 RUN npm install -g pnpm@9
 
-# 前端依赖（编译原生模块 bcrypt，跳过 husky prepare）
+# 前端依赖（含 devDependencies，构建阶段需要 vite/tsc 等）
 COPY package.json pnpm-lock.yaml ./
-RUN HUSKY=0 pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,sharing=locked,target=/root/.local/share/pnpm/store \
+    HUSKY=0 pnpm install --frozen-lockfile
 
 # 后端依赖
 COPY server/package.json server/pnpm-lock.yaml ./server/
-RUN cd server && HUSKY=0 pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store-server,sharing=locked,target=/root/.local/share/pnpm/store \
+    bash -c 'cd server && HUSKY=0 pnpm install --frozen-lockfile'
 
-# 归档 node_modules（避免 COPY 数千小文件超时）
+# 归档 node_modules（tar 传输避免 COPY 数千小文件导致 layer 膨胀）
 RUN tar cf /tmp/frontend_node_modules.tar node_modules && \
     tar cf /tmp/server_node_modules.tar server/node_modules
 
-# ============================================
-# 阶段 2: 构建应用 (builder)
-# ============================================
-FROM node:24-bookworm-slim AS builder
+# ============================================================
+# 阶段 2: 生产依赖裁剪 (prod-deps)
+# ============================================================
+FROM node:${NODE_VERSION}-bookworm-slim AS prod-deps
 WORKDIR /app
 
-# 安装 pnpm（不继承 deps 阶段的全局安装）
 RUN npm install -g pnpm@9
 
-# 解压前端依赖（tar 归档传输）
+# 前端生产依赖
+COPY package.json pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm-store-prod-fe,sharing=locked,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --prod
+
+# 后端生产依赖
+COPY server/package.json server/pnpm-lock.yaml ./server/
+RUN --mount=type=cache,id=pnpm-store-prod-be,sharing=locked,target=/root/.local/share/pnpm/store \
+    bash -c 'cd server && pnpm install --frozen-lockfile --prod'
+
+# 归档生产 node_modules
+RUN tar cf /tmp/frontend_prod_node_modules.tar node_modules && \
+    tar cf /tmp/server_prod_node_modules.tar server/node_modules
+
+# ============================================================
+# 阶段 3: 构建应用 (builder)
+# ============================================================
+FROM node:${NODE_VERSION}-bookworm-slim AS builder
+WORKDIR /app
+
+RUN npm install -g pnpm@9
+
+# 解压全量依赖（构建需要 devDependencies）
 COPY --from=deps /tmp/frontend_node_modules.tar /tmp/
 RUN tar xf /tmp/frontend_node_modules.tar -C /app --no-same-owner && \
     rm /tmp/frontend_node_modules.tar
-# 解压后端依赖（tar 归档传输）
+
 COPY --from=deps /tmp/server_node_modules.tar /tmp/
 RUN tar xf /tmp/server_node_modules.tar -C /app --no-same-owner && \
     rm /tmp/server_node_modules.tar
 
-# 复制源码并构建
+# 复制源码
 COPY . .
 
 # 构建前端（Vite → dist/）
@@ -75,34 +101,40 @@ RUN cd server && npx tsc
 RUN tar cf /tmp/dist.tar dist && \
     tar cf /tmp/server_dist.tar server/dist
 
-# ============================================
-# 阶段 3: 运行环境 (runner)
-# ============================================
-FROM node:24-bookworm-slim AS runner
-WORKDIR /app
+# ============================================================
+# 阶段 4: 运行环境 (runner)
+# ============================================================
+FROM node:${NODE_VERSION}-bookworm-slim AS runner
 
-# ─── OCI 标准标签（放在最终阶段确保生效）───
+# ─── OCI 标准标签 ───
 ARG PROJECT_NAME=vibeai
 ARG PROJECT_VERSION=1.0.0
 ARG BUILD_DATE
 ARG GIT_COMMIT
 LABEL org.opencontainers.image.title="${PROJECT_NAME}"
-LABEL org.opencontainers.image.description="VibeAI 内容创作平台 — AI 视频/图片生成 + 电商内容工具"
+LABEL org.opencontainers.image.description="VibeAI Content Creation Platform — AI Video/Image Generation"
 LABEL org.opencontainers.image.version="${PROJECT_VERSION}"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY:-vibeai/vibeai}"
+LABEL org.opencontainers.image.licenses="MIT"
 
-# 安装运行时必需工具（curl 用于 HEALTHCHECK，bash 用于启动脚本）
+WORKDIR /app
+
+# 最小运行时依赖
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       curl \
-      bash \
     && rm -rf /var/lib/apt/lists/*
 
-# 解压后端生产依赖
-COPY --from=deps /tmp/server_node_modules.tar /tmp/
-RUN tar xf /tmp/server_node_modules.tar -C /app --no-same-owner && \
-    rm /tmp/server_node_modules.tar
+# 解压生产依赖（不含 devDependencies，镜像更小）
+COPY --from=prod-deps /tmp/frontend_prod_node_modules.tar /tmp/
+RUN tar xf /tmp/frontend_prod_node_modules.tar -C /app --no-same-owner && \
+    rm /tmp/frontend_prod_node_modules.tar
+
+COPY --from=prod-deps /tmp/server_prod_node_modules.tar /tmp/
+RUN tar xf /tmp/server_prod_node_modules.tar -C /app --no-same-owner && \
+    rm /tmp/server_prod_node_modules.tar
 
 # 解压构建产物
 COPY --from=builder /tmp/dist.tar /tmp/
@@ -113,29 +145,28 @@ COPY --from=builder /tmp/server_dist.tar /tmp/
 RUN tar xf /tmp/server_dist.tar -C /app --no-same-owner && \
     rm /tmp/server_dist.tar
 
-# 复制数据库迁移文件
+# 数据库迁移文件
 COPY --from=builder /app/server/drizzle ./server/drizzle
 
-# 复制启动脚本
+# 启动脚本
 COPY scripts/start.sh ./scripts/start.sh
-RUN if [ -f ./scripts/start.sh ]; then chmod +x ./scripts/start.sh; fi
+RUN chmod +x ./scripts/start.sh
 
-# 确保所有文件归 node 用户所有（非 root 运行需要）
+# 文件归属非 root 用户
 RUN chown -R node:node /app
 
-# ─── 环境变量 ───
-ENV NODE_ENV=production
-ENV DEPLOY_RUN_PORT=5000
-ENV PORT=5000
-
-# ─── 健康检查 ───
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:${DEPLOY_RUN_PORT}/api/health || exit 1
+# ─── 运行时环境变量 ───
+ENV NODE_ENV=production \
+    DEPLOY_RUN_PORT=5000 \
+    PORT=5000
 
 EXPOSE 5000
+
+# ─── 健康检查 ───
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:${DEPLOY_RUN_PORT}/api/health || exit 1
 
 # ─── 非 root 运行 ───
 USER node
 
-# 启动应用（NestJS 同时提供 API 和静态文件服务）
 ENTRYPOINT ["bash", "./scripts/start.sh"]
