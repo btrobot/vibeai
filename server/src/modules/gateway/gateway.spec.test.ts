@@ -140,7 +140,7 @@ describe('Gateway Spec Tests', () => {
       expect(mockBillingService.reserveCredits).toHaveBeenCalledTimes(1);
       expect(mockBillingService.reserveCredits).toHaveBeenCalledWith(
         'user-1',
-        'pending',
+        null,
         expect.any(Number),
         expect.stringContaining('任务预扣'),
       );
@@ -173,7 +173,7 @@ describe('Gateway Spec Tests', () => {
         service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' }),
       ).rejects.toThrow(BadRequestException);
       expect(mockBillingService.refundCredits).toHaveBeenCalledWith(
-        'user-1', 'pending', expect.any(Number), '任务创建失败退款',
+        'user-1', null, expect.any(Number), '任务创建失败退款',
       );
     });
 

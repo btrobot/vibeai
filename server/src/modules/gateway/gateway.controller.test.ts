@@ -282,10 +282,10 @@ describe('GatewayController', () => {
       expect(doneWrite).toContain('"done":true');
       expect(doneWrite).toContain('"modelUsed":"doubao-seed-2-0-pro"');
 
-      // Verify credit deduction
+      // Verify credit deduction (LLM chat uses null as taskId, no Task record created)
       expect(mockBillingService.deductCredits).toHaveBeenCalledWith(
         'user-1',
-        expect.stringMatching(/^llm-\d+$/),
+        null,
         1,
         'LLM 对话: Doubao Pro',
       );

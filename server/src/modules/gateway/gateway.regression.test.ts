@@ -6,7 +6,7 @@
  * REG-001: listRecipes 原地排序导致 SEED_RECIPES 被篡改
  * REG-002: quickCreate 传入 seed model slug 但 router 只识别内存 model slug
  * REG-003: executeTask 中 getAdapter 在 try-catch 之前抛异常 → 任务卡 queued + 信用不退还
- * REG-004: submitGeneration 用 'pending' 作为 taskId 预扣信用 → 审计追踪断裂
+ * REG-004: submitGeneration 信用预扣 taskId 为 null（task_id 是 UUID 类型，'pending' 会导致 PostgresError）
  * REG-005: transferResult 部分图片转存失败时其他图片仍继续
  * REG-006: submitGeneration Task 创建失败后退还信用
  * REG-007: 退款失败不影响任务失败状态
@@ -192,27 +192,27 @@ describe('AI Gateway 回归测试', () => {
   });
 
   // ============================================================
-  // REG-004: submitGeneration 用 'pending' 作为 taskId 预扣信用
+  // REG-004: submitGeneration 信用预扣 taskId 审计追踪
   //
-  // Bug: reserveCredits(userId, 'pending', credits, desc)
-  //      taskId 传入 'pending' 而非实际 taskId（此时还未生成）
-  // 影响: creditUsage 表中 taskId='pending' 无法关联到具体任务
+  // Bugfix: reserveCredits(userId, null, credits, desc)
+  //         taskId 传 null（而非 'pending'）因为 taskId 在 reserveCredits 之后才生成
+  // 影响: credit_usage.task_id 是 UUID 类型，传 'pending' 会导致 PostgresError
+  // 修复: taskId 参数改为 string | null，调用处传 null
   // ============================================================
   describe('REG-004: 信用预扣 taskId 审计追踪', () => {
-    it('reserveCredits 被调用时 taskId 为 "pending"（已知设计限制）', async () => {
+    it('reserveCredits 被调用时 taskId 为 null（任务尚未创建）', async () => {
       await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
 
-      // 当前行为: 使用 'pending' 作为 taskId
-      // 这是因为 taskId 在 reserveCredits 之后才生成
+      // 当前行为: 使用 null 作为 taskId（taskId 在 reserveCredits 之后才生成）
       expect(mockBillingService.reserveCredits).toHaveBeenCalledWith(
         'user-1',
-        'pending',
+        null,
         expect.any(Number),
         expect.stringContaining('任务预扣'),
       );
     });
 
-    it('Task 创建失败时 refundCredits 也使用 "pending" 作为 taskId', async () => {
+    it('Task 创建失败时 refundCredits 也使用 null 作为 taskId', async () => {
       vi.spyOn(db, 'insert').mockImplementation(() => {
         throw new Error('DB error');
       });
@@ -223,24 +223,22 @@ describe('AI Gateway 回归测试', () => {
 
       expect(mockBillingService.refundCredits).toHaveBeenCalledWith(
         'user-1',
-        'pending',
+        null,
         expect.any(Number),
         '任务创建失败退款',
       );
     });
 
-    it('成功创建任务后 reserveCredits 和 refundCredits 的 taskId 一致', async () => {
-      // 成功路径: reserveCredits('pending') → 创建 task → executeTask 中 refundCredits(taskId)
-      // 两个 taskId 不一致: 'pending' vs 实际 taskId
-      // 这是已知设计限制: 预扣时 taskId 尚未生成
+    it('成功创建任务后 reserveCredits 使用 null，返回的 taskId 是 UUID', async () => {
+      // 成功路径: reserveCredits(null) → 创建 task → executeTask 中 refundCredits(taskId)
       const result = await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
 
-      // reserveCredits 使用 'pending'
+      // reserveCredits 使用 null
       expect(mockBillingService.reserveCredits).toHaveBeenCalledWith(
-        'user-1', 'pending', expect.any(Number), expect.any(String),
+        'user-1', null, expect.any(Number), expect.any(String),
       );
 
-      // 返回的 taskId 不是 'pending'
+      // 返回的 taskId 不是 null
       expect(result.taskId).not.toBe('pending');
       expect(result.taskId).toBeDefined();
     });
@@ -368,7 +366,7 @@ describe('AI Gateway 回归测试', () => {
       expect(mockBillingService.refundCredits).toHaveBeenCalledTimes(1);
       expect(mockBillingService.refundCredits).toHaveBeenCalledWith(
         'user-1',
-        'pending',
+        null,
         expect.any(Number),
         '任务创建失败退款',
       );

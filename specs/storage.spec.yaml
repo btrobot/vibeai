@@ -34,11 +34,19 @@ entities:
         default: temp
       - name: storageKey
         type: text
-        notNull: true
-        unique: true
+        nullable: true
       - name: url
         type: text
+        nullable: true
+      - name: source
+        type: varchar(20)
         notNull: true
+        default: storage
+        description: 'storage=实文件（有 storageKey），external=虚文件（只有 externalUrl）'
+      - name: externalUrl
+        type: text
+        nullable: true
+        description: 外部 URL（source=external 时使用）
       - name: isPublic
         type: boolean
         notNull: true
@@ -166,6 +174,20 @@ operations:
     auth: internal
     path: /storage/public/:id
     description: 获取公开文件的访问 URL（已通过 signedUrl 覆盖）
+    test: true
+  - name: serveFile
+    method: GET
+    path: /storage/serve/*splat
+    description: 通过 storageKey 直接提供文件内容（用于本地 Provider 的公开访问）
+    auth: none
+    pre:
+      - storageKey 存在于 files 表
+    post:
+      - 返回文件内容流
+    errors:
+      - status: 404
+        condition: storageKey 不存在
+        message: 文件不存在
     test: true
 rules:
   - name: file_owner_only
