@@ -12,14 +12,14 @@ import { WsService } from './modules/ws/ws.service';
 async function bootstrap() {
   // Run database migrations before starting the app
   try {
-    const databaseUrl = process.env.DATABASE_URL;
+    const databaseUrl = process.env.PGDATABASE_URL || process.env.DATABASE_URL;
     if (databaseUrl) {
       const pool = new Pool({ connectionString: databaseUrl });
       await migrate(drizzle(pool), { migrationsFolder: join(__dirname, '..', 'drizzle') });
       await pool.end();
       console.log('Database migrations completed successfully');
     } else {
-      console.log('DATABASE_URL not set, skipping migrations');
+      console.log('No database URL found (PGDATABASE_URL / DATABASE_URL), skipping migrations');
     }
   } catch (e) {
     console.error('Migration failed:', (e as Error).message);

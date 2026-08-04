@@ -17,6 +17,8 @@ cd server && pnpm build > /tmp/nestjs-build.log 2>&1
 cd "${COZE_WORKSPACE_PATH}"
 
 echo "Starting NestJS backend on port 3001..."
+# Prefer PGDATABASE_URL (sandbox Supabase) over .env's DATABASE_URL
+export DATABASE_URL="${PGDATABASE_URL:-${DATABASE_URL:-}}"
 cd server && (PORT=3001 nohup node dist/main.js > /tmp/nestjs.log 2>&1 &)
 cd "${COZE_WORKSPACE_PATH}"
 

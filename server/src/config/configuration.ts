@@ -1,7 +1,7 @@
 export default () => ({
   port: parseInt(process.env.BACKEND_PORT || '3001', 10),
   database: {
-    url: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/vibeai',
+    url: process.env.PGDATABASE_URL || process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/vibeai',
   },
   jwt: {
     secret: process.env.JWT_SECRET || 'vibeai-dev-secret-key-change-in-production',
