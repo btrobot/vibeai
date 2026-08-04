@@ -6,8 +6,17 @@ DEPLOY_RUN_PORT="${DEPLOY_RUN_PORT:-5000}"
 
 cd "${COZE_WORKSPACE_PATH}"
 
+# ── Load .env.local (host deploy) > .env (local dev) ──
+if [ -f .env.local ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . .env.local
+  set +a
+  echo "[env] Loaded .env.local"
+fi
+
 # ── Database URL resolution (priority order) ──
-# 1. DATABASE_URL (explicit)
+# 1. DATABASE_URL (from .env.local or env var)
 # 2. PGDATABASE_URL (sandbox Supabase)
 # 3. Construct from individual PG* env vars (Docker / custom deploy)
 if [ -z "${DATABASE_URL:-}" ]; then

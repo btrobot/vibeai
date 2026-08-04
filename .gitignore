@@ -13,7 +13,9 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+!.env.local.example
 server/.env
+server/.env.local
 .cozeproj/reduction
 
 # JS/TS bundlers & build outputs

@@ -4,6 +4,12 @@
  * 需要设置 DATABASE_URL 环境变量
  */
 
+import dotenv from 'dotenv';
+import path from 'path';
+// 加载项目根目录的 .env.local（宿主机部署）或 .env（本地开发）
+dotenv.config({ path: path.resolve(__dirname, '../../.env.local'), override: false });
+dotenv.config({ path: path.resolve(__dirname, '../.env'), override: false });
+
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import bcrypt from 'bcryptjs';

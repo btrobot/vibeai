@@ -1,3 +1,10 @@
+import { config } from 'dotenv';
+import path from 'path';
+
+// 加载 .env.local（宿主机部署）> .env（本地开发）
+config({ path: path.resolve(__dirname, '..', '..', '.env.local'), override: false });
+config({ path: path.resolve(__dirname, '..', '..', 'server', '.env'), override: false });
+
 export default () => ({
   port: parseInt(process.env.BACKEND_PORT || '3001', 10),
   database: {

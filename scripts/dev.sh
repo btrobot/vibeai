@@ -7,6 +7,15 @@ DEPLOY_RUN_PORT="${DEPLOY_RUN_PORT:-${PORT}}"
 
 cd "${COZE_WORKSPACE_PATH}"
 
+# ── Load .env.local (host deploy) > .env (local dev) ──
+if [ -f .env.local ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . .env.local
+  set +a
+  echo "[env] Loaded .env.local"
+fi
+
 echo "Installing dependencies..."
 pnpm install --prefer-frozen-lockfile --prefer-offline --loglevel debug --reporter=append-only 2>/dev/null || pnpm install
 cd server && pnpm install --prefer-offline --reporter=append-only 2>/dev/null || pnpm install

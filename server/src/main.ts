@@ -1,4 +1,11 @@
 import 'reflect-metadata';
+import { config } from 'dotenv';
+import path from 'path';
+
+// 加载 .env.local（宿主机部署）> .env（本地开发）
+config({ path: path.resolve(__dirname, '..', '.env.local'), override: false });
+config({ path: path.resolve(__dirname, '..', '.env'), override: false });
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
