@@ -79,7 +79,7 @@ export default function GalleryPage() {
               onClick={() => setActiveTab(tab.key as typeof activeTab)}
               className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab.key
-                  ? 'border-emerald-500 text-emerald-500'
+                  ? 'border-primary text-primary'
                   : 'border-transparent text-muted hover:text-foreground'
               }`}
             >
@@ -98,7 +98,7 @@ export default function GalleryPage() {
       ) : items.length === 0 ? (
         /* Empty State */
         <div className="flex flex-col items-center gap-4 py-20">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-hover">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-card-hover">
             <ImageIcon className="h-8 w-8 text-muted" />
           </div>
           <h3 className="text-base font-medium text-foreground">暂无作品</h3>
@@ -115,7 +115,7 @@ export default function GalleryPage() {
           {items.map((item) => (
             <div
               key={item.id}
-              className="group cursor-pointer rounded-lg border border-border bg-surface overflow-hidden transition-colors hover:border-emerald-600/30"
+              className="group cursor-pointer rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-primary/30"
             >
               <div className="aspect-square bg-background">
                 {item.imageUrl ? (

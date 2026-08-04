@@ -39,7 +39,7 @@ interface Task {
 
 const capabilities = [
   { slug: 'text-generation', label: '文本生成', icon: MessageSquare, color: 'text-blue-500' },
-  { slug: 'image-generation', label: '图像生成', icon: ImageIcon, color: 'text-emerald-500' },
+  { slug: 'image-generation', label: '图像生成', icon: ImageIcon, color: 'text-primary' },
   { slug: 'video-generation', label: '视频生成', icon: Video, color: 'text-purple-500' },
   { slug: 'background-removal', label: '白底图', icon: ImageIcon, color: 'text-amber-500' },
   { slug: 'scene-composition', label: '场景合成', icon: ImageIcon, color: 'text-green-500' },
@@ -134,7 +134,7 @@ export default function WorkspacePage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     );
   }
@@ -147,7 +147,7 @@ export default function WorkspacePage() {
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <button
             onClick={() => navigate('/projects')}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-foreground"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-card-hover hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
@@ -169,11 +169,11 @@ export default function WorkspacePage() {
                 onClick={() => setActiveCapability(cap.slug)}
                 className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                   activeCapability === cap.slug
-                    ? 'bg-emerald-600/10 text-emerald-500'
-                    : 'text-muted hover:bg-surface-hover hover:text-foreground'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted hover:bg-card-hover hover:text-foreground'
                 }`}
               >
-                <Icon className={`h-3.5 w-3.5 ${activeCapability === cap.slug ? 'text-emerald-500' : cap.color}`} />
+                <Icon className={`h-3.5 w-3.5 ${activeCapability === cap.slug ? 'text-primary' : cap.color}`} />
                 {cap.label}
               </button>
             );
@@ -194,7 +194,7 @@ export default function WorkspacePage() {
               return (
                 <div
                   key={task.id}
-                  className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-emerald-600/20"
+                  className="rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/20"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -211,7 +211,7 @@ export default function WorkspacePage() {
                   {task.status === 'processing' && (
                     <div className="h-1.5 w-full rounded-full bg-background">
                       <div
-                        className="h-full rounded-full bg-emerald-500 transition-all"
+                        className="h-full rounded-full bg-primary transition-all"
                         style={{ width: `${task.progress}%` }}
                       />
                     </div>
@@ -257,12 +257,12 @@ export default function WorkspacePage() {
               onKeyDown={handleKeyDown}
               placeholder="输入提示词，按 Enter 发送..."
               rows={2}
-              className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-emerald-500 focus:outline-none resize-none"
+              className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none resize-none"
             />
             <button
               onClick={handleSubmit}
               disabled={!prompt.trim() || submitting}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white transition-colors hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-white transition-colors hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

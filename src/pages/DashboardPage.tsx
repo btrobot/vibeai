@@ -71,7 +71,7 @@ export default function DashboardPage() {
 
   const statCards = [
     { label: '项目总数', value: stats?.totalProjects ?? 0, icon: FolderKanban, color: 'text-blue-500' },
-    { label: '任务总数', value: stats?.totalTasks ?? 0, icon: Image, color: 'text-emerald-500' },
+    { label: '任务总数', value: stats?.totalTasks ?? 0, icon: Image, color: 'text-primary' },
     { label: '已完成', value: stats?.completedTasks ?? 0, icon: TrendingUp, color: 'text-green-500' },
     { label: '可用额度', value: user?.credits ?? 0, icon: Sparkles, color: 'text-amber-500' },
   ];
@@ -104,7 +104,7 @@ export default function DashboardPage() {
         </div>
         <button
           onClick={() => navigate('/projects')}
-          className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary"
         >
           <Plus className="h-4 w-4" />
           新建项目
@@ -116,10 +116,10 @@ export default function DashboardPage() {
         {statCards.map((card) => (
           <div
             key={card.label}
-            className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-emerald-600/30"
+            className="rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30"
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-hover">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-card-hover">
                 <card.icon className={`h-5 w-5 ${card.color}`} />
               </div>
               <div>
@@ -132,7 +132,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="rounded-lg border border-border bg-surface p-4">
+      <div className="rounded-lg border border-border bg-card p-4">
         <h2 className="text-sm font-semibold text-foreground mb-3">快速创作</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
@@ -144,9 +144,9 @@ export default function DashboardPage() {
             <button
               key={tool.label}
               onClick={() => navigate(tool.path)}
-              className="flex items-center gap-3 rounded-lg border border-border bg-background p-3 text-sm text-foreground transition-colors hover:border-emerald-600/30 hover:bg-surface-hover"
+              className="flex items-center gap-3 rounded-lg border border-border bg-background p-3 text-sm text-foreground transition-colors hover:border-primary/30 hover:bg-card-hover"
             >
-              <tool.icon className="h-4 w-4 text-emerald-500" />
+              <tool.icon className="h-4 w-4 text-primary" />
               <span>{tool.label}</span>
               <ArrowRight className="h-3 w-3 ml-auto text-muted" />
             </button>
@@ -155,12 +155,12 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Tasks */}
-      <div className="rounded-lg border border-border bg-surface">
+      <div className="rounded-lg border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-foreground">最近任务</h2>
           <button
             onClick={() => navigate('/projects')}
-            className="text-xs text-emerald-500 hover:text-emerald-400"
+            className="text-xs text-primary hover:text-primary/80"
           >
             查看全部
           </button>
@@ -174,7 +174,7 @@ export default function DashboardPage() {
             <p className="text-sm text-muted">暂无任务</p>
             <button
               onClick={() => navigate('/tools/background-removal')}
-              className="text-xs text-emerald-500 hover:text-emerald-400"
+              className="text-xs text-primary hover:text-primary/80"
             >
               开始创作
             </button>
@@ -187,7 +187,7 @@ export default function DashboardPage() {
               return (
                 <div
                   key={task.id}
-                  className="flex items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-surface-hover"
+                  className="flex items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-card-hover"
                 >
                   <Clock className="h-4 w-4 text-muted shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -200,7 +200,7 @@ export default function DashboardPage() {
                   {task.status === 'processing' && (
                     <div className="h-1.5 w-20 rounded-full bg-background">
                       <div
-                        className="h-full rounded-full bg-emerald-500 transition-all"
+                        className="h-full rounded-full bg-primary transition-all"
                         style={{ width: `${task.progress}%` }}
                       />
                     </div>

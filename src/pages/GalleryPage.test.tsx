@@ -30,7 +30,7 @@ describe('GalleryPage', () => {
   it('应该默认选中热门标签', async () => {
     renderGalleryPage();
     const hotTab = (await screen.findByText('热门')).closest('button');
-    expect(hotTab).toHaveClass('border-emerald-500');
+    expect(hotTab).toHaveClass('border-primary');
   });
 
   it('应该支持切换标签', async () => {

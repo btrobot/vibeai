@@ -169,11 +169,11 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/projects')}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-foreground"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-card-hover hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-hover">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-card-hover">
           <Icon className={`h-5 w-5 ${config.color}`} />
         </div>
         <div>
@@ -185,7 +185,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input Section */}
         <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-surface p-4">
+          <div className="rounded-lg border border-border bg-card p-4">
             <h2 className="text-sm font-semibold text-foreground mb-3">上传图片</h2>
 
             {preview ? (
@@ -206,7 +206,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
                 </button>
               </div>
             ) : (
-              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-8 transition-colors hover:border-emerald-600/30">
+              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-8 transition-colors hover:border-primary/30">
                 <Upload className="h-8 w-8 text-muted" />
                 <p className="text-sm text-muted">点击上传图片</p>
                 <p className="text-xs text-muted">支持 JPG、PNG、WebP，最大 10MB</p>
@@ -220,21 +220,21 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
             )}
           </div>
 
-          <div className="rounded-lg border border-border bg-surface p-4">
+          <div className="rounded-lg border border-border bg-card p-4">
             <h2 className="text-sm font-semibold text-foreground mb-3">提示词</h2>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder={`输入描述，例如：${toolSlug === 'background-removal' ? '去除背景，保留商品主体' : toolSlug === 'scene-composition' ? '将商品放在自然光下的木桌上' : toolSlug === 'model-dressing' ? '模特穿这件衣服在户外街拍' : '生成包含商品详情、规格、卖点的详情页'}`}
               rows={4}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-emerald-500 focus:outline-none resize-none"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none resize-none"
             />
           </div>
 
           <button
             onClick={handleSubmit}
             disabled={(!file && !prompt.trim()) || loading}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <>
@@ -251,7 +251,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
         </div>
 
         {/* Output Section */}
-        <div className="rounded-lg border border-border bg-surface p-4">
+        <div className="rounded-lg border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground mb-3">生成结果</h2>
 
           {error && (
@@ -262,7 +262,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
 
           {loading && (
             <div className="flex flex-col items-center gap-3 py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-sm text-muted">正在生成，请稍候...</p>
             </div>
           )}
@@ -305,7 +305,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
                     a.download = `${toolSlug}-result.png`;
                     a.click();
                   }}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-hover"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-card-hover"
                 >
                   <Download className="h-4 w-4" />
                   下载结果

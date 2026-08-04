@@ -149,7 +149,7 @@ export default function StoragePage() {
       </div>
 
       {/* Upload Area */}
-      <Card className="mb-6 border-emerald-500/20">
+      <Card className="mb-6 border-primary/20">
         <CardContent className="p-6">
           <div className="flex items-center gap-4">
             <Button
@@ -242,7 +242,7 @@ export default function StoragePage() {
               return (
                 <Card
                   key={file.id}
-                  className="group relative overflow-hidden border-border/50 transition-all duration-200 hover:border-emerald-500/30"
+                  className="group relative overflow-hidden border-border/50 transition-all duration-200 hover:border-primary/30"
                 >
                   {/* Preview */}
                   <div className="flex aspect-video items-center justify-center bg-muted/30">
@@ -269,7 +269,7 @@ export default function StoragePage() {
                       <span>{formatDate(file.createdAt)}</span>
                     </div>
                     <div className="mt-2 flex items-center gap-1">
-                      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary/80">
                         {file.category}
                       </span>
                     </div>

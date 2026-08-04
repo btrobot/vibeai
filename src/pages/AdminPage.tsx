@@ -75,7 +75,7 @@ export default function AdminPage() {
         </div>
         <button
           onClick={fetchStats}
-          className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-hover"
+          className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-card-hover"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           刷新
@@ -87,17 +87,17 @@ export default function AdminPage() {
         {[
           { label: '总用户', value: stats?.totalUsers ?? '-', icon: Users, color: 'text-blue-500' },
           { label: '活跃用户', value: stats?.activeUsers ?? '-', icon: UserCheck, color: 'text-green-500' },
-          { label: '总项目', value: stats?.totalProjects ?? '-', icon: FileText, color: 'text-emerald-500' },
+          { label: '总项目', value: stats?.totalProjects ?? '-', icon: FileText, color: 'text-primary' },
           { label: '总任务', value: stats?.totalTasks ?? '-', icon: Activity, color: 'text-purple-500' },
           { label: '失败任务', value: stats?.failedTasks ?? '-', icon: AlertTriangle, color: 'text-red-500' },
           { label: '存储用量', value: stats?.totalStorage ? `${(stats.totalStorage / 1024 / 1024).toFixed(1)}MB` : '-', icon: BarChart3, color: 'text-amber-500' },
         ].map((card) => (
           <div
             key={card.label}
-            className="rounded-lg border border-border bg-surface p-4"
+            className="rounded-lg border border-border bg-card p-4"
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-hover">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-card-hover">
                 <card.icon className={`h-5 w-5 ${card.color}`} />
               </div>
               <div>
@@ -111,34 +111,34 @@ export default function AdminPage() {
 
       {/* Management Sections */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="rounded-lg border border-border bg-surface p-4">
+        <div className="rounded-lg border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground mb-4">用户管理</h2>
           <p className="text-sm text-muted">用户列表、权限管理、账户操作</p>
-          <button className="mt-3 text-xs text-emerald-500 hover:text-emerald-400">
+          <button className="mt-3 text-xs text-primary hover:text-primary/80">
             查看用户列表 →
           </button>
         </div>
 
-        <div className="rounded-lg border border-border bg-surface p-4">
+        <div className="rounded-lg border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground mb-4">系统配置</h2>
           <p className="text-sm text-muted">AI 模型配置、存储设置、计费参数</p>
-          <button className="mt-3 text-xs text-emerald-500 hover:text-emerald-400">
+          <button className="mt-3 text-xs text-primary hover:text-primary/80">
             系统配置 →
           </button>
         </div>
 
-        <div className="rounded-lg border border-border bg-surface p-4">
+        <div className="rounded-lg border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground mb-4">任务监控</h2>
           <p className="text-sm text-muted">实时任务队列、失败任务排查、性能监控</p>
-          <button className="mt-3 text-xs text-emerald-500 hover:text-emerald-400">
+          <button className="mt-3 text-xs text-primary hover:text-primary/80">
             查看任务 →
           </button>
         </div>
 
-        <div className="rounded-lg border border-border bg-surface p-4">
+        <div className="rounded-lg border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground mb-4">审计日志</h2>
           <p className="text-sm text-muted">操作日志、登录记录、安全事件</p>
-          <button className="mt-3 text-xs text-emerald-500 hover:text-emerald-400">
+          <button className="mt-3 text-xs text-primary hover:text-primary/80">
             查看日志 →
           </button>
         </div>

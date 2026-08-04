@@ -112,7 +112,7 @@ export default function ProjectsPage() {
   };
 
   const statusColors: Record<string, string> = {
-    active: 'text-emerald-500 border-emerald-600/30',
+    active: 'text-primary border-primary/30',
     completed: 'text-blue-500 border-blue-600/30',
     archived: 'text-muted border-border',
   };
@@ -133,7 +133,7 @@ export default function ProjectsPage() {
         </div>
         <button
           onClick={() => setShowNewModal(true)}
-          className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary"
         >
           <Plus className="h-4 w-4" />
           新建项目
@@ -149,7 +149,7 @@ export default function ProjectsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="搜索项目..."
-            className="w-full rounded-lg border border-border bg-surface py-2 pl-10 pr-4 text-sm text-foreground placeholder:text-muted focus:border-emerald-500 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-card py-2 pl-10 pr-4 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
           />
         </form>
         <div className="flex items-center gap-2">
@@ -160,7 +160,7 @@ export default function ProjectsPage() {
               onClick={() => setStatusFilter(s)}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 statusFilter === s
-                  ? 'bg-emerald-600/10 text-emerald-500'
+                  ? 'bg-primary/10 text-primary'
                   : 'text-muted hover:text-foreground'
               }`}
             >
@@ -173,7 +173,7 @@ export default function ProjectsPage() {
       {/* Project Grid */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
       ) : projects.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-20">
@@ -181,7 +181,7 @@ export default function ProjectsPage() {
           <p className="text-sm text-muted">暂无项目</p>
           <button
             onClick={() => setShowNewModal(true)}
-            className="text-sm text-emerald-500 hover:text-emerald-400"
+            className="text-sm text-primary hover:text-primary/80"
           >
             创建第一个项目
           </button>
@@ -191,15 +191,15 @@ export default function ProjectsPage() {
           {projects.map((project) => (
             <div
               key={project.id}
-              className="group rounded-lg border border-border bg-surface transition-colors hover:border-emerald-600/30"
+              className="group rounded-lg border border-border bg-card transition-colors hover:border-primary/30"
             >
               <div
                 className="cursor-pointer p-4"
                 onClick={() => navigate(`/workspace/${project.id}`)}
               >
                 <div className="flex items-start justify-between mb-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/10">
-                    <FolderKanban className="h-5 w-5 text-emerald-500" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                    <FolderKanban className="h-5 w-5 text-primary" />
                   </div>
                   <span
                     className={`rounded-full border px-2 py-0.5 text-xs ${statusColors[project.status] || statusColors.active}`}
@@ -228,14 +228,14 @@ export default function ProjectsPage() {
               <div className="flex items-center justify-end gap-1 border-t border-border px-4 py-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => navigate(`/workspace/${project.id}`)}
-                  className="rounded-lg p-1.5 text-muted hover:bg-surface-hover hover:text-foreground"
+                  className="rounded-lg p-1.5 text-muted hover:bg-card-hover hover:text-foreground"
                   title="打开"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => handleDelete(project.id)}
-                  className="rounded-lg p-1.5 text-muted hover:bg-surface-hover hover:text-danger"
+                  className="rounded-lg p-1.5 text-muted hover:bg-card-hover hover:text-danger"
                   title="删除"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -255,8 +255,8 @@ export default function ProjectsPage() {
               onClick={() => setPage(i + 1)}
               className={`h-8 w-8 rounded-lg text-xs font-medium transition-colors ${
                 page === i + 1
-                  ? 'bg-emerald-600/10 text-emerald-500'
-                  : 'text-muted hover:bg-surface-hover hover:text-foreground'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted hover:bg-card-hover hover:text-foreground'
               }`}
             >
               {i + 1}
@@ -268,7 +268,7 @@ export default function ProjectsPage() {
       {/* New Project Modal */}
       {showNewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-md rounded-lg border border-border bg-surface p-6">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6">
             <h2 className="text-lg font-semibold text-foreground mb-4">新建项目</h2>
 
             <div className="space-y-4">
@@ -279,7 +279,7 @@ export default function ProjectsPage() {
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="输入项目名称"
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-emerald-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
                   autoFocus
                 />
               </div>
@@ -290,7 +290,7 @@ export default function ProjectsPage() {
                   onChange={(e) => setNewDesc(e.target.value)}
                   placeholder="项目描述"
                   rows={3}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-emerald-500 focus:outline-none resize-none"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none resize-none"
                 />
               </div>
             </div>
@@ -305,7 +305,7 @@ export default function ProjectsPage() {
               <button
                 onClick={handleCreate}
                 disabled={!newName.trim()}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 创建
               </button>

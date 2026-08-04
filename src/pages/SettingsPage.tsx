@@ -104,7 +104,7 @@ export default function SettingsPage() {
         <div
           className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
             message.type === 'success'
-              ? 'bg-emerald-500/10 text-emerald-500'
+              ? 'bg-primary/10 text-primary'
               : 'bg-red-500/10 text-danger'
           }`}
         >
@@ -118,10 +118,10 @@ export default function SettingsPage() {
       )}
 
       {/* Profile */}
-      <div className="rounded-lg border border-border bg-surface p-6">
+      <div className="rounded-lg border border-border bg-card p-6">
         <div className="flex items-center gap-3 mb-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/10">
-            <User className="h-5 w-5 text-emerald-500" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <User className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-foreground">个人资料</h2>
@@ -144,14 +144,14 @@ export default function SettingsPage() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
             />
           </div>
 
           <button
             onClick={handleSaveProfile}
             disabled={saving || !name.trim()}
-            className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
             保存
@@ -160,10 +160,10 @@ export default function SettingsPage() {
       </div>
 
       {/* Password */}
-      <div className="rounded-lg border border-border bg-surface p-6">
+      <div className="rounded-lg border border-border bg-card p-6">
         <div className="flex items-center gap-3 mb-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/10">
-            <Key className="h-5 w-5 text-emerald-500" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <Key className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-foreground">修改密码</h2>
@@ -179,7 +179,7 @@ export default function SettingsPage() {
                 type={showPassword ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground focus:border-primary focus:outline-none"
               />
               <button
                 onClick={() => setShowPassword(!showPassword)}
@@ -196,7 +196,7 @@ export default function SettingsPage() {
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
             />
           </div>
 
@@ -206,14 +206,14 @@ export default function SettingsPage() {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
             />
           </div>
 
           <button
             onClick={handleChangePassword}
             disabled={saving || !currentPassword || !newPassword || !confirmPassword}
-            className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
             修改密码
@@ -222,10 +222,10 @@ export default function SettingsPage() {
       </div>
 
       {/* Account Info */}
-      <div className="rounded-lg border border-border bg-surface p-6">
+      <div className="rounded-lg border border-border bg-card p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/10">
-            <User className="h-5 w-5 text-emerald-500" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <User className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-foreground">账户信息</h2>
@@ -244,7 +244,7 @@ export default function SettingsPage() {
           </div>
           <div className="flex justify-between">
             <span className="text-muted">可用额度</span>
-            <span className="text-foreground font-medium text-emerald-500">{user?.credits ?? 0}</span>
+            <span className="text-foreground font-medium text-primary">{user?.credits ?? 0}</span>
           </div>
         </div>
       </div>
