@@ -27,6 +27,7 @@
     "class-validator": "^0.14.1",
     "cookie-parser": "^1.4.7",
     "coze-coding-dev-sdk": "^0.7.24",
+    "dotenv": "^17.4.2",
     "drizzle-orm": "^0.38.0",
     "express": "^5.2.1",
     "passport": "^0.7.0",
