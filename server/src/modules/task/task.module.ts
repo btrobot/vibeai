@@ -6,7 +6,7 @@ import { BillingModule } from '../billing/billing.module';
 @Module({
   imports: [BillingModule],
   controllers: [TaskController],
-  providers: [TaskService],
-  exports: [TaskService],
+  providers: [{ provide: 'TASK_SERVICE', useClass: TaskService }],
+  exports: ['TASK_SERVICE'],
 })
 export class TaskModule {}

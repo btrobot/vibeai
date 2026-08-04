@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 @Controller('tasks')
 @UseGuards(JwtAuthGuard)
 export class TaskController {
-  constructor(@Inject(TaskService) private readonly taskService: TaskService) {}
+  constructor(@Inject('TASK_SERVICE') private readonly taskService: TaskService) {}
 
   @Get()
   async list(

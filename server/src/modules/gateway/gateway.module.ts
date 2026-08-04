@@ -14,8 +14,15 @@ import { CreateModule } from '../create/create.module';
 @Module({
   imports: [DrizzleModule, StorageModule, BillingModule, CreateModule],
   controllers: [GatewayController],
-  providers: [GatewayService, TaskExecutionService, LlmAdapter, ImageAdapter, VideoAdapter, AdapterRegistry],
-  exports: [GatewayService, TaskExecutionService],
+  providers: [
+    { provide: 'GATEWAY_SERVICE', useClass: GatewayService },
+    { provide: 'TASK_EXECUTION_SERVICE', useClass: TaskExecutionService },
+    { provide: 'LLM_ADAPTER', useClass: LlmAdapter },
+    { provide: 'IMAGE_ADAPTER', useClass: ImageAdapter },
+    { provide: 'VIDEO_ADAPTER', useClass: VideoAdapter },
+    { provide: 'ADAPTER_REGISTRY', useClass: AdapterRegistry },
+  ],
+  exports: ['GATEWAY_SERVICE', 'TASK_EXECUTION_SERVICE', 'ADAPTER_REGISTRY'],
 })
 export class GatewayModule implements OnModuleInit {
   constructor() {}

@@ -23,7 +23,7 @@ describe('GatewayService', () => {
   beforeEach(() => {
     db = createDrizzleMockForNestJS();
     service = new GatewayService(
-      { db } as any,
+      db as any,
       { executeTask: vi.fn().mockResolvedValue(undefined) } as any,
       {
         reserveCredits: vi.fn().mockResolvedValue(true),

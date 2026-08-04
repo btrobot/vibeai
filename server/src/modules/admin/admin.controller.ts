@@ -8,7 +8,7 @@ import type { Request } from 'express';
 export class AdminController {
   private readonly logger = new Logger(AdminController.name);
 
-  constructor(@Inject(AdminService) private readonly adminService: AdminService) {}
+  constructor(@Inject('ADMIN_SERVICE') private readonly adminService: AdminService) {}
 
   @Get('stats')
   async getStats(@Req() req: Request) {

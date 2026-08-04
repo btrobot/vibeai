@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class CreateController {
-  constructor(@Inject(CreateService) private readonly createService: CreateService) {}
+  constructor(@Inject('CREATE_SERVICE') private readonly createService: CreateService) {}
 
   @Get('creates')
   async listAll(

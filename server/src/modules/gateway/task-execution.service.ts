@@ -17,11 +17,11 @@ export class TaskExecutionService {
 
   constructor(
     @Inject(DRIZZLE) private db: PostgresJsDatabase<typeof schema>,
-    @Inject(WsService) private wsService: WsService,
-    @Inject(StorageService) private storageService: StorageService,
-    @Inject(BillingService) private billingService: BillingService,
-    @Inject(CreateService) private createService: CreateService,
-    @Inject(AdapterRegistry) private adapterRegistry: AdapterRegistry,
+    @Inject('WS_SERVICE') private wsService: WsService,
+    @Inject('STORAGE_SERVICE') private storageService: StorageService,
+    @Inject('BILLING_SERVICE') private billingService: BillingService,
+    @Inject('CREATE_SERVICE') private createService: CreateService,
+    @Inject('ADAPTER_REGISTRY') private adapterRegistry: AdapterRegistry,
   ) {}
 
   async executeTask(

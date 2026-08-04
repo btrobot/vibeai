@@ -6,6 +6,6 @@ import { DrizzleModule } from '../../common/drizzle.module';
 @Module({
   imports: [DrizzleModule],
   controllers: [AdminController],
-  providers: [AdminService],
+  providers: [{ provide: 'ADMIN_SERVICE', useClass: AdminService }],
 })
 export class AdminModule {}

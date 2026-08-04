@@ -6,7 +6,7 @@ import type { CreateSubscriptionInput } from '../../shared-types';
 
 @Controller('billing')
 export class BillingController {
-  constructor(@Inject(BillingService) private readonly billing: BillingService) {}
+  constructor(@Inject('BILLING_SERVICE') private readonly billing: BillingService) {}
 
   @Get('plans')
   async getPlans() {

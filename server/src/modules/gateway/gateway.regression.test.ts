@@ -40,7 +40,7 @@ describe('AI Gateway 回归测试', () => {
       executeTask: vi.fn().mockResolvedValue(undefined),
     };
     service = new GatewayService(
-      { db } as any,
+      db as any,
       mockTaskExecution as any,
       mockBillingService as any,
       {

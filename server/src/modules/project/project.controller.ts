@@ -8,7 +8,7 @@ import { ZodValidationPipe } from '../../common/zod-validation.pipe';
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
 export class ProjectController {
-  constructor(@Inject(ProjectService) private readonly projectService: ProjectService) {}
+  constructor(@Inject('PROJECT_SERVICE') private readonly projectService: ProjectService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)

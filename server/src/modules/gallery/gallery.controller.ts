@@ -5,7 +5,7 @@ import type { Request } from 'express';
 
 @Controller('gallery')
 export class GalleryController {
-  constructor(@Inject(GalleryService) private readonly gallery: GalleryService) {}
+  constructor(@Inject('GALLERY_SERVICE') private readonly gallery: GalleryService) {}
 
   @Get('works')
   async listWorks(

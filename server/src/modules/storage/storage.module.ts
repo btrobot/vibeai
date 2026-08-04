@@ -19,7 +19,7 @@ const storageProviderFactory: Provider = {
 @Module({
   imports: [DrizzleModule],
   controllers: [StorageController],
-  providers: [StorageService, storageProviderFactory],
-  exports: [StorageService],
+  providers: [{ provide: 'STORAGE_SERVICE', useClass: StorageService }, storageProviderFactory],
+  exports: ['STORAGE_SERVICE'],
 })
 export class StorageModule {}

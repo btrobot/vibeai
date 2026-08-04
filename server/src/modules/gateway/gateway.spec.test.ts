@@ -29,7 +29,7 @@ describe('Gateway Spec Tests', () => {
       deductCredits: vi.fn().mockResolvedValue(true),
     };
     service = new GatewayService(
-      { db } as any,
+      db as any,
       { executeTask: vi.fn().mockResolvedValue(undefined) } as any,
       mockBillingService as any,
       {

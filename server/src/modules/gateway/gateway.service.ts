@@ -1,6 +1,8 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
-import { DrizzleService } from '../../common/drizzle.service';
+import { DRIZZLE } from '../../common/drizzle.module';
+import type { PostgresJsDatabase } from 'drizzle-orm';
+import * as schema from '../../db/schema';
 import { tasks } from '../../db/schema/task-engine';
 import { aiModels, aiCapabilities } from '../../db/schema/gateway';
 import { builtInCapabilityMap } from './capabilities/index';
@@ -31,23 +33,23 @@ export class GatewayService {
   private readonly logger = new Logger(GatewayService.name);
 
   constructor(
-    @Inject(DrizzleService) private readonly drizzle: DrizzleService,
-    @Inject(TaskExecutionService) private readonly taskExecution: TaskExecutionService,
-    @Inject(BillingService) private readonly billingService: BillingService,
-    @Inject(CreateService) private readonly createService: CreateService,
+    @Inject(DRIZZLE) private db: PostgresJsDatabase<typeof schema>,
+    @Inject('TASK_EXECUTION_SERVICE') private readonly taskExecution: TaskExecutionService,
+    @Inject('BILLING_SERVICE') private readonly billingService: BillingService,
+    @Inject('CREATE_SERVICE') private readonly createService: CreateService,
   ) {}
 
   // ===== Seed =====
 
   async seedModels(): Promise<void> {
-    const existing = await this.drizzle.db.select().from(aiModels).limit(1);
+    const existing = await this.db.select().from(aiModels).limit(1);
     if (existing.length > 0) {
       this.logger.log('AI 模型种子数据已存在，跳过');
       return;
     }
 
     for (const model of SEED_MODELS) {
-      await this.drizzle.db.insert(aiModels).values(model);
+      await this.db.insert(aiModels).values(model);
     }
     this.logger.log(`已初始化 ${SEED_MODELS.length} 个 AI 模型种子数据`);
   }
@@ -72,16 +74,16 @@ export class GatewayService {
 
   async listModels(capability?: string): Promise<AdapterModel[]> {
     try {
-      let query = this.drizzle.db.select().from(aiModels).where(eq(aiModels.isActive, true));
+      let query = this.db.select().from(aiModels).where(eq(aiModels.isActive, true));
       let rows;
 
       if (capability) {
-        rows = await this.drizzle.db
+        rows = await this.db
           .select()
           .from(aiModels)
           .where(and(eq(aiModels.isActive, true), sql`${aiModels.capabilities} @> ARRAY[${capability}]::text[]`));
       } else {
-        rows = await this.drizzle.db.select().from(aiModels).where(eq(aiModels.isActive, true));
+        rows = await this.db.select().from(aiModels).where(eq(aiModels.isActive, true));
       }
 
       if (rows.length === 0) {
@@ -100,7 +102,7 @@ export class GatewayService {
 
   async getModel(slug: string): Promise<AdapterModel | null> {
     try {
-      const [row] = await this.drizzle.db.select().from(aiModels).where(eq(aiModels.slug, slug)).limit(1);
+      const [row] = await this.db.select().from(aiModels).where(eq(aiModels.slug, slug)).limit(1);
       if (row) {
         return this.toAdapterModel(row);
       }
@@ -255,7 +257,7 @@ export class GatewayService {
     const expiresAt = new Date(now.getTime() + 30 * 60 * 1000); // 30 min timeout
 
     try {
-      await this.drizzle.db.insert(tasks).values({
+      await this.db.insert(tasks).values({
         id: taskId,
         createId,
         projectId,
@@ -323,7 +325,7 @@ export class GatewayService {
 
   async getTask(taskId: string): Promise<Record<string, unknown> | null> {
     try {
-      const [task] = await this.drizzle.db
+      const [task] = await this.db
         .select()
         .from(tasks)
         .where(eq(tasks.id, taskId))

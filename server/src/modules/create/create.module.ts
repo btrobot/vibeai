@@ -4,7 +4,7 @@ import { CreateController } from './create.controller';
 
 @Module({
   controllers: [CreateController],
-  providers: [CreateService],
-  exports: [CreateService],
+  providers: [{ provide: 'CREATE_SERVICE', useClass: CreateService }],
+  exports: ['CREATE_SERVICE'],
 })
 export class CreateModule {}

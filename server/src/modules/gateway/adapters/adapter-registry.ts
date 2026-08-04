@@ -4,7 +4,7 @@
  * 根据 model.modality 返回对应的 ProtocolAdapter
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { LlmAdapter } from './llm.adapter';
 import { ImageAdapter } from './image.adapter';
 import { VideoAdapter } from './video.adapter';
@@ -15,9 +15,9 @@ export class AdapterRegistry {
   private readonly adapters: Map<Modality, ProtocolAdapter>;
 
   constructor(
-    private readonly llmAdapter: LlmAdapter,
-    private readonly imageAdapter: ImageAdapter,
-    private readonly videoAdapter: VideoAdapter,
+    @Inject('LLM_ADAPTER') private readonly llmAdapter: LlmAdapter,
+    @Inject('IMAGE_ADAPTER') private readonly imageAdapter: ImageAdapter,
+    @Inject('VIDEO_ADAPTER') private readonly videoAdapter: VideoAdapter,
   ) {
     this.adapters = new Map<Modality, ProtocolAdapter>([
       ['llm', llmAdapter],

@@ -22,7 +22,7 @@ import type { Request } from 'express';
 @Controller('storage')
 @UseGuards(JwtAuthGuard)
 export class StorageController {
-  constructor(@Inject(StorageService) private readonly storageService: StorageService) {}
+  constructor(@Inject('STORAGE_SERVICE') private readonly storageService: StorageService) {}
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))

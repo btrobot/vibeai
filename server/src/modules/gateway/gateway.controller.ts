@@ -24,9 +24,9 @@ import type { GenerateInput, ChatInput, QuickCreateInput } from './dto/index';
 @Controller('gateway')
 export class GatewayController {
   constructor(
-    @Inject(GatewayService) private readonly gatewayService: GatewayService,
-    @Inject(AdapterRegistry) private readonly adapterRegistry: AdapterRegistry,
-    @Inject(BillingService) private readonly billingService: BillingService,
+    @Inject('GATEWAY_SERVICE') private readonly gatewayService: GatewayService,
+    @Inject('ADAPTER_REGISTRY') private readonly adapterRegistry: AdapterRegistry,
+    @Inject('BILLING_SERVICE') private readonly billingService: BillingService,
   ) {}
 
   // ===== Capabilities =====

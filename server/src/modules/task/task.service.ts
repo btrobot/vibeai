@@ -13,7 +13,7 @@ export class TaskService {
 
   constructor(
     @Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>,
-    @Inject(BillingService) private readonly billing: BillingService,
+    @Inject('BILLING_SERVICE') private readonly billing: BillingService,
   ) {}
 
   private toTaskResponse(t: typeof tasks.$inferSelect): TaskResponse {

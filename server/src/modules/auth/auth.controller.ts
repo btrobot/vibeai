@@ -18,7 +18,7 @@ import { RegisterDto, LoginDto, RefreshTokenDto, UpdateProfileDto, ChangePasswor
 
 @Controller('auth')
 export class AuthController {
-  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
+  constructor(@Inject('AUTH_SERVICE') private readonly authService: AuthService) {}
 
   @Post('register')
   async register(@Body() dto: RegisterDto) {
