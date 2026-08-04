@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { DrizzleService } from '../../common/drizzle.service';
 import { tasks } from '../../db/schema/task-engine';
@@ -31,10 +31,10 @@ export class GatewayService {
   private readonly logger = new Logger(GatewayService.name);
 
   constructor(
-    private readonly drizzle: DrizzleService,
-    private readonly taskExecution: TaskExecutionService,
-    private readonly billingService: BillingService,
-    private readonly createService: CreateService,
+    @Inject(DrizzleService) private readonly drizzle: DrizzleService,
+    @Inject(TaskExecutionService) private readonly taskExecution: TaskExecutionService,
+    @Inject(BillingService) private readonly billingService: BillingService,
+    @Inject(CreateService) private readonly createService: CreateService,
   ) {}
 
   // ===== Seed =====

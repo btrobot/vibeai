@@ -15,6 +15,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { AppModule } from './app.module';
 import { WsService } from './modules/ws/ws.service';
+import { GatewayService } from './modules/gateway/gateway.service';
 
 async function bootstrap() {
   // Run database migrations before starting the app
@@ -60,6 +61,14 @@ async function bootstrap() {
 
   // 显式初始化模块（ServeStaticModule 的中间件在此阶段注册）
   await app.init();
+
+  // Seed AI models (moved from GatewayModule.onModuleInit to avoid DI issues with tsx)
+  try {
+    const gatewayService = app.get(GatewayService);
+    await gatewayService.seedModels();
+  } catch (e) {
+    console.error('Seed models failed:', (e as Error).message);
+  }
 
   // SPA fallback — 必须在 app.init() 之后注册，
   // 否则会在 serve-static 之前执行，导致 JS/CSS 等静态资源返回 index.html

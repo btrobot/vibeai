@@ -18,9 +18,9 @@ import { CreateModule } from '../create/create.module';
   exports: [GatewayService, TaskExecutionService],
 })
 export class GatewayModule implements OnModuleInit {
-  constructor(private readonly gatewayService: GatewayService) {}
+  constructor() {}
 
   async onModuleInit(): Promise<void> {
-    await this.gatewayService.seedModels();
+    // seedModels is called from main.ts bootstrap instead
   }
 }
