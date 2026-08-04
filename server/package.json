@@ -6,6 +6,8 @@
     "build": "tsc",
     "dev": "tsx watch src/main.ts",
     "seed": "tsx scripts/seed.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed": "tsx scripts/seed.ts",
     "start": "node dist/main.js",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -46,6 +46,24 @@ if [ -z "${JWT_SECRET:-}" ]; then
   echo "Using default JWT_SECRET (set JWT_SECRET env var for production)"
 fi
 
+# ── Database migrations ──
+echo "[db] Running migrations..."
+cd server && node dist/scripts/migrate.js
+MIGRATE_EXIT=$?
+cd "${COZE_WORKSPACE_PATH}"
+if [ "$MIGRATE_EXIT" -ne 0 ]; then
+  echo "[db] Migration failed (exit $MIGRATE_EXIT), continuing anyway..."
+fi
+
+# ── Database seeds ──
+echo "[db] Running seeds..."
+cd server && node dist/scripts/seed.js
+SEED_EXIT=$?
+cd "${COZE_WORKSPACE_PATH}"
+if [ "$SEED_EXIT" -ne 0 ]; then
+  echo "[db] Seed failed (exit $SEED_EXIT), continuing anyway..."
+fi
+
 echo "Starting NestJS (API + static files) on port ${DEPLOY_RUN_PORT}..."
 export PORT="${DEPLOY_RUN_PORT}"
 cd server && node dist/main.js &

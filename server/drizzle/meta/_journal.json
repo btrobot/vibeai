@@ -15,6 +15,13 @@
       "when": 1785722506742,
       "tag": "0001_hot_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785800000000,
+      "tag": "0002_create_entity_schema",
+      "breakpoints": true
     }
   ]
 }

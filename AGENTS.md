@@ -241,6 +241,39 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
   - `sourceCreateId` 自引用 FK：null=原创，非 null=基于之前创作的修改
   - `syncCreateStatus`（ENG-012）：Task 完成或失败时自动同步 Create 状态
 
+## 数据库迁移与种子数据
+
+### 迁移文件（Drizzle Migrations）
+
+迁移文件位于 `server/drizzle/`，由 drizzle-orm migrator 在应用启动时自动执行：
+
+| 文件 | 说明 |
+|------|------|
+| `0000_spicy_wallow.sql` | 初始 schema（users/sessions/files/ai_models/projects/tasks 等） |
+| `0001_hot_dragon_man.sql` | Gallery 表（gallery_works/gallery_likes） |
+| `0002_create_entity_schema.sql` | Create 实体层 + ai_models 新 schema + provider_attempts |
+
+### 独立脚本
+
+| 脚本 | 命令 | 说明 |
+|------|------|------|
+| `server/src/scripts/migrate.ts` | `pnpm db:migrate` | 独立迁移执行器，CI/CD 和 Dockerfile 复用 |
+| `server/src/scripts/seed.ts` | `pnpm db:seed` | 独立种子脚本，幂等（AI 模型 + 订阅套餐） |
+
+### 启动流程（Docker / 生产）
+
+`scripts/start.sh` 按顺序执行：
+1. `node dist/scripts/migrate.js` — 运行数据库迁移
+2. `node dist/scripts/seed.js` — 插入种子数据（幂等，已有则跳过）
+3. `node dist/main.js` — 启动 NestJS 服务
+
+开发模式下 `pnpm dev` 直接启动 main.ts，内含迁移 + AI 模型种子（作为 fallback）。
+
+### 种子数据来源
+
+- **AI 模型**：`server/src/modules/gateway/seeds/model-seeds.ts`（10 个模型：6 LLM + 2 图片 + 2 视频）
+- **订阅套餐**：`specs/billing.spec.yaml` → `seed_data`（4 个套餐：free/starter/pro/enterprise）
+
 ## CI/CD 流水线
 
 ### CI (`.github/workflows/ci.yml`)
