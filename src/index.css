@@ -6,39 +6,44 @@
 :root {
   --radius: 0.5rem;
 
-  --background: hsl(0 0% 4%);
-  --foreground: hsl(0 0% 93%);
+  /* 明亮主题 - 清晨工作台 */
+  --background: hsl(0 0% 98%);
+  --foreground: hsl(224 71% 4%);
 
-  --card: hsl(0 0% 8%);
-  --card-foreground: hsl(0 0% 93%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(224 71% 4%);
 
-  --popover: hsl(0 0% 8%);
-  --popover-foreground: hsl(0 0% 93%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(224 71% 4%);
 
-  --primary: hsl(160 40% 40%);
+  --primary: hsl(221 83% 53%);
   --primary-foreground: hsl(0 0% 100%);
 
-  --secondary: hsl(0 0% 12%);
-  --secondary-foreground: hsl(0 0% 80%);
+  --secondary: hsl(220 14% 96%);
+  --secondary-foreground: hsl(224 71% 4%);
 
-  --muted: hsl(0 0% 12%);
-  --muted-foreground: hsl(0 0% 60%);
+  --muted: hsl(220 14% 96%);
+  --muted-foreground: hsl(220 9% 46%);
 
   --accent: hsl(160 40% 40%);
   --accent-foreground: hsl(0 0% 100%);
 
-  --destructive: hsl(0 70% 50%);
+  --destructive: hsl(0 84% 60%);
   --destructive-foreground: hsl(0 0% 100%);
 
-  --border: hsl(0 0% 16%);
-  --input: hsl(0 0% 16%);
-  --ring: hsl(160 40% 40%);
+  --border: hsl(220 13% 91%);
+  --input: hsl(220 13% 91%);
+  --ring: hsl(221 83% 53%);
 
-  --chart-1: hsl(160 40% 40%);
-  --chart-2: hsl(160 30% 50%);
-  --chart-3: hsl(30 40% 50%);
-  --chart-4: hsl(280 30% 50%);
-  --chart-5: hsl(340 40% 50%);
+  --chart-1: hsl(221 83% 53%);
+  --chart-2: hsl(160 40% 40%);
+  --chart-3: hsl(38 92% 50%);
+  --chart-4: hsl(280 60% 55%);
+  --chart-5: hsl(0 84% 60%);
+
+  /* Custom surface colors */
+  --surface-hover: hsl(220 14% 96%);
+  --danger: hsl(0 84% 60%);
 }
 
 @theme inline {
@@ -62,6 +67,8 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --radius: var(--radius);
+  --color-surface-hover: var(--surface-hover);
+  --color-danger: var(--danger);
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
 }
 
@@ -84,14 +91,14 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: hsl(220 14% 96%);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(0 0% 20%);
+  background: hsl(220 13% 80%);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(0 0% 30%);
+  background: hsl(220 13% 65%);
 }
