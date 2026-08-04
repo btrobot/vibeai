@@ -9,13 +9,18 @@
  * - 创作列表展示
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/msw-setup';
 import WorkspacePage from './WorkspacePage';
+
+// Mock WebSocket hook — no real WS in tests
+vi.mock('@/hooks/useCreateWebSocket', () => ({
+  useCreateWebSocket: vi.fn(),
+}));
 
 const mockProject = {
   id: 'proj-1',

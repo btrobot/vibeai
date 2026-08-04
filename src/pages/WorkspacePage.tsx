@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
+import { useCreateWebSocket, type CreateWsEvent } from '@/hooks/useCreateWebSocket';
 
 interface ProjectDetail {
   id: string;
@@ -68,6 +69,56 @@ export default function WorkspacePage() {
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [sourceCreateId, setSourceCreateId] = useState<string | null>(null);
+
+  // Extract userId from JWT token for WS auth
+  const getUserId = (): string | undefined => {
+    try {
+      const stored = localStorage.getItem('auth_tokens');
+      if (!stored) return undefined;
+      const { accessToken } = JSON.parse(stored);
+      if (!accessToken) return undefined;
+      // Decode JWT payload (no verification needed client-side, server validates)
+      const payload = JSON.parse(atob(accessToken.split('.')[1]));
+      return payload.sub || payload.userId;
+    } catch {
+      return undefined;
+    }
+  };
+
+  // Handle real-time WS events for create updates
+  const handleWsEvent = useCallback((event: CreateWsEvent) => {
+    const { type, payload } = event;
+    const { createId } = payload;
+    if (!createId) return;
+
+    setCreates((prev) => {
+      const idx = prev.findIndex((c) => c.id === createId);
+      if (idx === -1) return prev;
+
+      const updated = [...prev];
+      if (type === 'create:progress') {
+        updated[idx] = {
+          ...updated[idx],
+          taskProgress: payload.progress ?? updated[idx].taskProgress,
+        };
+      } else if (type === 'create:status') {
+        const status = payload.status as Create['status'];
+        updated[idx] = {
+          ...updated[idx],
+          status,
+          output: payload.output ?? updated[idx].output,
+          errorMessage: payload.errorMessage ?? (status === 'failed' ? updated[idx].errorMessage : null),
+        };
+      }
+      return updated;
+    });
+  }, []);
+
+  useCreateWebSocket({
+    userId: getUserId(),
+    onEvent: handleWsEvent,
+    enabled: !loading,
+  });
 
   const getAuthHeaders = (): Record<string, string> => {
     const stored = localStorage.getItem('auth_tokens');

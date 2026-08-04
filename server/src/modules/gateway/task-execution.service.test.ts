@@ -354,4 +354,78 @@ describe('TaskExecutionService', () => {
       expect(mockAdapterRegistry.getAdapter).toHaveBeenCalledWith('llm');
     });
   });
+
+  // ===== Create 级别 WebSocket 事件 =====
+
+  describe('Create WS 事件推送', () => {
+    it('任务有 createId 时应推送 create:status (processing)', async () => {
+      mockAdapter.execute.mockResolvedValue({ output: { content: 'ok' } });
+      // Set mock to return task with createId
+      db._result = [{ id: 'task-1', createId: 'create-1' }];
+
+      await service.executeTask('task-1', 'user-1', 'text-generation', { prompt: 'hi' }, mockModel);
+
+      expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
+        type: 'create:status',
+        payload: { createId: 'create-1', status: 'processing' },
+      });
+    });
+
+    it('任务完成时应推送 create:status (completed)', async () => {
+      mockAdapter.execute.mockResolvedValue({ output: { content: 'done' } });
+      db._result = [{ id: 'task-1', createId: 'create-1' }];
+
+      await service.executeTask('task-1', 'user-1', 'text-generation', { prompt: 'hi' }, mockModel);
+
+      expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
+        type: 'create:status',
+        payload: { createId: 'create-1', status: 'completed', output: expect.objectContaining({ content: 'done' }) },
+      });
+
+      // syncCreateStatus should also be called
+      expect(mockCreateService.syncCreateStatus).toHaveBeenCalledWith('create-1', 'completed', expect.any(Object));
+    });
+
+    it('任务失败时应推送 create:status (failed)', async () => {
+      mockAdapter.execute.mockRejectedValue(new Error('模型超时'));
+      db._result = [{ id: 'task-1', createId: 'create-1' }];
+
+      await service.executeTask('task-1', 'user-1', 'text-generation', { prompt: 'hi' }, mockModel);
+
+      expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
+        type: 'create:status',
+        payload: { createId: 'create-1', status: 'failed', errorMessage: '模型超时' },
+      });
+
+      expect(mockCreateService.syncCreateStatus).toHaveBeenCalledWith('create-1', 'failed', undefined, '模型超时');
+    });
+
+    it('onProgress 回调应推送 create:progress', async () => {
+      mockAdapter.execute.mockImplementation(async (_input, _model, ctx) => {
+        ctx.onProgress(60, '正在生成...');
+        return { output: { content: 'ok' } };
+      });
+      db._result = [{ id: 'task-1', createId: 'create-1' }];
+
+      await service.executeTask('task-1', 'user-1', 'text-generation', { prompt: 'hi' }, mockModel);
+
+      expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
+        type: 'create:progress',
+        payload: { createId: 'create-1', progress: 60, message: '正在生成...' },
+      });
+    });
+
+    it('任务无 createId 时不推送 create 事件', async () => {
+      mockAdapter.execute.mockResolvedValue({ output: { content: 'ok' } });
+      // Default mock returns empty array — no createId
+      db._result = [];
+
+      await service.executeTask('task-1', 'user-1', 'text-generation', { prompt: 'hi' }, mockModel);
+
+      const createEvents = mockWsService.sendToUser.mock.calls.filter(
+        ([, msg]) => typeof msg.type === 'string' && msg.type.startsWith('create:'),
+      );
+      expect(createEvents).toHaveLength(0);
+    });
+  });
 });

@@ -33,6 +33,10 @@ export class TaskExecutionService {
   ): Promise<void> {
     const adapter = this.adapterRegistry.getAdapter(model.modality);
 
+    // Fetch createId for create-level WS events
+    const [taskRow] = await this.db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    const createId = taskRow?.createId ?? null;
+
     // Transition: queued → submitting
     await this.db.update(tasks)
       .set({ status: 'submitting', startedAt: new Date(), updatedAt: new Date() })
@@ -43,6 +47,13 @@ export class TaskExecutionService {
       payload: { taskId, status: 'submitting' },
     });
 
+    if (createId) {
+      this.wsService.sendToUser(userId, {
+        type: 'create:status',
+        payload: { createId, status: 'processing' },
+      });
+    }
+
     const context: ExecutionContext = {
       taskId,
       userId,
@@ -51,6 +62,12 @@ export class TaskExecutionService {
           type: 'task:progress',
           payload: { taskId, progress, message },
         });
+        if (createId) {
+          this.wsService.sendToUser(userId, {
+            type: 'create:progress',
+            payload: { createId, progress, message },
+          });
+        }
       },
     };
 
@@ -90,6 +107,10 @@ export class TaskExecutionService {
       const [completedTask] = await this.db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
       if (completedTask?.createId) {
         await this.createService.syncCreateStatus(completedTask.createId, 'completed', transferredOutput);
+        this.wsService.sendToUser(userId, {
+          type: 'create:status',
+          payload: { createId: completedTask.createId, status: 'completed', output: transferredOutput },
+        });
       }
 
       this.wsService.sendToUser(userId, {
@@ -122,6 +143,10 @@ export class TaskExecutionService {
         const [failedTask] = await this.db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
         if (failedTask?.createId) {
           await this.createService.syncCreateStatus(failedTask.createId, 'failed', undefined, e.message);
+          this.wsService.sendToUser(userId, {
+            type: 'create:status',
+            payload: { createId: failedTask.createId, status: 'failed', errorMessage: e.message },
+          });
         }
       } catch (syncErr) {
         this.logger.error(`Failed to sync create status for task ${taskId}: ${syncErr}`);

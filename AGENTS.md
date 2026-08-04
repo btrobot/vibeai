@@ -213,12 +213,12 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 3: Image Adapter | `image.adapter.test.ts` | 11 | 96% | ≥85% | ✅ |
 | Phase 3: Video Adapter | `video.adapter.test.ts` | 16 | 98% | ≥85% | ✅ |
 | Phase 3: LLM Adapter | `llm.adapter.test.ts` | 11 | 96% | ≥85% | ✅ |
-| Phase 3: Task Execution | `task-execution.service.test.ts` | 14 | 98.5% | ≥85% | ✅ |
-| **合计（后端）** | | **446** | — | — | **✅ 全部通过** |
+| Phase 3: Task Execution | `task-execution.service.test.ts` | 19 | 98.5% | ≥85% | ✅ |
+| **合计（后端）** | | **451** | — | — | **✅ 全部通过** |
 | **合计（前端）** | | **72** | — | — | **⚠️ 71/72 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **552** | — | — | **✅ 551/552 通过** |
+| **总计** | | **557** | — | — | **✅ 556/557 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ⏹️ 需手动构建后运行 |
 
 ### 已知问题
