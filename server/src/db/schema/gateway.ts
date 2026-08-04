@@ -27,10 +27,10 @@ export const aiModels = pgTable('ai_models', {
   slug: varchar('slug', { length: 100 }).notNull().unique(),
   name: varchar('name', { length: 255 }).notNull(),
   providerName: varchar('provider_name', { length: 100 }).notNull().default('coze'),
-  modality: varchar('modality', { length: 50 }).notNull(), // text_generation | image_generation | video_generation
+  modality: varchar('modality', { length: 50 }).notNull(), // llm | image | video
   sdkModelId: varchar('sdk_model_id', { length: 200 }).notNull(),
-  sdkClient: varchar('sdk_client', { length: 50 }).notNull().default('llm'), // llm | image_generation | video_generation
-  capabilitySlug: varchar('capability_slug', { length: 100 }).notNull(),
+  sdkClient: varchar('sdk_client', { length: 50 }).notNull().default('llm'), // llm | image | video
+  capabilities: text('capabilities').array().default([]),
   description: text('description'),
   avatar: text('avatar'),
   contextWindow: integer('context_window'),
@@ -49,7 +49,6 @@ export const aiModels = pgTable('ai_models', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (table) => [
   index('ai_models_slug_idx').on(table.slug),
-  index('ai_models_capability_slug_idx').on(table.capabilitySlug),
   index('ai_models_modality_idx').on(table.modality),
   index('ai_models_active_idx').on(table.isActive),
 ]);

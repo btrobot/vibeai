@@ -6,6 +6,7 @@ import { files } from '../../db/schema/files';
 import { eq, and, like, desc, count, sql } from 'drizzle-orm';
 import { IStorageProvider } from './interfaces/storage-provider.interface';
 import type { UploadFileInput, ListFilesQuery, FileResponse } from './dto';
+import axios from 'axios';
 
 @Injectable()
 export class StorageService {
@@ -128,6 +129,57 @@ export class StorageService {
     if (!record) return null;
 
     return this.provider.getSignedUrl(record.storageKey);
+  }
+
+  /**
+   * 从 URL 下载文件并转存到我们的存储
+   * 用于 AI 生成结果的持久化（确定性转存）
+   */
+  async downloadAndStore(
+    userId: string,
+    sourceUrl: string,
+    fileName: string,
+    contentType: string,
+    category: string = 'generated',
+  ): Promise<{ fileId: string; url: string }> {
+    this.logger.log(`Downloading from ${sourceUrl} for user ${userId}`);
+
+    // 1. 下载
+    const response = await axios.get(sourceUrl, {
+      responseType: 'arraybuffer',
+      timeout: 120000,
+      maxContentLength: 500 * 1024 * 1024, // 500MB max
+    });
+    const buffer = Buffer.from(response.data);
+
+    // 2. 上传到我们的存储
+    const uploadResult = await this.provider.upload({
+      fileContent: buffer,
+      fileName,
+      contentType,
+      userId,
+      category,
+      isPublic: false,
+    });
+
+    // 3. 记录到 files 表
+    const [record] = await this.db
+      .insert(files)
+      .values({
+        userId,
+        originalName: fileName,
+        mimeType: contentType,
+        size: buffer.length,
+        category,
+        storageKey: uploadResult.key,
+        url: uploadResult.url,
+        isPublic: false,
+      })
+      .returning();
+
+    this.logger.log(`File stored: ${record.id} (${fileName}, ${buffer.length} bytes) by user ${userId}`);
+
+    return { fileId: record.id, url: uploadResult.url };
   }
 
   async getStorageStats(userId: string) {

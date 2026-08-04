@@ -337,6 +337,30 @@ export class BillingService {
     return user.credits >= requiredCredits;
   }
 
+  /**
+   * 预扣信用额度（任务提交时调用）
+   * 预扣 = 实际扣减，失败时通过 refundCredits 退回
+   */
+  async reserveCredits(
+    userId: string,
+    taskId: string,
+    credits: number,
+    description?: string,
+  ): Promise<boolean> {
+    const hasCredits = await this.checkCredits(userId, credits);
+    if (!hasCredits) return false;
+
+    return this.deductCredits(userId, taskId, credits, description ?? '任务预扣');
+  }
+
+  /**
+   * 结算（任务成功时调用）
+   * 预扣即扣减，结算为确认操作（未来可支持按实际用量调整）
+   */
+  async settleCredits(taskId: string): Promise<void> {
+    this.logger.log(`Credits settled for task ${taskId}`);
+  }
+
   // ===== Private Helpers =====
 
   private toPlanResponse(p: typeof subscriptionPlans.$inferSelect): PlanResponse {

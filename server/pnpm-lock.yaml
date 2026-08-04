@@ -35,6 +35,9 @@ importers:
       '@types/pg':
         specifier: ^8.20.3
         version: 8.20.3
+      axios:
+        specifier: ^1.19.0
+        version: 1.19.0
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3

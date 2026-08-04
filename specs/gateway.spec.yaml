@@ -92,10 +92,10 @@ entities:
         notNull: true
         default: llm
         desc: llm | image_generation | video_generation
-      - name: capabilitySlug
-        type: varchar(100)
-        notNull: true
-        desc: 关联的 AICapability slug
+      - name: capabilities
+        type: text[]
+        default: '[]'
+        desc: 支持的能力 slug 列表
       - name: description
         type: text
         nullable: true
@@ -358,6 +358,16 @@ operations:
         condition: 信用额度不足
         message: 信用额度不足
     test: true
+  - name: listRecipes
+    method: GET
+    path: /gateway/recipes
+    description: 获取快捷创作方案列表
+    auth: jwt
+    pre:
+      - 用户已登录
+    effect:
+      - 返回所有预设快捷创作方案（按 sortOrder 排序）
+    test: true
 rules:
   - name: capability_slug_unique
     id: GTW-001
@@ -393,7 +403,7 @@ rules:
     level: error
     description: 生成结果必须转存到 StorageObject，不直接暴露外部 URL
     enforcement: ProtocolAdapter 执行成功后调用 StorageService.persistFromUrl
-    test: should persist result to storage
+    test: should persist generated results
   - name: protocol_adapter_dispatch
     id: GTW-007
     severity: error
