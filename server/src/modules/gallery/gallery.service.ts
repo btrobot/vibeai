@@ -94,7 +94,7 @@ export class GalleryService {
 
       if (create) {
         autoPrompt = autoPrompt || create.prompt;
-        autoModelSlug = autoModelSlug || create.modelSlug;
+        autoModelSlug = autoModelSlug || create.modelSlug || undefined;
         autoCapabilitySlug = autoCapabilitySlug || create.capabilitySlug;
 
         // Extract URLs from create output

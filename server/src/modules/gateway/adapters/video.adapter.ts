@@ -74,8 +74,8 @@ export class VideoAdapter implements ProtocolAdapter {
     const options = {
       model: model.sdkModelId,
       duration: (input.duration as number) ?? (model.defaultParams.duration as number) ?? 5,
-      ratio: (input.ratio as string) ?? (model.defaultParams.ratio as string) ?? '16:9',
-      resolution: (input.resolution as string) ?? (model.defaultParams.resolution as string) ?? '720p',
+      ratio: ((input.ratio as string) ?? (model.defaultParams.ratio as string) ?? '16:9') as '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | 'adaptive',
+      resolution: ((input.resolution as string) ?? (model.defaultParams.resolution as string) ?? '720p') as '480p' | '720p' | '1080p',
       watermark: (input.watermark as boolean) ?? (model.defaultParams.watermark as boolean) ?? true,
       generateAudio: (input.generateAudio as boolean) ?? (model.defaultParams.generateAudio as boolean) ?? true,
       returnLastFrame: true,

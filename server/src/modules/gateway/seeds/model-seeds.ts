@@ -8,7 +8,7 @@
  * 数据来源：coze-coding-dev-sdk 支持的模型列表
  */
 
-import { aiModels } from '../../db/schema/gateway';
+import { aiModels } from '../../../db/schema/gateway';
 
 type ModelSeed = typeof aiModels.$inferInsert;
 

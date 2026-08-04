@@ -230,6 +230,17 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **前端 1 个预存测试失败**：`RegisterPage.test.tsx`（密码可见切换按钮 accessible name 为空）。为 UI 属性不匹配，非后端问题。DashboardPage 和 WorkspacePage 测试已修复。
 - **credit_usage.task_id UUID 类型错误**（已修复）：`gateway.service.ts` 在任务创建前调用 `reserveCredits` 时传入字符串 `'pending'` 作为 taskId，但 `credit_usage.task_id` 是 UUID 类型导致 500。已将 `reserveCredits/deductCredits/refundCredits` 的 taskId 改为 `string | null`，调用处传 `null`。新增 2 个回归测试 + 端到端集成测试。
 - **AI 适配器 Mock 模式**：当 `COZE_LOOP_API_TOKEN` 未设置时，三种适配器（Image/LLM/Video）自动进入 Mock 模式，返回伪造结果（picsum.photos 图片、模拟文本、Big Buck Bunny 视频），完整走通 Create → Task → Execution → Storage → Billing 流程。已在测试机验证。
+- **tsc 构建错误**（已修复）：5 个预先存在的 `tsc --noEmit` 错误已修复：
+  1. `PostgresJsDatabase` 导入路径从 `drizzle-orm` 改为 `drizzle-orm/postgres-js`
+  2. `model-seeds.ts` 相对路径从 `../../db/schema/gateway` 改为 `../../../db/schema/gateway`（3 级目录深度）
+  3. `video.adapter.ts` 的 `resolution` 和 `ratio` 类型显式 cast 为 SDK 的 `Resolution` 和 `Ratio` 联合类型
+  4. `gallery.service.ts` 的 `create.modelSlug` (string|null) 用 `|| undefined` 转换为 string|undefined
+  5. `gateway.service.ts` sort/map 回调参数显式标注 `typeof aiModels.$inferSelect` 类型
+- **循环依赖**（已修复）：`db/schema/index.ts` 中 `users` 定义导致 `index → gateway → task-engine → index` 循环。将 `users/sessions/oauthAccounts/loginLogs` 拆到独立的 `auth.ts`，4 个 schema 文件改为从 `./auth` 导入。
+- **migrate 脚本路径**（已修复）：`migrate.ts` 的 `migrationsFolder` 从 `path.resolve(__dirname, '..', 'drizzle')` 改为 `path.resolve(__dirname, '..', '..', 'drizzle')`，修复编译后 `dist/scripts/migrate.js` 路径计算错误。
+- **storage serve 路由 splat 参数**（已修复）：NestJS 11 的 `@Param('splat')` 返回 `string | string[]`，多段路径时为数组。`serveFile` 方法增加 `Array.isArray(splat) ? splat.join('/') : splat` 处理。
+- **resolveInputForAdapter URL 转绝对路径**（已修复）：本地存储返回相对路径 `/api/storage/serve/...`，AI SDK 需要公网可达的绝对 URL。在出口转换时通过 `COZE_PROJECT_DOMAIN_DEFAULT` 拼接为绝对 URL。
+- **Drizzle 迁移静默失败**：drizzle-orm migrator 在迁移 SQL 执行失败时可能静默跳过（记录 hash 但不实际执行 SQL）。需要手动验证列是否存在，必要时手动执行 ALTER TABLE。
 
 ## 关键架构决策
 

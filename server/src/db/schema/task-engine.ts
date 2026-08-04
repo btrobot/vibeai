@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, uuid, integer, varchar, boolean, jsonb, index } from 'drizzle-orm/pg-core';
-import { users } from './index';
+import { users } from './auth';
 
 // ===== Projects Table =====
 export const projects = pgTable('projects', {

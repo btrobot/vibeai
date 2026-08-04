@@ -30,8 +30,8 @@ export class StorageController {
    * URL format: /api/storage/serve/users/{userId}/generated/{filename}
    */
   @Get('serve/*splat')
-  async serveFile(@Param('splat') splat: string, @Res() res: Response) {
-    const key = splat;
+  async serveFile(@Param('splat') splat: string | string[], @Res() res: Response) {
+    const key = Array.isArray(splat) ? splat.join('/') : splat;
     try {
       const result = await this.storageService.readFile(key);
       if (!result) {

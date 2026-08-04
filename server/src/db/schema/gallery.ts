@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, uuid, integer, varchar, boolean, index, foreignKey } from 'drizzle-orm/pg-core';
-import { users } from './index';
+import { users } from './auth';
 
 // ===== Gallery Works Table =====
 export const galleryWorks = pgTable('gallery_works', {

@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, uuid, integer, bigint, varchar, boolean, jsonb, decimal, index } from 'drizzle-orm/pg-core';
-import { users } from './index';
+import { users } from './auth';
 import { tasks } from './task-engine';
 
 // ===== Subscription Plans Table =====

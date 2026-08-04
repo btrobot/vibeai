@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { DRIZZLE } from '../../common/drizzle.constants';
-import type { PostgresJsDatabase } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { tasks } from '../../db/schema/task-engine';
 import { aiModels, aiCapabilities } from '../../db/schema/gateway';
@@ -94,8 +94,8 @@ export class GatewayService {
       }
 
       return rows
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((r) => this.toAdapterModel(r));
+        .sort((a: typeof aiModels.$inferSelect, b: typeof aiModels.$inferSelect) => a.sortOrder - b.sortOrder)
+        .map((r: typeof aiModels.$inferSelect) => this.toAdapterModel(r));
     } catch (e) {
       this.logger.warn(`DB query failed, falling back to in-memory: ${(e as Error).message}`);
       return this.listModelsFromMemory(capability);
@@ -221,6 +221,24 @@ export class GatewayService {
       const val = resolved[field];
       if (typeof val === 'object' && val !== null && 'fileId' in val) {
         resolved[field] = urlMap.get((val as { fileId: string }).fileId) ?? null;
+      }
+    }
+
+    // Convert relative URLs to absolute for external AI API consumption
+    const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT;
+    if (domain) {
+      const toAbsolute = (url: unknown): unknown => {
+        if (typeof url === 'string' && url.startsWith('/')) {
+          return `${domain}${url}`;
+        }
+        return url;
+      };
+      for (const field of [...arrayFields, ...singleFields]) {
+        if (Array.isArray(resolved[field])) {
+          resolved[field] = (resolved[field] as unknown[]).map(toAbsolute);
+        } else {
+          resolved[field] = toAbsolute(resolved[field]);
+        }
       }
     }
 

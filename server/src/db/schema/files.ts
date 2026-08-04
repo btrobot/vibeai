@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, uuid, integer, varchar, boolean, bigint, index } from 'drizzle-orm/pg-core';
-import { users } from './index';
+import { users } from './auth';
 
 export const files = pgTable('files', {
   id: uuid('id').defaultRandom().primaryKey(),

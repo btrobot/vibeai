@@ -29,7 +29,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const migrationsFolder = path.resolve(__dirname, '..', 'drizzle');
+  const migrationsFolder = path.resolve(__dirname, '..', '..', 'drizzle');
 
   console.log('[migrate] Running migrations from:', migrationsFolder);
   const pool = new Pool({ connectionString: databaseUrl });
