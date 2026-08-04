@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef, useEffect, type ElementType } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useAuth } from '@/hooks/useAuth';
-import { useStorage, type FileItem, type FileListResponse } from '@/hooks/useStorage';
+import { useStorage, type FileItem } from '@/hooks/useStorage';
 import { Upload, File, Image, Video, Music, FileText, Trash2, HardDrive, Download, Search, Loader2 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -45,9 +46,8 @@ function getFileIcon(mimeType: string): ElementType {
 }
 
 export default function StoragePage() {
-  const { user, fetchUser, logout } = useAuth();
+  const { fetchUser } = useAuth();
   const { loading, uploadFile, listFiles, deleteFile, getStats } = useStorage();
-  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [files, setFiles] = useState<FileItem[]>([]);
@@ -81,20 +81,13 @@ export default function StoragePage() {
   }, [getStats]);
 
   useEffect(() => {
-    if (user) {
-      loadFiles();
-      loadStats();
-    }
-  }, [user, loadFiles, loadStats]);
+    loadFiles();
+    loadStats();
+  }, [loadFiles, loadStats]);
 
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
-
-  if (!user) {
-    navigate('/login');
-    return null;
-  }
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -130,55 +123,34 @@ export default function StoragePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-6">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">文件管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="text-3xl font-bold text-foreground">文件管理</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             管理你的所有上传文件
             {stats && ` · 共 ${stats.totalFiles} 个文件 · ${formatFileSize(stats.totalSize)}`}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">{user.name}</span>
-          <Button variant="ghost" size="sm" onClick={logout}>
-            登出
-          </Button>
-        </div>
+        <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+          {uploading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Upload className="h-4 w-4" />
+          )}
+          {uploading ? '上传中...' : '上传文件'}
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleUpload}
+        />
       </div>
 
-      {/* Upload Area */}
-      <Card className="mb-6 border-primary/20">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-4">
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="gap-2"
-            >
-              {uploading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4" />
-              )}
-              {uploading ? '上传中...' : '上传文件'}
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleUpload}
-            />
-            <span className="text-sm text-muted-foreground">
-              支持图片、视频、音频、文档等格式
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Filters */}
-      <Card className="mb-6">
+      <Card>
         <CardContent className="p-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex flex-wrap gap-1.5">
@@ -227,10 +199,13 @@ export default function StoragePage() {
         </div>
       ) : files.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-20">
-            <HardDrive className="mb-4 h-12 w-12 text-muted-foreground/50" />
-            <p className="text-lg font-medium">暂无文件</p>
-            <p className="mt-1 text-sm text-muted-foreground">点击上方「上传文件」开始使用</p>
+          <CardContent>
+            <EmptyState
+              icon={HardDrive}
+              title="暂无文件"
+              description="点击上方「上传文件」开始使用"
+              className="py-20"
+            />
           </CardContent>
         </Card>
       ) : (
@@ -242,10 +217,10 @@ export default function StoragePage() {
               return (
                 <Card
                   key={file.id}
-                  className="group relative overflow-hidden border-border/50 transition-all duration-200 hover:border-primary/30"
+                  className="group relative overflow-hidden transition-all duration-200 hover:border-primary/30"
                 >
                   {/* Preview */}
-                  <div className="flex aspect-video items-center justify-center bg-muted/30">
+                  <div className="flex aspect-video items-center justify-center bg-muted">
                     {isImage ? (
                       <img
                         src={file.url}
@@ -254,7 +229,7 @@ export default function StoragePage() {
                         loading="lazy"
                       />
                     ) : (
-                      <FileIcon className="h-10 w-10 text-muted-foreground/50" />
+                      <FileIcon className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
                     )}
                   </div>
 
@@ -264,14 +239,12 @@ export default function StoragePage() {
                       {file.originalName}
                     </p>
                     <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{formatFileSize(file.size)}</span>
+                      <span className="font-mono">{formatFileSize(file.size)}</span>
                       <span>·</span>
                       <span>{formatDate(file.createdAt)}</span>
                     </div>
-                    <div className="mt-2 flex items-center gap-1">
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary/80">
-                        {file.category}
-                      </span>
+                    <div className="mt-2">
+                      <Badge variant="default">{file.category}</Badge>
                     </div>
                   </CardContent>
 
@@ -282,6 +255,7 @@ export default function StoragePage() {
                       size="icon"
                       className="h-8 w-8"
                       onClick={() => window.open(file.url, '_blank')}
+                      aria-label="下载文件"
                     >
                       <Download className="h-4 w-4" />
                     </Button>
@@ -290,6 +264,7 @@ export default function StoragePage() {
                       size="icon"
                       className="h-8 w-8"
                       onClick={() => handleDelete(file.id)}
+                      aria-label="删除文件"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -301,7 +276,7 @@ export default function StoragePage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -310,7 +285,7 @@ export default function StoragePage() {
               >
                 上一页
               </Button>
-              <span className="px-3 text-sm text-muted-foreground">
+              <span className="px-3 text-sm text-muted-foreground font-mono">
                 {page} / {totalPages}
               </span>
               <Button

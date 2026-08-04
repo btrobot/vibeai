@@ -3,8 +3,6 @@ import {
   User,
   Mail,
   Key,
-  Bell,
-  Palette,
   Save,
   CheckCircle2,
   AlertCircle,
@@ -12,6 +10,9 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function SettingsPage() {
   const { user, fetchUser } = useAuth();
@@ -96,7 +97,7 @@ export default function SettingsPage() {
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-8">
       <div>
-        <h1 className="text-xl font-bold text-foreground">设置</h1>
+        <h1 className="text-3xl font-bold text-foreground">设置</h1>
         <p className="text-sm text-muted-foreground mt-1">管理你的账户和偏好</p>
       </div>
 
@@ -107,18 +108,19 @@ export default function SettingsPage() {
               ? 'bg-primary/10 text-primary'
               : 'bg-destructive/10 text-destructive'
           }`}
+          role="alert"
         >
           {message.type === 'success' ? (
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
           ) : (
-            <AlertCircle className="h-4 w-4 shrink-0" />
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
           )}
           {message.text}
         </div>
       )}
 
       {/* Profile */}
-      <div className="rounded-lg border border-border bg-card p-6">
+      <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <User className="h-5 w-5 text-primary" />
@@ -130,37 +132,33 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-foreground mb-1">邮箱</label>
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2">
-              <Mail className="h-4 w-4 text-muted-foreground" />
+          <div className="space-y-2">
+            <Label>邮箱</Label>
+            <div className="flex items-center gap-2 rounded-lg border border-input bg-transparent px-3 py-2">
+              <Mail className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <span className="text-sm text-muted-foreground">{user?.email || ''}</span>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm text-foreground mb-1">昵称</label>
-            <input
+          <div className="space-y-2">
+            <Label htmlFor="name">昵称</Label>
+            <Input
+              id="name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
             />
           </div>
 
-          <button
-            onClick={handleSaveProfile}
-            disabled={saving || !name.trim()}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary disabled:opacity-50"
-          >
+          <Button onClick={handleSaveProfile} disabled={saving || !name.trim()}>
             <Save className="h-4 w-4" />
             保存
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Password */}
-      <div className="rounded-lg border border-border bg-card p-6">
+      <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <Key className="h-5 w-5 text-primary" />
@@ -172,57 +170,57 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-foreground mb-1">当前密码</label>
+          <div className="space-y-2">
+            <Label htmlFor="currentPassword">当前密码</Label>
             <div className="relative">
-              <input
+              <Input
+                id="currentPassword"
                 type={showPassword ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground focus:border-primary focus:outline-none"
+                className="pr-10"
               />
               <button
+                type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                tabIndex={-1}
+                aria-label={showPassword ? '隐藏密码' : '显示密码'}
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm text-foreground mb-1">新密码</label>
-            <input
+          <div className="space-y-2">
+            <Label htmlFor="newPassword">新密码</Label>
+            <Input
+              id="newPassword"
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-foreground mb-1">确认新密码</label>
-            <input
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">确认新密码</Label>
+            <Input
+              id="confirmPassword"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
             />
           </div>
 
-          <button
-            onClick={handleChangePassword}
-            disabled={saving || !currentPassword || !newPassword || !confirmPassword}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary disabled:opacity-50"
-          >
+          <Button onClick={handleChangePassword} disabled={saving || !currentPassword || !newPassword || !confirmPassword}>
             <Save className="h-4 w-4" />
             修改密码
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Account Info */}
-      <div className="rounded-lg border border-border bg-card p-6">
+      <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <User className="h-5 w-5 text-primary" />
@@ -244,7 +242,7 @@ export default function SettingsPage() {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">可用额度</span>
-            <span className="text-foreground font-medium text-primary">{user?.credits ?? 0}</span>
+            <span className="text-foreground font-medium font-mono text-primary">{user?.credits ?? 0}</span>
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Check, Zap, HardDrive, Layers, Crown, RefreshCw, History, TrendingUp } from 'lucide-react';
 
@@ -92,8 +93,8 @@ export default function BillingPage() {
       if (subData.success) setSubscription(subData.data);
       const statsData = await statsRes.json();
       if (statsData.success) setStats(statsData.data);
-    } catch (err) {
-      console.error('Failed to fetch billing data:', err);
+    } catch {
+      // Silently fail
     } finally {
       setLoading(false);
     }
@@ -113,13 +114,12 @@ export default function BillingPage() {
       const data = await res.json();
       if (data.success) {
         setSubscription(data.data);
-        // Refresh stats
         const statsRes = await fetch('/api/billing/stats', { headers: { Authorization: `Bearer ${token}` } });
         const statsData = await statsRes.json();
         if (statsData.success) setStats(statsData.data);
       }
-    } catch (err) {
-      console.error('Failed to subscribe:', err);
+    } catch {
+      // Silently fail
     } finally {
       setSubscribing(null);
     }
@@ -135,8 +135,8 @@ export default function BillingPage() {
         setSubscription(null);
         await fetchData();
       }
-    } catch (err) {
-      console.error('Failed to cancel subscription:', err);
+    } catch {
+      // Silently fail
     }
   }
 
@@ -151,17 +151,17 @@ export default function BillingPage() {
   const currentPlanSlug = subscription?.plan?.slug ?? 'free';
 
   const planIcons: Record<string, React.ReactNode> = {
-    free: <Zap className="w-6 h-6" />,
-    starter: <Layers className="w-6 h-6" />,
-    pro: <Crown className="w-6 h-6" />,
-    enterprise: <Crown className="w-6 h-6" />,
+    free: <Zap className="w-5 h-5" />,
+    starter: <Layers className="w-5 h-5" />,
+    pro: <Crown className="w-5 h-5" />,
+    enterprise: <Crown className="w-5 h-5" />,
   };
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-bold text-foreground">计费管理</h1>
+        <h1 className="text-3xl font-bold text-foreground">计费管理</h1>
         <p className="text-sm text-muted-foreground mt-1">管理你的套餐和用量</p>
       </div>
 
@@ -169,7 +169,7 @@ export default function BillingPage() {
       {stats && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
+            <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-brand" />
               用量概览
             </CardTitle>
@@ -181,19 +181,19 @@ export default function BillingPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-4 rounded-lg bg-surface-hover">
                 <div className="text-sm text-muted-foreground mb-1">可用额度</div>
-                <div className="text-2xl font-bold text-brand">{stats.creditsRemaining}</div>
+                <div className="text-3xl font-bold font-mono text-brand">{stats.creditsRemaining}</div>
               </div>
               <div className="p-4 rounded-lg bg-surface-hover">
                 <div className="text-sm text-muted-foreground mb-1">本月已用</div>
-                <div className="text-2xl font-bold text-foreground">{stats.creditsUsedThisMonth}</div>
+                <div className="text-3xl font-bold font-mono text-foreground">{stats.creditsUsedThisMonth}</div>
               </div>
               <div className="p-4 rounded-lg bg-surface-hover">
                 <div className="text-sm text-muted-foreground mb-1">完成任务</div>
-                <div className="text-2xl font-bold text-foreground">{stats.totalTasksCompleted}</div>
+                <div className="text-3xl font-bold font-mono text-foreground">{stats.totalTasksCompleted}</div>
               </div>
               <div className="p-4 rounded-lg bg-surface-hover">
                 <div className="text-sm text-muted-foreground mb-1">存储用量</div>
-                <div className="text-2xl font-bold text-foreground">{formatBytes(stats.storageUsedBytes)}</div>
+                <div className="text-3xl font-bold font-mono text-foreground">{formatBytes(stats.storageUsedBytes)}</div>
               </div>
             </div>
 
@@ -202,16 +202,12 @@ export default function BillingPage() {
               <div className="mt-6">
                 <div className="flex justify-between text-sm text-muted-foreground mb-2">
                   <span>额度使用率</span>
-                  <span>{Math.round((stats.creditsUsedThisMonth / (stats.creditsUsedThisMonth + stats.creditsRemaining)) * 100)}%</span>
+                  <span className="font-mono">{Math.round((stats.creditsUsedThisMonth / (stats.creditsUsedThisMonth + stats.creditsRemaining)) * 100)}%</span>
                 </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-brand rounded-full transition-all duration-500"
-                    style={{
-                      width: `${Math.min((stats.creditsUsedThisMonth / (stats.creditsUsedThisMonth + stats.creditsRemaining)) * 100, 100)}%`,
-                    }}
-                  />
-                </div>
+                <Progress
+                  variant="brand"
+                  value={Math.min((stats.creditsUsedThisMonth / (stats.creditsUsedThisMonth + stats.creditsRemaining)) * 100, 100)}
+                />
               </div>
             )}
           </CardContent>
@@ -239,55 +235,55 @@ export default function BillingPage() {
                 <CardHeader>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-brand">{planIcons[plan.slug]}</span>
-                    <CardTitle className="text-lg">{plan.name}</CardTitle>
+                    <CardTitle>{plan.name}</CardTitle>
                   </div>
                   <CardDescription>
                     {plan.description}
                   </CardDescription>
                   <div className="mt-3">
-                    <span className="text-3xl font-bold text-foreground">¥{plan.priceMonthly}</span>
+                    <span className="text-3xl font-bold font-mono text-foreground">¥{plan.priceMonthly}</span>
                     <span className="text-muted-foreground text-sm ml-1">/月</span>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-brand" />
+                      <Check className="h-4 w-4 text-brand" aria-hidden="true" />
                       <span>每月 {plan.credits} 额度</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-brand" />
+                      <Check className="h-4 w-4 text-brand" aria-hidden="true" />
                       <span>最多 {plan.maxProjects} 个项目</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-brand" />
+                      <Check className="h-4 w-4 text-brand" aria-hidden="true" />
                       <span>最多 {plan.maxConcurrentTasks} 并发</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-brand" />
+                      <Check className="h-4 w-4 text-brand" aria-hidden="true" />
                       <span>存储 {formatBytes(plan.maxStorageBytes)}</span>
                     </div>
                     {plan.capabilities.length > 0 && plan.capabilities[0] !== '*' && (
                       <div className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-brand" />
+                        <Check className="h-4 w-4 text-brand" aria-hidden="true" />
                         <span>{plan.capabilities.length} 项能力</span>
                       </div>
                     )}
                     {plan.capabilities.length > 0 && plan.capabilities[0] === '*' && (
                       <div className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-brand" />
+                        <Check className="h-4 w-4 text-brand" aria-hidden="true" />
                         <span>全部能力</span>
                       </div>
                     )}
                     {!!(plan.features as Record<string, unknown>).apiAccess && (
                       <div className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-brand" />
+                        <Check className="h-4 w-4 text-brand" aria-hidden="true" />
                         <span>API 访问</span>
                       </div>
                     )}
                     {!!(plan.features as Record<string, unknown>).teamSeats && (
                       <div className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-brand" />
+                        <Check className="h-4 w-4 text-brand" aria-hidden="true" />
                         <span>{String(plan.features.teamSeats)} 个团队席位</span>
                       </div>
                     )}
@@ -314,7 +310,7 @@ export default function BillingPage() {
       {subscription && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
+            <CardTitle className="flex items-center gap-2">
               <RefreshCw className="h-5 w-5 text-brand" />
               订阅信息
             </CardTitle>
@@ -343,16 +339,16 @@ export default function BillingPage() {
       {stats && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
+            <CardTitle className="flex items-center gap-2">
               <History className="h-5 w-5 text-brand" />
               额度明细
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-1 text-sm text-muted-foreground">
-              <p>总消耗：{stats.totalCreditsUsed} 额度</p>
-              <p>图片生成：{stats.totalImagesGenerated} 次</p>
-              <p>视频生成：{stats.totalVideosGenerated} 次</p>
+              <p>总消耗：<span className="font-mono text-foreground">{stats.totalCreditsUsed}</span> 额度</p>
+              <p>图片生成：<span className="font-mono text-foreground">{stats.totalImagesGenerated}</span> 次</p>
+              <p>视频生成：<span className="font-mono text-foreground">{stats.totalVideosGenerated}</span> 次</p>
             </div>
           </CardContent>
         </Card>

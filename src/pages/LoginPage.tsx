@@ -31,18 +31,18 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-primary/5 pointer-events-none" />
-      <Card className="w-full max-w-md relative z-10 border-border/50">
+      <Card className="w-full max-w-md relative z-10 border-border">
         <CardHeader className="space-y-1 text-center">
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full border border-primary/20 bg-primary/5">
             <LogIn className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-bold">欢迎回来</CardTitle>
+          <CardTitle className="text-2xl font-bold text-foreground">欢迎回来</CardTitle>
           <CardDescription>登录你的 VibeAI 账户</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {error && (
-              <div className="rounded-md border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
                 {error}
               </div>
             )}
@@ -82,6 +82,7 @@ export default function LoginPage() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   tabIndex={-1}
+                  aria-label={showPassword ? '隐藏密码' : '显示密码'}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -92,7 +93,7 @@ export default function LoginPage() {
             </Button>
           </CardContent>
         </form>
-        <CardFooter className="justify-center border-t border-border/50 pt-4">
+        <CardFooter className="justify-center border-t border-border pt-4">
           <p className="text-sm text-muted-foreground">
             还没有账户？{' '}
             <Link to="/register" className="font-medium text-primary hover:text-primary/80 transition-colors">

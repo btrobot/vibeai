@@ -8,8 +8,9 @@ import {
   TrendingUp,
   Clock,
   Flame,
-  Loader2,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 
 interface GalleryItem {
   id: string;
@@ -40,7 +41,7 @@ export default function GalleryPage() {
       .then((r) => r.json())
       .then((res) => {
         if (res.success) {
-          setItems((res.data ?? []).map((w: any) => ({
+          setItems((res.data ?? []).map((w: { id: string; title?: string; imageUrl?: string; authorName?: string; likes?: number; comments?: number; views?: number; type?: string; createdAt: string }) => ({
             id: w.id,
             title: w.title || '未命名作品',
             imageUrl: w.imageUrl || '',
@@ -64,7 +65,7 @@ export default function GalleryPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-foreground">社区画廊</h1>
+          <h1 className="text-3xl font-bold text-foreground">社区画廊</h1>
           <p className="text-sm text-muted-foreground mt-1">发现其他创作者的精彩作品</p>
         </div>
       </div>
@@ -83,7 +84,7 @@ export default function GalleryPage() {
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4" aria-hidden="true" />
               {tab.label}
             </button>
           );
@@ -92,30 +93,30 @@ export default function GalleryPage() {
 
       {/* Loading */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-border bg-card overflow-hidden">
+              <Skeleton className="aspect-square w-full" />
+              <div className="p-3 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : items.length === 0 ? (
-        /* Empty State */
-        <div className="flex flex-col items-center gap-4 py-20">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-hover">
-            <ImageIcon className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="text-base font-medium text-foreground">暂无作品</h3>
-          <p className="text-sm text-muted-foreground text-center max-w-sm">
-            社区画廊即将上线，敬请期待！你可以先在创作工具中生成作品。
-          </p>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <TrendingUp className="h-3 w-3" />
-            <span>社区功能开发中</span>
-          </div>
-        </div>
+        <EmptyState
+          icon={ImageIcon}
+          title="暂无作品"
+          description="社区画廊即将上线，敬请期待！你可以先在创作工具中生成作品。"
+          className="py-20"
+        />
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {items.map((item) => (
             <div
               key={item.id}
-              className="group cursor-pointer rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-primary/30"
+              className="group cursor-pointer rounded-xl border border-border bg-card overflow-hidden transition-colors hover:border-primary/30"
             >
               <div className="aspect-square bg-background">
                 {item.imageUrl ? (
@@ -123,10 +124,11 @@ export default function GalleryPage() {
                     src={item.imageUrl}
                     alt={item.title}
                     className="h-full w-full object-cover"
+                    loading="lazy"
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
-                    <ImageIcon className="h-12 w-12 text-muted-foreground" />
+                    <ImageIcon className="h-12 w-12 text-muted-foreground" aria-hidden="true" />
                   </div>
                 )}
               </div>
@@ -135,15 +137,15 @@ export default function GalleryPage() {
                 <p className="text-xs text-muted-foreground mt-1">{item.authorName}</p>
                 <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
-                    <Heart className="h-3 w-3" />
+                    <Heart className="h-3 w-3" aria-hidden="true" />
                     {item.likes}
                   </span>
                   <span className="flex items-center gap-1">
-                    <MessageCircle className="h-3 w-3" />
+                    <MessageCircle className="h-3 w-3" aria-hidden="true" />
                     {item.comments}
                   </span>
                   <span className="flex items-center gap-1">
-                    <Eye className="h-3 w-3" />
+                    <Eye className="h-3 w-3" aria-hidden="true" />
                     {item.views}
                   </span>
                 </div>

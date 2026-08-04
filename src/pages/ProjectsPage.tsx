@@ -13,6 +13,12 @@ import {
   AlertCircle,
   Filter,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 
 interface Project {
   id: string;
@@ -111,10 +117,10 @@ export default function ProjectsPage() {
     fetchProjects();
   };
 
-  const statusColors: Record<string, string> = {
-    active: 'text-primary border-primary/30',
-    completed: 'text-brand border-brand/30',
-    archived: 'text-muted-foreground border-border',
+  const statusVariant: Record<string, 'primary' | 'brand' | 'default'> = {
+    active: 'primary',
+    completed: 'brand',
+    archived: 'default',
   };
 
   const statusLabels: Record<string, string> = {
@@ -128,32 +134,29 @@ export default function ProjectsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-foreground">我的项目</h1>
+          <h1 className="text-3xl font-bold text-foreground">我的项目</h1>
           <p className="text-sm text-muted-foreground mt-1">共 {total} 个项目</p>
         </div>
-        <button
-          onClick={() => setShowNewModal(true)}
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary"
-        >
+        <Button onClick={() => setShowNewModal(true)}>
           <Plus className="h-4 w-4" />
           新建项目
-        </button>
+        </Button>
       </div>
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <form onSubmit={handleSearch} className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="搜索项目..."
-            className="w-full rounded-lg border border-border bg-card py-2 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            className="pl-10"
           />
         </form>
         <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Filter className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           {['all', 'active', 'completed', 'archived'].map((s) => (
             <button
               key={s}
@@ -172,26 +175,32 @@ export default function ProjectsPage() {
 
       {/* Project Grid */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-border bg-card p-4">
+              <div className="flex items-start justify-between mb-3">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <Skeleton className="h-5 w-14 rounded" />
+              </div>
+              <Skeleton className="h-5 w-32 mb-2" />
+              <Skeleton className="h-3 w-full mb-1" />
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+          ))}
         </div>
       ) : projects.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-20">
-          <FolderKanban className="h-12 w-12 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">暂无项目</p>
-          <button
-            onClick={() => setShowNewModal(true)}
-            className="text-sm text-primary hover:text-primary/80"
-          >
-            创建第一个项目
-          </button>
-        </div>
+        <EmptyState
+          icon={FolderKanban}
+          title="暂无项目"
+          description="创建你的第一个项目，开始 AI 创作之旅"
+          action={{ label: '创建第一个项目', onClick: () => setShowNewModal(true) }}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map((project) => (
             <div
               key={project.id}
-              className="group rounded-lg border border-border bg-card transition-colors hover:border-primary/30"
+              className="group rounded-xl border border-border bg-card transition-colors hover:border-primary/30"
             >
               <div
                 className="cursor-pointer p-4"
@@ -201,25 +210,23 @@ export default function ProjectsPage() {
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                     <FolderKanban className="h-5 w-5 text-primary" />
                   </div>
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-xs ${statusColors[project.status] || statusColors.active}`}
-                  >
+                  <Badge variant={statusVariant[project.status] || 'default'}>
                     {statusLabels[project.status] || project.status}
-                  </span>
+                  </Badge>
                 </div>
 
-                <h3 className="font-medium text-foreground mb-1 truncate">{project.name}</h3>
+                <h3 className="text-base font-medium text-foreground mb-1 truncate">{project.name}</h3>
                 {project.description && (
                   <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{project.description}</p>
                 )}
 
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3" />
+                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
                     {project.completedTaskCount}/{project.taskCount}
                   </span>
                   <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
+                    <Clock className="h-3 w-3" aria-hidden="true" />
                     {new Date(project.updatedAt).toLocaleDateString('zh-CN')}
                   </span>
                 </div>
@@ -229,14 +236,14 @@ export default function ProjectsPage() {
                 <button
                   onClick={() => navigate(`/workspace/${project.id}`)}
                   className="rounded-lg p-1.5 text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-                  title="打开"
+                  aria-label="打开项目"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => handleDelete(project.id)}
-                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-surface-hover hover:text-danger"
-                  title="删除"
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-surface-hover hover:text-destructive"
+                  aria-label="删除项目"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -267,48 +274,42 @@ export default function ProjectsPage() {
 
       {/* New Project Modal */}
       {showNewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6">
-            <h2 className="text-lg font-semibold text-foreground mb-4">新建项目</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-lg">
+            <h2 className="text-base font-semibold text-foreground mb-4">新建项目</h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-foreground mb-1">项目名称 *</label>
-                <input
+              <div className="space-y-2">
+                <Label htmlFor="project-name">项目名称 <span className="text-destructive">*</span></Label>
+                <Input
+                  id="project-name"
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="输入项目名称"
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
                   autoFocus
                 />
               </div>
-              <div>
-                <label className="block text-sm text-foreground mb-1">描述（可选）</label>
+              <div className="space-y-2">
+                <Label htmlFor="project-desc">描述（可选）</Label>
                 <textarea
+                  id="project-desc"
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
                   placeholder="项目描述"
                   rows={3}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none resize-none"
+                  className="flex w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-150 resize-none"
                 />
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-3 mt-6">
-              <button
-                onClick={() => setShowNewModal(false)}
-                className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
-              >
+              <Button variant="ghost" onClick={() => setShowNewModal(false)}>
                 取消
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={!newName.trim()}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              </Button>
+              <Button onClick={handleCreate} disabled={!newName.trim()}>
                 创建
-              </button>
+              </Button>
             </div>
           </div>
         </div>

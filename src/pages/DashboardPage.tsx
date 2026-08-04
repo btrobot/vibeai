@@ -12,6 +12,11 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 
 interface DashboardStats {
   totalProjects: number;
@@ -56,7 +61,7 @@ export default function DashboardPage() {
         setStats({
           totalProjects: projects?.total ?? 0,
           totalTasks: tasks?.total ?? 0,
-          completedTasks: tasks?.items?.filter((t: any) => t.status === 'completed').length ?? 0,
+          completedTasks: tasks?.items?.filter((t: { status: string }) => t.status === 'completed').length ?? 0,
           usedCredits: 0,
           recentTasks: (tasks?.items ?? []).slice(0, 5),
         });
@@ -76,12 +81,12 @@ export default function DashboardPage() {
     { label: '可用额度', value: user?.credits ?? 0, icon: Sparkles, color: 'text-foreground' },
   ];
 
-  const statusLabels: Record<string, { label: string; color: string }> = {
-    pending: { label: '排队中', color: 'text-muted-foreground' },
-    processing: { label: '处理中', color: 'text-primary' },
-    completed: { label: '已完成', color: 'text-brand' },
-    failed: { label: '失败', color: 'text-destructive' },
-    cancelled: { label: '已取消', color: 'text-muted-foreground' },
+  const statusConfig: Record<string, { label: string; variant: 'default' | 'primary' | 'brand' | 'warning' | 'destructive' }> = {
+    pending: { label: '排队中', variant: 'default' },
+    processing: { label: '生成中...', variant: 'primary' },
+    completed: { label: '已完成', variant: 'brand' },
+    failed: { label: '生成失败', variant: 'destructive' },
+    cancelled: { label: '已取消', variant: 'default' },
   };
 
   const typeLabels: Record<string, string> = {
@@ -99,40 +104,51 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-foreground">欢迎回来，{user?.name || '用户'}</h1>
+          <h1 className="text-3xl font-bold text-foreground">欢迎回来，{user?.name || '用户'}</h1>
           <p className="text-sm text-muted-foreground mt-1">这是你的创作概览</p>
         </div>
-        <button
-          onClick={() => navigate('/projects')}
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        >
+        <Button onClick={() => navigate('/projects')}>
           <Plus className="h-4 w-4" />
           新建项目
-        </button>
+        </Button>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30"
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-hover">
-                <card.icon className={`h-5 w-5 ${card.color}`} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{card.value}</p>
-                <p className="text-xs text-muted-foreground">{card.label}</p>
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-border bg-card p-4">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <div className="space-y-2">
+                  <Skeleton className="h-7 w-16" />
+                  <Skeleton className="h-3 w-12" />
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        ) : (
+          statCards.map((card) => (
+            <div
+              key={card.label}
+              className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/30"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-hover">
+                  <card.icon className={`h-5 w-5 ${card.color}`} />
+                </div>
+                <div>
+                  <p className="text-3xl font-bold font-mono text-foreground">{card.value}</p>
+                  <p className="text-xs text-muted-foreground">{card.label}</p>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Quick Actions */}
-      <div className="rounded-lg border border-border bg-card p-4">
+      <div className="rounded-xl border border-border bg-card p-4">
         <h2 className="text-sm font-semibold text-foreground mb-3">快速创作</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
@@ -155,54 +171,56 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Tasks */}
-      <div className="rounded-lg border border-border bg-card">
+      <div className="rounded-xl border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-foreground">最近任务</h2>
-          <button
-            onClick={() => navigate('/projects')}
-            className="text-xs text-primary hover:text-primary/80"
-          >
+          <Button variant="link" size="sm" onClick={() => navigate('/projects')}>
             查看全部
-          </button>
+          </Button>
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">加载中...</div>
-        ) : !stats?.recentTasks?.length ? (
-          <div className="flex flex-col items-center gap-2 p-8">
-            <AlertCircle className="h-8 w-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">暂无任务</p>
-            <button
-              onClick={() => navigate('/tools/background-removal')}
-              className="text-xs text-primary hover:text-primary/80"
-            >
-              开始创作
-            </button>
+          <div className="p-4 space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <Skeleton className="h-4 w-4 rounded" />
+                <div className="flex-1 space-y-1">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-48" />
+                </div>
+                <Skeleton className="h-5 w-16 rounded" />
+              </div>
+            ))}
           </div>
+        ) : !stats?.recentTasks?.length ? (
+          <EmptyState
+            icon={AlertCircle}
+            title="暂无任务"
+            description="开始你的第一次创作吧"
+            action={{ label: '开始创作', onClick: () => navigate('/tools/background-removal') }}
+            className="py-12"
+          />
         ) : (
           <div className="divide-y divide-border">
             {stats.recentTasks.map((task) => {
-              const status = statusLabels[task.status] || { label: task.status, color: 'text-muted-foreground' };
+              const status = statusConfig[task.status] || { label: task.status, variant: 'default' as const };
               const type = typeLabels[task.type] || task.type;
               return (
                 <div
                   key={task.id}
                   className="flex items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-surface-hover"
                 >
-                  <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <Clock className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
                   <div className="flex-1 min-w-0">
                     <p className="text-foreground truncate">{type}</p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(task.createdAt).toLocaleString('zh-CN')}
                     </p>
                   </div>
-                  <span className={`text-xs font-medium ${status.color}`}>{status.label}</span>
+                  <Badge variant={status.variant}>{status.label}</Badge>
                   {task.status === 'processing' && (
-                    <div className="h-1.5 w-20 rounded-full bg-background">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{ width: `${task.progress}%` }}
-                      />
+                    <div className="w-20">
+                      <Progress value={task.progress} size="slim" />
                     </div>
                   )}
                 </div>

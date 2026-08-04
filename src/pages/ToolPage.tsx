@@ -7,14 +7,16 @@ import {
   Sparkles,
   Loader2,
   Download,
-  CheckCircle2,
   ShieldCheck,
   Palette,
   Shirt,
   FileText,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import type { LucideIcon } from 'lucide-react';
 
-const toolConfig: Record<string, { name: string; description: string; icon: any; color: string; capability: string }> = {
+const toolConfig: Record<string, { name: string; description: string; icon: LucideIcon; color: string; capability: string }> = {
   'background-removal': {
     name: '白底图生成',
     description: '一键去除商品背景，生成纯白底图，支持批量处理',
@@ -59,8 +61,8 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
 
   if (!config) {
     return (
-      <div className="flex items-center justify-center h-full p-6">
-        <p className="text-sm text-muted-foreground">工具不存在</p>
+      <div className="p-6">
+        <EmptyState icon={ImageIcon} title="工具不存在" description="请从导航菜单选择有效的工具" />
       </div>
     );
   }
@@ -124,7 +126,6 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
 
       const generateData = await generateRes.json();
       if (generateRes.ok) {
-        // Poll for completion
         const taskId = generateData.taskId || generateData.id;
         if (taskId) {
           const poll = async () => {
@@ -163,6 +164,22 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
     }
   };
 
+  const handleDownload = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${toolSlug}-result.png`;
+      link.click();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
+      // Fallback: open in new tab
+      window.open(url, '_blank');
+    }
+  };
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -170,6 +187,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
         <button
           onClick={() => navigate('/projects')}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+          aria-label="返回"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
@@ -177,7 +195,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
           <Icon className={`h-5 w-5 ${config.color}`} />
         </div>
         <div>
-          <h1 className="text-lg font-semibold text-foreground">{config.name}</h1>
+          <h1 className="text-3xl font-bold text-foreground">{config.name}</h1>
           <p className="text-sm text-muted-foreground">{config.description}</p>
         </div>
       </div>
@@ -185,7 +203,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input Section */}
         <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-card p-4">
+          <div className="rounded-xl border border-border bg-card p-4">
             <h2 className="text-sm font-semibold text-foreground mb-3">上传图片</h2>
 
             {preview ? (
@@ -200,14 +218,14 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
                     setFile(null);
                     setPreview(null);
                   }}
-                  className="absolute top-2 right-2 rounded-lg bg-black/60 px-2 py-1 text-xs text-white"
+                  className="absolute top-2 right-2 rounded-lg bg-black/50 px-2 py-1 text-xs text-primary-foreground"
                 >
                   更换
                 </button>
               </div>
             ) : (
               <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-8 transition-colors hover:border-primary/30">
-                <Upload className="h-8 w-8 text-muted-foreground" />
+                <Upload className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
                 <p className="text-sm text-muted-foreground">点击上传图片</p>
                 <p className="text-xs text-muted-foreground">支持 JPG、PNG、WebP，最大 10MB</p>
                 <input
@@ -220,21 +238,23 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
             )}
           </div>
 
-          <div className="rounded-lg border border-border bg-card p-4">
+          <div className="rounded-xl border border-border bg-card p-4">
             <h2 className="text-sm font-semibold text-foreground mb-3">提示词</h2>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder={`输入描述，例如：${toolSlug === 'background-removal' ? '去除背景，保留商品主体' : toolSlug === 'scene-composition' ? '将商品放在自然光下的木桌上' : toolSlug === 'model-dressing' ? '模特穿这件衣服在户外街拍' : '生成包含商品详情、规格、卖点的详情页'}`}
               rows={4}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none resize-none"
+              className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none transition-all duration-150"
             />
           </div>
 
-          <button
+          <Button
+            variant="brand"
+            className="w-full"
+            size="lg"
             onClick={handleSubmit}
             disabled={(!file && !prompt.trim()) || loading}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <>
@@ -247,11 +267,11 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
                 开始生成
               </>
             )}
-          </button>
+          </Button>
         </div>
 
         {/* Output Section */}
-        <div className="rounded-lg border border-border bg-card p-4">
+        <div className="rounded-xl border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground mb-3">生成结果</h2>
 
           {error && (
@@ -268,10 +288,12 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
           )}
 
           {!result && !loading && !error && (
-            <div className="flex flex-col items-center gap-3 py-16">
-              <ImageIcon className="h-12 w-12 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">等待输入</p>
-            </div>
+            <EmptyState
+              icon={ImageIcon}
+              title="等待输入"
+              description="上传图片并输入提示词后，点击「开始生成」"
+              className="py-16"
+            />
           )}
 
           {result && !loading && (
@@ -283,14 +305,13 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
                     alt="生成结果"
                     className="w-full rounded-lg object-cover"
                   />
-                  <a
-                    href={result}
-                    download
-                    className="absolute top-2 right-2 flex items-center gap-1 rounded-lg bg-black/60 px-3 py-1.5 text-xs text-white hover:bg-black/80"
+                  <button
+                    onClick={() => handleDownload(result)}
+                    className="absolute top-2 right-2 flex items-center gap-1 rounded-lg bg-black/50 px-3 py-1.5 text-xs text-primary-foreground hover:bg-black/60"
                   >
                     <Download className="h-3 w-3" />
                     下载
-                  </a>
+                  </button>
                 </div>
               ) : (
                 <div className="rounded-lg bg-background p-4">
@@ -298,18 +319,14 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
                 </div>
               )}
               {result.startsWith('http') && (
-                <button
-                  onClick={() => {
-                    const a = document.createElement('a');
-                    a.href = result;
-                    a.download = `${toolSlug}-result.png`;
-                    a.click();
-                  }}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-hover"
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleDownload(result)}
                 >
                   <Download className="h-4 w-4" />
                   下载结果
-                </button>
+                </Button>
               )}
             </div>
           )}

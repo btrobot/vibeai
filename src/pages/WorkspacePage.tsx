@@ -7,13 +7,17 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  AlertCircle,
   Sparkles,
   Image as ImageIcon,
   Video,
   FileText,
   MessageSquare,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 
 interface ProjectDetail {
   id: string;
@@ -123,18 +127,24 @@ export default function WorkspacePage() {
     }
   };
 
-  const statusConfig: Record<string, { icon: any; label: string; color: string }> = {
-    pending: { icon: Clock, label: '排队中', color: 'text-muted-foreground' },
-    processing: { icon: Loader2, label: '处理中', color: 'text-primary' },
-    completed: { icon: CheckCircle2, label: '已完成', color: 'text-brand' },
-    failed: { icon: XCircle, label: '失败', color: 'text-destructive' },
-    cancelled: { icon: XCircle, label: '已取消', color: 'text-muted-foreground' },
+  const statusConfig: Record<string, { icon: typeof Clock; label: string; variant: 'default' | 'primary' | 'brand' | 'destructive'; spin?: boolean }> = {
+    pending: { icon: Clock, label: '排队中', variant: 'default' },
+    processing: { icon: Loader2, label: '生成中...', variant: 'primary', spin: true },
+    completed: { icon: CheckCircle2, label: '已完成', variant: 'brand' },
+    failed: { icon: XCircle, label: '生成失败', variant: 'destructive' },
+    cancelled: { icon: XCircle, label: '已取消', variant: 'default' },
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <div className="flex h-full flex-col p-4 space-y-3">
+        <Skeleton className="h-12 w-full rounded-lg" />
+        <Skeleton className="h-10 w-full rounded-lg" />
+        <div className="flex-1 space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -148,11 +158,12 @@ export default function WorkspacePage() {
           <button
             onClick={() => navigate('/projects')}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+            aria-label="返回项目列表"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div>
-            <h1 className="text-sm font-semibold text-foreground">{project?.name || '工作区'}</h1>
+            <h1 className="text-base font-semibold text-foreground">{project?.name || '工作区'}</h1>
             {project?.description && (
               <p className="text-xs text-muted-foreground truncate max-w-md">{project.description}</p>
             )}
@@ -183,10 +194,12 @@ export default function WorkspacePage() {
         {/* Task List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {tasks.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-16">
-              <Sparkles className="h-12 w-12 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">输入提示词开始创作</p>
-            </div>
+            <EmptyState
+              icon={Sparkles}
+              title="输入提示词开始创作"
+              description="选择上方的创作能力，在下方输入框中描述你的需求"
+              className="py-16"
+            />
           ) : (
             tasks.map((task) => {
               const cfg = statusConfig[task.status] || statusConfig.pending;
@@ -194,46 +207,41 @@ export default function WorkspacePage() {
               return (
                 <div
                   key={task.id}
-                  className="rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/20"
+                  className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/20"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-foreground">
                         {capabilities.find((c) => c.slug === task.type)?.label || task.type}
                       </span>
-                      <span className={`flex items-center gap-1 text-xs ${cfg.color}`}>
-                        <Icon className={`h-3 w-3 ${task.status === 'processing' ? 'animate-spin' : ''}`} />
+                      <Badge variant={cfg.variant}>
+                        <Icon className={`h-3 w-3 ${cfg.spin ? 'animate-spin' : ''}`} />
                         {cfg.label}
-                      </span>
+                      </Badge>
                     </div>
                   </div>
 
                   {task.status === 'processing' && (
-                    <div className="h-1.5 w-full rounded-full bg-background">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{ width: `${task.progress}%` }}
-                      />
-                    </div>
+                    <Progress value={task.progress} size="slim" className="mt-2" />
                   )}
 
                   {task.status === 'failed' && task.errorMessage && (
-                    <p className="text-xs text-danger mt-2">{task.errorMessage}</p>
+                    <p className="text-xs text-destructive mt-2">{task.errorMessage}</p>
                   )}
 
                   {task.status === 'completed' && task.output && (
                     <div className="mt-2 rounded-lg bg-background p-3">
                       {task.type === 'image-generation' || task.type === 'background-removal' || task.type === 'scene-composition' || task.type === 'model-dressing' ? (
-                        (task.output as any).images?.map((url: string, i: number) => (
+                        (task.output as { images?: string[] }).images?.map((url: string, i: number) => (
                           <img key={i} src={url} alt="" className="max-h-48 rounded object-contain" />
                         ))
                       ) : task.type === 'video-generation' ? (
-                        (task.output as any).videos?.map((url: string, i: number) => (
+                        (task.output as { videos?: string[] }).videos?.map((url: string, i: number) => (
                           <video key={i} src={url} controls className="max-h-48 rounded" />
                         ))
                       ) : (
                         <p className="text-xs text-foreground whitespace-pre-wrap">
-                          {(task.output as any).text || JSON.stringify(task.output, null, 2)}
+                          {(task.output as { text?: string }).text || JSON.stringify(task.output, null, 2)}
                         </p>
                       )}
                     </div>
@@ -257,19 +265,22 @@ export default function WorkspacePage() {
               onKeyDown={handleKeyDown}
               placeholder="输入提示词，按 Enter 发送..."
               rows={2}
-              className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none resize-none"
+              className="flex-1 rounded-lg border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none transition-all duration-150"
             />
-            <button
+            <Button
+              variant="brand"
+              size="icon"
+              className="h-10 w-10 shrink-0"
               onClick={handleSubmit}
               disabled={!prompt.trim() || submitting}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-white transition-colors hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="发送"
             >
               {submitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Send className="h-4 w-4" />
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

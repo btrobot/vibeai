@@ -67,7 +67,7 @@ export default function AppLayout() {
       {/* Mobile Overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/60 md:hidden"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -93,7 +93,7 @@ export default function AppLayout() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-2 space-y-1">
+        <nav className="flex-1 overflow-y-auto p-2 space-y-1" aria-label="主导航">
           {sidebarNav.map((item) => {
             if ('children' in item && item.children) {
               return (
@@ -127,7 +127,7 @@ export default function AppLayout() {
                           className={({ isActive }) =>
                             `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                               isActive
-                                ? 'bg-primary/10 text-primary'
+                                ? 'bg-primary/10 text-primary font-medium'
                                 : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                             }`
                           }
@@ -149,7 +149,7 @@ export default function AppLayout() {
                 className={({ isActive }) =>
                   `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                     isActive
-                      ? 'bg-primary/10 text-primary'
+                      ? 'bg-primary/10 text-primary font-medium'
                       : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                   } ${sidebarCollapsed ? 'justify-center' : ''}`
                 }
@@ -177,7 +177,7 @@ export default function AppLayout() {
           </div>
           <button
             onClick={handleLogout}
-            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-surface-hover hover:text-danger ${
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-surface-hover hover:text-destructive ${
               sidebarCollapsed ? 'justify-center' : ''
             }`}
             title="退出登录"
@@ -201,6 +201,7 @@ export default function AppLayout() {
               }
             }}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+            aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
           >
             {window.innerWidth < 768 ? (
               mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />
@@ -216,14 +217,14 @@ export default function AppLayout() {
           {/* Credits Badge */}
           <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5">
             <Sparkles className="h-3.5 w-3.5 text-brand" />
-            <span className="text-xs font-medium text-foreground">{user?.credits ?? 0}</span>
+            <span className="text-xs font-medium font-mono text-foreground">{user?.credits ?? 0}</span>
             <span className="text-xs text-muted-foreground">额度</span>
           </div>
         </header>
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="animate-fadeIn">
+          <div className="mx-auto max-w-[1200px] animate-fadeIn">
             <Outlet />
           </div>
         </main>
