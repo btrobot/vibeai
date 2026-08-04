@@ -17,7 +17,7 @@ import { DrizzleModule } from './common/drizzle.module';
   imports: [
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'dist'),
-      exclude: ['/api*', '/ws*'],
+      exclude: ['/api/{*path}', '/ws/{*path}'],
       serveStaticOptions: {
         index: 'index.html',
         fallthrough: true,

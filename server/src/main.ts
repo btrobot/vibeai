@@ -43,21 +43,24 @@ async function bootstrap() {
     }),
   );
 
-  // SPA fallback: serve index.html for non-API, non-WebSocket routes
-  const expressApp = app.getHttpAdapter().getInstance();
-  expressApp.use((req: any, res: any, next: any) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/ws')) return next();
-    // If serve-static didn't find the file, serve index.html as SPA fallback
-    res.sendFile(join(__dirname, '..', '..', 'dist', 'index.html'), (err: any) => {
-      if (err) res.status(500).send('Internal Server Error');
-    });
-  });
-
   const port = process.env.PORT || process.env.BACKEND_PORT || 3001;
+  const expressApp = app.getHttpAdapter().getInstance();
 
-  // Health check endpoint (复用上面已声明的 expressApp)
+  // Health check — 注册在 app.init() 之前，确保可被路由匹配
   expressApp.get('/api/health', (_req: any, res: any) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // 显式初始化模块（ServeStaticModule 的中间件在此阶段注册）
+  await app.init();
+
+  // SPA fallback — 必须在 app.init() 之后注册，
+  // 否则会在 serve-static 之前执行，导致 JS/CSS 等静态资源返回 index.html
+  expressApp.use((req: any, res: any, next: any) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/ws')) return next();
+    res.sendFile(join(__dirname, '..', '..', 'dist', 'index.html'), (err: any) => {
+      if (err) next();
+    });
   });
 
   await app.listen(port);
