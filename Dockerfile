@@ -59,13 +59,14 @@ RUN npm install -g pnpm@9
 
 # 前端生产依赖
 COPY package.json pnpm-lock.yaml ./
+ENV HUSKY=0
 RUN --mount=type=cache,id=pnpm-store-prod-fe,sharing=locked,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --prod
+    pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # 后端生产依赖
 COPY server/package.json server/pnpm-lock.yaml ./server/
 RUN --mount=type=cache,id=pnpm-store-prod-be,sharing=locked,target=/root/.local/share/pnpm/store \
-    bash -c 'cd server && pnpm install --frozen-lockfile --prod'
+    bash -c 'cd server && HUSKY=0 pnpm install --frozen-lockfile --prod --ignore-scripts'
 
 # 归档生产 node_modules
 RUN tar cf /tmp/frontend_prod_node_modules.tar node_modules && \
