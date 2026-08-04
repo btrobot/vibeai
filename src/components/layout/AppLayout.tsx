@@ -76,7 +76,7 @@ export default function AppLayout() {
       <aside
         className={`
           fixed md:static inset-y-0 left-0 z-50
-          flex flex-col border-r border-border bg-surface
+          flex flex-col border-r border-border bg-card
           transition-all duration-300
           ${sidebarCollapsed ? 'w-16' : 'w-60'}
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
@@ -191,7 +191,7 @@ export default function AppLayout() {
       {/* Main Content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex h-14 items-center gap-4 border-b border-border bg-surface px-4">
+        <header className="flex h-14 items-center gap-4 border-b border-border bg-card px-4">
           <button
             onClick={() => {
               if (window.innerWidth < 768) {
