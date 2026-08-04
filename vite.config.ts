@@ -22,9 +22,14 @@ export default defineConfig({
       overlay: true,
       path: '/hot/vite-hmr',
       port: Number(env.VITE_PORT) || 5000,
-      // Sandbox: HMR_CLIENT_PORT=443 (HTTPS passthrough)
-      // Dev server behind nginx: HMR_CLIENT_PORT=8082 in .env.local
-      clientPort: Number(env.HMR_CLIENT_PORT) || 443,
+      // Sandbox (COZE_PROJECT_ENV=DEV): HTTPS passthrough on 443
+      // Test machine / direct access: use server port (no clientPort override)
+      // Override: set HMR_CLIENT_PORT in .env.local
+      ...(env.HMR_CLIENT_PORT
+        ? { clientPort: Number(env.HMR_CLIENT_PORT) }
+        : env.COZE_PROJECT_ENV === 'DEV'
+          ? { clientPort: 443 }
+          : {}),
       timeout: 30000,
     },
     watch: {
