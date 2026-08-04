@@ -161,7 +161,215 @@ async function main() {
   });
 
   // ─── Summary ───
-  console.log(`\n\n📊 Results: ${passed} passed, ${failed} failed, ${passed + failed} total`);
+  console.log(`\n\n📊 Auth Results: ${passed} passed, ${failed} failed, ${passed + failed} total`);
+
+  // ============================================================
+  // Gateway Integration Tests
+  // ============================================================
+  console.log('\n📋 Gateway Integration Tests\n');
+
+  // Register a fresh user for gateway tests (needs credits)
+  const gwEmail = `gw-${Date.now()}@example.com`;
+  let gwToken = '';
+  let gwUserId = '';
+  let projectId = '';
+
+  await runTest('should register gateway test user', async () => {
+    const res = await request
+      .post('/api/auth/register')
+      .send({ email: gwEmail, password: 'TestPass123!', name: 'GW Test' });
+    assert(res.status === 201, `Expected 201, got ${res.status}`);
+    assert(res.body.data.credits >= 100, `Expected >=100 credits, got ${res.body.data.credits}`);
+  });
+
+  await runTest('should login gateway test user', async () => {
+    const res = await request
+      .post('/api/auth/login')
+      .send({ email: gwEmail, password: 'TestPass123!' });
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    gwToken = res.body.data.tokens.accessToken;
+    gwUserId = res.body.data.user.id;
+    assert(gwToken, 'Expected accessToken');
+  });
+
+  await runTest('should create a project', async () => {
+    const res = await request
+      .post('/api/projects')
+      .set('Authorization', `Bearer ${gwToken}`)
+      .send({ name: 'Integration Test Project', description: 'For gateway tests' });
+    assert(res.status === 201, `Expected 201, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(res.body.data.id, 'Expected project id');
+    projectId = res.body.data.id;
+  });
+
+  // ─── Capabilities & Models ───
+  console.log('\n  GET /api/gateway/capabilities');
+
+  await runTest('should list capabilities', async () => {
+    const res = await request
+      .get('/api/gateway/capabilities')
+      .set('Authorization', `Bearer ${gwToken}`);
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    assert(Array.isArray(res.body.data), 'Expected array');
+    assert(res.body.data.length > 0, 'Expected at least 1 capability');
+  });
+
+  console.log('\n  GET /api/gateway/models');
+
+  await runTest('should list models', async () => {
+    const res = await request
+      .get('/api/gateway/models')
+      .set('Authorization', `Bearer ${gwToken}`);
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    assert(Array.isArray(res.body.data), 'Expected array');
+    assert(res.body.data.length > 0, 'Expected at least 1 model');
+  });
+
+  // ─── Image Generation (the bug that was fixed) ───
+  console.log('\n  POST /api/gateway/generate (image)');
+
+  let imageTaskId = '';
+  let imageCreateId = '';
+
+  await runTest('should submit image generation (no 500 error)', async () => {
+    const res = await request
+      .post('/api/gateway/generate')
+      .set('Authorization', `Bearer ${gwToken}`)
+      .send({
+        projectId,
+        capabilitySlug: 'image-generation',
+        modelSlug: 'doubao-seedream-5-0',
+        input: { prompt: 'a cute cat in a garden' },
+      });
+    assert(res.status === 202, `Expected 202, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(res.body.success === true, 'Expected success=true');
+    assert(res.body.data.taskId, 'Expected taskId');
+    assert(res.body.data.createId, 'Expected createId');
+    imageTaskId = res.body.data.taskId;
+    imageCreateId = res.body.data.createId;
+  });
+
+  await runTest('should query task status after submission', async () => {
+    const res = await request
+      .get(`/api/tasks/${imageTaskId}`)
+      .set('Authorization', `Bearer ${gwToken}`);
+    assert(res.status === 200, `Expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(res.body.data.id === imageTaskId, 'Expected matching taskId');
+    assert(['queued', 'submitting', 'completing', 'completed', 'failed'].includes(res.body.data.status),
+      `Unexpected status: ${res.body.data.status}`);
+  });
+
+  await runTest('should have task completed after mock execution (2s wait)', async () => {
+    // Wait for async mock execution to complete
+    await new Promise(resolve => setTimeout(resolve, 2500));
+    const res = await request
+      .get(`/api/tasks/${imageTaskId}`)
+      .set('Authorization', `Bearer ${gwToken}`);
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    assert(res.body.data.status === 'completed',
+      `Expected completed, got ${res.body.data.status}: ${JSON.stringify(res.body.data)}`);
+    assert(res.body.data.output !== null, 'Expected output to be populated');
+  });
+
+  // ─── Text Generation ───
+  console.log('\n  POST /api/gateway/generate (text)');
+
+  await runTest('should submit text generation', async () => {
+    const res = await request
+      .post('/api/gateway/generate')
+      .set('Authorization', `Bearer ${gwToken}`)
+      .send({
+        projectId,
+        capabilitySlug: 'text-generation',
+        modelSlug: 'doubao-pro-32k',
+        input: { prompt: 'Write a short poem about the ocean' },
+      });
+    assert(res.status === 202, `Expected 202, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(res.body.data.taskId, 'Expected taskId');
+  });
+
+  // ─── Video Generation ───
+  console.log('\n  POST /api/gateway/generate (video)');
+
+  await runTest('should submit video generation', async () => {
+    const res = await request
+      .post('/api/gateway/generate')
+      .set('Authorization', `Bearer ${gwToken}`)
+      .send({
+        projectId,
+        capabilitySlug: 'video-generation',
+        modelSlug: 'doubao-seedance-1-0',
+        input: { prompt: 'A sunset over mountains' },
+      });
+    assert(res.status === 202, `Expected 202, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(res.body.data.taskId, 'Expected taskId');
+  });
+
+  // ─── Quick Create ───
+  console.log('\n  POST /api/gateway/quick-create');
+
+  await runTest('should list recipes', async () => {
+    const res = await request
+      .get('/api/gateway/recipes')
+      .set('Authorization', `Bearer ${gwToken}`);
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    assert(Array.isArray(res.body.data), 'Expected array');
+    assert(res.body.data.length > 0, 'Expected at least 1 recipe');
+  });
+
+  // ─── Credit Deduction Verification ───
+  console.log('\n  Credit deduction verification');
+
+  await runTest('should have deducted credits after generations', async () => {
+    const res = await request
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${gwToken}`);
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    // Started with 100 credits, 3 generations at 1 credit each = 97 remaining
+    assert(res.body.data.credits < 100,
+      `Expected credits < 100, got ${res.body.data.credits}`);
+  });
+
+  // ─── Error Cases ───
+  console.log('\n  Error cases');
+
+  await runTest('should reject generation with invalid capability', async () => {
+    const res = await request
+      .post('/api/gateway/generate')
+      .set('Authorization', `Bearer ${gwToken}`)
+      .send({
+        projectId,
+        capabilitySlug: 'nonexistent-capability',
+        input: { prompt: 'test' },
+      });
+    assert(res.status === 404, `Expected 404, got ${res.status}`);
+  });
+
+  await runTest('should reject generation without auth', async () => {
+    const res = await request
+      .post('/api/gateway/generate')
+      .send({
+        projectId,
+        capabilitySlug: 'image-generation',
+        input: { prompt: 'test' },
+      });
+    assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  await runTest('should reject generation with empty projectId', async () => {
+    const res = await request
+      .post('/api/gateway/generate')
+      .set('Authorization', `Bearer ${gwToken}`)
+      .send({
+        projectId: '',
+        capabilitySlug: 'image-generation',
+        input: { prompt: 'test' },
+      });
+    assert(res.status === 400, `Expected 400, got ${res.status}`);
+  });
+
+  // ─── Final Summary ───
+  console.log(`\n\n📊 Total Results: ${passed} passed, ${failed} failed, ${passed + failed} total`);
   if (failed > 0) {
     console.log('\n❌ Failed tests:');
     results.filter(r => r.status === 'failed').forEach(r => {

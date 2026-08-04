@@ -137,7 +137,7 @@ export class GatewayController {
       // Credit deduction (LLM doesn't pre-deduct, charges after completion)
       await this.billingService.deductCredits(
         userId,
-        `llm-${Date.now()}`,
+        null,
         model.costCredits,
         `LLM 对话: ${model.name}`,
       );

@@ -232,7 +232,7 @@ export class GatewayService {
     // Credit pre-deduction (reserve)
     const reserved = await this.billingService.reserveCredits(
       userId,
-      'pending',
+      null,
       model.costCredits,
       `任务预扣: ${model.name}`,
     );
@@ -279,7 +279,7 @@ export class GatewayService {
     } catch (error) {
       this.logger.error(`Failed to create task: ${error}`);
       // Refund if task creation failed
-      await this.billingService.refundCredits(userId, 'pending', model.costCredits, '任务创建失败退款');
+      await this.billingService.refundCredits(userId, null, model.costCredits, '任务创建失败退款');
       await this.createService.updateStatus(createId, 'failed' as any, { errorMessage: '任务创建失败' });
       throw new BadRequestException('任务创建失败');
     }

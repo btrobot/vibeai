@@ -309,6 +309,37 @@ describe('GatewayService', () => {
 
   // ===== Coverage gap: in-memory fallback in submitGeneration (lines 215-219) =====
 
+  describe('submitGeneration — taskId 回归测试 (BUGFIX: UUID 类型)', () => {
+    it('reserveCredits 应以 null taskId 调用（非字符串 "pending"）', async () => {
+      const reserveSpy = (service as any).billingService.reserveCredits;
+      await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
+
+      expect(reserveSpy).toHaveBeenCalledTimes(1);
+      const callArgs = reserveSpy.mock.calls[0];
+      // [userId, taskId, credits, description]
+      expect(callArgs[0]).toBe('user-1');
+      expect(callArgs[1]).toBeNull(); // NOT 'pending' — was the bug
+      expect(typeof callArgs[2]).toBe('number');
+      expect(callArgs[3]).toContain('任务预扣');
+    });
+
+    it('任务创建失败时 refundCredits 也应以 null taskId 调用', async () => {
+      // Make DB insert throw to trigger the catch block
+      const refundSpy = (service as any).billingService.refundCredits;
+      db.insert.mockImplementationOnce(() => {
+        throw new Error('DB insert failed');
+      });
+
+      await expect(
+        service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(refundSpy).toHaveBeenCalledTimes(1);
+      const callArgs = refundSpy.mock.calls[0];
+      expect(callArgs[1]).toBeNull(); // NOT 'pending'
+    });
+  });
+
   describe('submitGeneration — 内存模型回退路径', () => {
     it('DB 查不到模型时应回退到内存 builtInModelMap', async () => {
       // DB returns empty for getModel (both DB row lookup and fallback)

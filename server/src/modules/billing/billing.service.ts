@@ -171,7 +171,7 @@ export class BillingService {
 
   // ===== Credit Management =====
 
-  async deductCredits(userId: string, taskId: string, credits: number, description?: string): Promise<boolean> {
+  async deductCredits(userId: string, taskId: string | null, credits: number, description?: string): Promise<boolean> {
     const [user] = await this.db
       .select()
       .from(users)
@@ -227,7 +227,7 @@ export class BillingService {
     return true;
   }
 
-  async refundCredits(userId: string, taskId: string, credits: number, description?: string): Promise<void> {
+  async refundCredits(userId: string, taskId: string | null, credits: number, description?: string): Promise<void> {
     const [user] = await this.db
       .select()
       .from(users)
@@ -345,7 +345,7 @@ export class BillingService {
    */
   async reserveCredits(
     userId: string,
-    taskId: string,
+    taskId: string | null,
     credits: number,
     description?: string,
   ): Promise<boolean> {
