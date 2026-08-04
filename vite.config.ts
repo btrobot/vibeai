@@ -18,8 +18,8 @@ export default defineConfig({
     hmr: {
       overlay: true,
       path: '/hot/vite-hmr',
-      port: 6000,
-      clientPort: 443,
+      port: 5000,
+      clientPort: 8082,
       timeout: 30000,
     },
     watch: {
