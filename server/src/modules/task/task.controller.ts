@@ -1,11 +1,11 @@
-import { Controller, Get, Post, Param, Query, Req, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Req, UseGuards, ParseUUIDPipe, Inject } from '@nestjs/common';
 import { TaskService } from './task.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('tasks')
 @UseGuards(JwtAuthGuard)
 export class TaskController {
-  constructor(private readonly taskService: TaskService) {}
+  constructor(@Inject(TaskService) private readonly taskService: TaskService) {}
 
   @Get()
   async list(

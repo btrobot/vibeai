@@ -24,7 +24,7 @@ describe('ProjectService', () => {
 
   beforeEach(() => {
     db = createDrizzleMockForNestJS();
-    service = new ProjectService({ db } as any);
+    service = new ProjectService(db as any);
   });
 
   describe('create', () => {

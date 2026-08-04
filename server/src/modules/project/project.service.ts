@@ -1,5 +1,7 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { DrizzleService } from '../../common/drizzle.service';
+import { Injectable, Logger, NotFoundException, Inject } from '@nestjs/common';
+import { DRIZZLE } from '../../common/drizzle.constants';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../../db/schema';
 import { projects, creates } from '../../db/schema/task-engine';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
 import type { CreateProjectInput, UpdateProjectInput, ProjectResponse } from '../../shared-types';
@@ -8,7 +10,7 @@ import type { CreateProjectInput, UpdateProjectInput, ProjectResponse } from '..
 export class ProjectService {
   private readonly logger = new Logger(ProjectService.name);
 
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(@Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>) {}
 
   private toResponse(p: typeof projects.$inferSelect): ProjectResponse {
     return {
@@ -27,7 +29,7 @@ export class ProjectService {
   }
 
   async create(userId: string, input: CreateProjectInput): Promise<ProjectResponse> {
-    const [p] = await this.drizzle.db
+    const [p] = await this.db
       .insert(projects)
       .values({
         userId,
@@ -45,12 +47,12 @@ export class ProjectService {
   async list(userId: string, page = 1, pageSize = 20): Promise<{ items: ProjectResponse[]; total: number }> {
     const offset = (page - 1) * pageSize;
 
-    const [totalResult] = await this.drizzle.db
+    const [totalResult] = await this.db
       .select({ count: count() })
       .from(projects)
       .where(eq(projects.userId, userId));
 
-    const items = await this.drizzle.db
+    const items = await this.db
       .select()
       .from(projects)
       .where(eq(projects.userId, userId))
@@ -65,7 +67,7 @@ export class ProjectService {
   }
 
   async getById(id: string, userId: string): Promise<ProjectResponse> {
-    const [p] = await this.drizzle.db
+    const [p] = await this.db
       .select()
       .from(projects)
       .where(and(eq(projects.id, id), eq(projects.userId, userId)));
@@ -84,7 +86,7 @@ export class ProjectService {
     }
     updateData.updatedAt = new Date();
 
-    const [p] = await this.drizzle.db
+    const [p] = await this.db
       .update(projects)
       .set(updateData)
       .where(and(eq(projects.id, id), eq(projects.userId, userId)))
@@ -95,7 +97,7 @@ export class ProjectService {
   }
 
   async delete(id: string, userId: string): Promise<void> {
-    const [p] = await this.drizzle.db
+    const [p] = await this.db
       .delete(projects)
       .where(and(eq(projects.id, id), eq(projects.userId, userId)))
       .returning({ id: projects.id });
@@ -105,7 +107,7 @@ export class ProjectService {
   }
 
   async updateCreateCounts(projectId: string): Promise<void> {
-    const [result] = await this.drizzle.db
+    const [result] = await this.db
       .select({
         total: count(),
         completed: sql<number>`count(*) filter (where ${creates.status} = 'completed')`,
@@ -114,7 +116,7 @@ export class ProjectService {
       .where(eq(creates.projectId, projectId));
 
     if (result) {
-      await this.drizzle.db
+      await this.db
         .update(projects)
         .set({
           totalTasks: Number(result.total),

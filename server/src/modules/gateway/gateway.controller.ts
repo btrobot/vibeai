@@ -11,6 +11,7 @@ import {
   HttpStatus,
   NotFoundException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { GatewayService } from './gateway.service';
@@ -23,9 +24,9 @@ import type { GenerateInput, ChatInput, QuickCreateInput } from './dto/index';
 @Controller('gateway')
 export class GatewayController {
   constructor(
-    private readonly gatewayService: GatewayService,
-    private readonly adapterRegistry: AdapterRegistry,
-    private readonly billingService: BillingService,
+    @Inject(GatewayService) private readonly gatewayService: GatewayService,
+    @Inject(AdapterRegistry) private readonly adapterRegistry: AdapterRegistry,
+    @Inject(BillingService) private readonly billingService: BillingService,
   ) {}
 
   // ===== Capabilities =====

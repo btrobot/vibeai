@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Req, Logger } from '@nestjs/common';
+import { Controller, Get, UseGuards, Req, Logger, Inject } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Request } from 'express';
@@ -8,7 +8,7 @@ import type { Request } from 'express';
 export class AdminController {
   private readonly logger = new Logger(AdminController.name);
 
-  constructor(private readonly adminService: AdminService) {}
+  constructor(@Inject(AdminService) private readonly adminService: AdminService) {}
 
   @Get('stats')
   async getStats(@Req() req: Request) {

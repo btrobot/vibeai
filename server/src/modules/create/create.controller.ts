@@ -1,11 +1,11 @@
-import { Controller, Get, Post, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Req, UseGuards, Inject } from '@nestjs/common';
 import { CreateService } from './create.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class CreateController {
-  constructor(private readonly createService: CreateService) {}
+  constructor(@Inject(CreateService) private readonly createService: CreateService) {}
 
   @Get('creates')
   async listAll(

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Req, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Req, UseGuards, HttpCode, HttpStatus, Inject } from '@nestjs/common';
 import { BillingService } from './billing.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Request } from 'express';
@@ -6,7 +6,7 @@ import type { CreateSubscriptionInput } from '../../shared-types';
 
 @Controller('billing')
 export class BillingController {
-  constructor(private readonly billing: BillingService) {}
+  constructor(@Inject(BillingService) private readonly billing: BillingService) {}
 
   @Get('plans')
   async getPlans() {

@@ -1,11 +1,11 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, Req, UseGuards, HttpCode, HttpStatus, Patch } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, Req, UseGuards, HttpCode, HttpStatus, Patch, Inject } from '@nestjs/common';
 import { GalleryService } from './gallery.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Request } from 'express';
 
 @Controller('gallery')
 export class GalleryController {
-  constructor(private readonly gallery: GalleryService) {}
+  constructor(@Inject(GalleryService) private readonly gallery: GalleryService) {}
 
   @Get('works')
   async listWorks(

@@ -1,5 +1,7 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { DrizzleService } from '../../common/drizzle.service';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { DRIZZLE } from '../../common/drizzle.constants';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../../db/schema';
 import { subscriptionPlans, subscriptions, creditUsage, invoices } from '../../db/schema/billing';
 import { users } from '../../db/schema';
 import { eq, and, desc, count, sum, gte, lte, sql } from 'drizzle-orm';
@@ -15,12 +17,12 @@ import type {
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
 
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(@Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>) {}
 
   // ===== Plan Management =====
 
   async getPlans(): Promise<PlanResponse[]> {
-    const plans = await this.drizzle.db
+    const plans = await this.db
       .select()
       .from(subscriptionPlans)
       .where(eq(subscriptionPlans.isActive, true))
@@ -30,7 +32,7 @@ export class BillingService {
   }
 
   async getPlanBySlug(slug: string): Promise<PlanResponse> {
-    const [plan] = await this.drizzle.db
+    const [plan] = await this.db
       .select()
       .from(subscriptionPlans)
       .where(eq(subscriptionPlans.slug, slug));
@@ -40,7 +42,7 @@ export class BillingService {
   }
 
   async seedDefaultPlans(): Promise<void> {
-    const existing = await this.drizzle.db.select().from(subscriptionPlans).limit(1);
+    const existing = await this.db.select().from(subscriptionPlans).limit(1);
     if (existing.length > 0) return;
 
     const defaultPlans = [
@@ -71,7 +73,7 @@ export class BillingService {
     ];
 
     for (const plan of defaultPlans) {
-      await this.drizzle.db.insert(subscriptionPlans).values(plan);
+      await this.db.insert(subscriptionPlans).values(plan);
     }
     this.logger.log('已初始化默认套餐');
   }
@@ -79,7 +81,7 @@ export class BillingService {
   // ===== Subscription Management =====
 
   async getSubscription(userId: string): Promise<SubscriptionResponse | null> {
-    const [sub] = await this.drizzle.db
+    const [sub] = await this.db
       .select()
       .from(subscriptions)
       .where(
@@ -94,7 +96,7 @@ export class BillingService {
     if (!sub) return null;
 
     const plan = await this.getPlanBySlug(
-      (await this.drizzle.db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, sub.planId)).then(r => r[0]))?.slug ?? 'free'
+      (await this.db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, sub.planId)).then(r => r[0]))?.slug ?? 'free'
     );
 
     return {
@@ -107,7 +109,7 @@ export class BillingService {
     const plan = await this.getPlanBySlug(input.planSlug);
 
     // Cancel existing active subscription
-    await this.drizzle.db
+    await this.db
       .update(subscriptions)
       .set({ status: 'cancelled', cancelledAt: new Date() })
       .where(
@@ -121,7 +123,7 @@ export class BillingService {
     const periodEnd = new Date(now);
     periodEnd.setMonth(periodEnd.getMonth() + (input.billingCycle === 'yearly' ? 12 : 1));
 
-    const [sub] = await this.drizzle.db
+    const [sub] = await this.db
       .insert(subscriptions)
       .values({
         userId,
@@ -136,7 +138,7 @@ export class BillingService {
       .returning();
 
     // Update user credits
-    await this.drizzle.db
+    await this.db
       .update(users)
       .set({ credits: plan.credits, updatedAt: now })
       .where(eq(users.id, userId));
@@ -148,7 +150,7 @@ export class BillingService {
   }
 
   async cancelSubscription(userId: string): Promise<void> {
-    const [sub] = await this.drizzle.db
+    const [sub] = await this.db
       .select()
       .from(subscriptions)
       .where(
@@ -161,7 +163,7 @@ export class BillingService {
 
     if (!sub) throw new NotFoundException('没有活跃的订阅');
 
-    await this.drizzle.db
+    await this.db
       .update(subscriptions)
       .set({ status: 'cancelled', cancelledAt: new Date(), autoRenew: false, updatedAt: new Date() })
       .where(eq(subscriptions.id, sub.id));
@@ -170,7 +172,7 @@ export class BillingService {
   // ===== Credit Management =====
 
   async deductCredits(userId: string, taskId: string, credits: number, description?: string): Promise<boolean> {
-    const [user] = await this.drizzle.db
+    const [user] = await this.db
       .select()
       .from(users)
       .where(eq(users.id, userId))
@@ -179,7 +181,7 @@ export class BillingService {
     if (!user) throw new NotFoundException('用户不存在');
     if (user.credits < credits) return false;
 
-    const [sub] = await this.drizzle.db
+    const [sub] = await this.db
       .select()
       .from(subscriptions)
       .where(
@@ -192,7 +194,7 @@ export class BillingService {
 
     const newBalance = user.credits - credits;
 
-    await this.drizzle.db.transaction(async (tx) => {
+    await this.db.transaction(async (tx) => {
       // Deduct user credits
       await tx.update(users)
         .set({ credits: newBalance, updatedAt: new Date() })
@@ -226,7 +228,7 @@ export class BillingService {
   }
 
   async refundCredits(userId: string, taskId: string, credits: number, description?: string): Promise<void> {
-    const [user] = await this.drizzle.db
+    const [user] = await this.db
       .select()
       .from(users)
       .where(eq(users.id, userId))
@@ -236,7 +238,7 @@ export class BillingService {
 
     const newBalance = user.credits + credits;
 
-    await this.drizzle.db.transaction(async (tx) => {
+    await this.db.transaction(async (tx) => {
       await tx.update(users)
         .set({ credits: newBalance, updatedAt: new Date() })
         .where(eq(users.id, userId));
@@ -255,7 +257,7 @@ export class BillingService {
   // ===== Usage Statistics =====
 
   async getUsageStats(userId: string): Promise<UsageStatsResponse> {
-    const [user] = await this.drizzle.db
+    const [user] = await this.db
       .select()
       .from(users)
       .where(eq(users.id, userId))
@@ -267,7 +269,7 @@ export class BillingService {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [monthlyUsage] = await this.drizzle.db
+    const [monthlyUsage] = await this.db
       .select({
         total: sql<number>`COALESCE(SUM(ABS(credits)), 0)`,
       })
@@ -280,7 +282,7 @@ export class BillingService {
         ),
       );
 
-    const [taskStats] = await this.drizzle.db
+    const [taskStats] = await this.db
       .select({
         completed: sql<number>`COALESCE(COUNT(*) FILTER (WHERE status = 'completed'), 0)`,
         images: sql<number>`COALESCE(COUNT(*) FILTER (WHERE type LIKE 'image-%' AND status = 'completed'), 0)`,
@@ -305,7 +307,7 @@ export class BillingService {
   }
 
   async getCreditHistory(userId: string, limit = 50): Promise<CreditUsageResponse[]> {
-    const records = await this.drizzle.db
+    const records = await this.db
       .select()
       .from(creditUsage)
       .where(eq(creditUsage.userId, userId))
@@ -327,7 +329,7 @@ export class BillingService {
   // ===== Check Credits =====
 
   async checkCredits(userId: string, requiredCredits: number): Promise<boolean> {
-    const [user] = await this.drizzle.db
+    const [user] = await this.db
       .select({ credits: users.credits })
       .from(users)
       .where(eq(users.id, userId))

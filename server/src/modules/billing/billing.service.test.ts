@@ -75,8 +75,7 @@ describe('BillingService', () => {
 
   beforeEach(() => {
     db = createDrizzleMockForNestJS();
-    const drizzleService = { db } as DrizzleService;
-    service = new BillingService(drizzleService);
+    service = new BillingService(db as any);
   });
 
   // ===== Plan Management =====

@@ -85,7 +85,7 @@ describe('TaskService', () => {
       deductCredits: vi.fn(),
       refundCredits: vi.fn(),
     };
-    service = new TaskService({ db } as any, billingMock as any);
+    service = new TaskService(db as any, billingMock as any);
   });
 
   describe('createTask', () => {

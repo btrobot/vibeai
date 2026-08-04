@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Req, UseGuards, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Req, UseGuards, HttpCode, HttpStatus, ParseUUIDPipe, Inject } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateProjectSchema, UpdateProjectSchema } from '../../shared-types';
@@ -8,7 +8,7 @@ import { ZodValidationPipe } from '../../common/zod-validation.pipe';
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
 export class ProjectController {
-  constructor(private readonly projectService: ProjectService) {}
+  constructor(@Inject(ProjectService) private readonly projectService: ProjectService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)

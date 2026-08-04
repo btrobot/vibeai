@@ -1,5 +1,7 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { DrizzleService } from '../../common/drizzle.service';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { DRIZZLE } from '../../common/drizzle.constants';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../../db/schema';
 import { creates, tasks } from '../../db/schema/task-engine';
 import { eq, and, desc, count, asc, sql } from 'drizzle-orm';
 import type { CreateResponse, CreateStatus, TaskStatus } from '../../shared-types';
@@ -8,7 +10,7 @@ import type { CreateResponse, CreateStatus, TaskStatus } from '../../shared-type
 export class CreateService {
   private readonly logger = new Logger(CreateService.name);
 
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(@Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>) {}
 
   private toResponse(c: typeof creates.$inferSelect, latestTask?: typeof tasks.$inferSelect | null): CreateResponse {
     return {
@@ -41,7 +43,7 @@ export class CreateService {
     modelSlug?: string;
     sourceCreateId?: string | null;
   }): Promise<{ id: string }> {
-    const [created] = await this.drizzle.db
+    const [created] = await this.db
       .insert(creates)
       .values({
         projectId: params.projectId,
@@ -69,7 +71,7 @@ export class CreateService {
     if (extra?.output !== undefined) updateData.output = extra.output;
     if (extra?.errorMessage !== undefined) updateData.errorMessage = extra.errorMessage;
 
-    await this.drizzle.db
+    await this.db
       .update(creates)
       .set(updateData)
       .where(eq(creates.id, createId));
@@ -81,7 +83,7 @@ export class CreateService {
    * Increment task count (called when a new task is created for this create)
    */
   async incrementTaskCount(createId: string): Promise<void> {
-    await this.drizzle.db
+    await this.db
       .update(creates)
       .set({
         taskCount: sql`${creates.taskCount} + 1`,
@@ -127,12 +129,12 @@ export class CreateService {
 
     if (status) conditions.push(eq(creates.status, status));
 
-    const [totalResult] = await this.drizzle.db
+    const [totalResult] = await this.db
       .select({ count: count() })
       .from(creates)
       .where(and(...conditions));
 
-    const items = await this.drizzle.db
+    const items = await this.db
       .select()
       .from(creates)
       .where(and(...conditions))
@@ -143,7 +145,7 @@ export class CreateService {
     // Fetch latest task for each create
     const result: CreateResponse[] = [];
     for (const c of items) {
-      const [latestTask] = await this.drizzle.db
+      const [latestTask] = await this.db
         .select()
         .from(tasks)
         .where(eq(tasks.createId, c.id))
@@ -162,14 +164,14 @@ export class CreateService {
    * Get a single create with its latest task status
    */
   async getCreate(createId: string, userId: string): Promise<CreateResponse> {
-    const [c] = await this.drizzle.db
+    const [c] = await this.db
       .select()
       .from(creates)
       .where(and(eq(creates.id, createId), eq(creates.userId, userId)));
 
     if (!c) throw new NotFoundException('创作记录不存在');
 
-    const [latestTask] = await this.drizzle.db
+    const [latestTask] = await this.db
       .select()
       .from(tasks)
       .where(eq(tasks.createId, createId))
@@ -192,12 +194,12 @@ export class CreateService {
 
     if (status) conditions.push(eq(creates.status, status));
 
-    const [totalResult] = await this.drizzle.db
+    const [totalResult] = await this.db
       .select({ count: count() })
       .from(creates)
       .where(and(...conditions));
 
-    const items = await this.drizzle.db
+    const items = await this.db
       .select()
       .from(creates)
       .where(and(...conditions))
@@ -207,7 +209,7 @@ export class CreateService {
 
     const result: CreateResponse[] = [];
     for (const c of items) {
-      const [latestTask] = await this.drizzle.db
+      const [latestTask] = await this.db
         .select()
         .from(tasks)
         .where(eq(tasks.createId, c.id))

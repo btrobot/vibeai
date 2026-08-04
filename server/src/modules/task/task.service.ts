@@ -1,5 +1,7 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { DrizzleService } from '../../common/drizzle.service';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { DRIZZLE } from '../../common/drizzle.constants';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../../db/schema';
 import { tasks, executionStates } from '../../db/schema/task-engine';
 import { eq, and, desc, count, asc } from 'drizzle-orm';
 import type { TaskResponse, ExecutionStateResponse } from '../../shared-types';
@@ -10,8 +12,8 @@ export class TaskService {
   private readonly logger = new Logger(TaskService.name);
 
   constructor(
-    private readonly drizzle: DrizzleService,
-    private readonly billing: BillingService,
+    @Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>,
+    @Inject(BillingService) private readonly billing: BillingService,
   ) {}
 
   private toTaskResponse(t: typeof tasks.$inferSelect): TaskResponse {
@@ -74,7 +76,7 @@ export class TaskService {
       }
     }
 
-    const [task] = await this.drizzle.db
+    const [task] = await this.db
       .insert(tasks)
       .values({
         userId: params.userId,
@@ -103,12 +105,12 @@ export class TaskService {
     if (status) conditions.push(eq(tasks.status, status));
     if (type) conditions.push(eq(tasks.type, type));
 
-    const [totalResult] = await this.drizzle.db
+    const [totalResult] = await this.db
       .select({ count: count() })
       .from(tasks)
       .where(and(...conditions));
 
-    const items = await this.drizzle.db
+    const items = await this.db
       .select()
       .from(tasks)
       .where(and(...conditions))
@@ -123,7 +125,7 @@ export class TaskService {
   }
 
   async getTask(taskId: string, userId: string): Promise<TaskResponse> {
-    const [task] = await this.drizzle.db
+    const [task] = await this.db
       .select()
       .from(tasks)
       .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
@@ -152,7 +154,7 @@ export class TaskService {
       updateData.progress = Math.max(0, Math.min(100, Number(updateData.progress)));
     }
 
-    const [task] = await this.drizzle.db
+    const [task] = await this.db
       .update(tasks)
       .set(updateData)
       .where(eq(tasks.id, taskId))
@@ -172,7 +174,7 @@ export class TaskService {
       throw new BadRequestException('任务已完成或已取消，无法取消');
     }
 
-    const [updated] = await this.drizzle.db
+    const [updated] = await this.db
       .update(tasks)
       .set({ status: 'cancelled', updatedAt: new Date(), completedAt: new Date() })
       .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
@@ -194,7 +196,7 @@ export class TaskService {
       throw new BadRequestException('只有失败的任务可以重试');
     }
 
-    const [updated] = await this.drizzle.db
+    const [updated] = await this.db
       .update(tasks)
       .set({
         status: 'queued',
@@ -272,7 +274,7 @@ export class TaskService {
   // ===== Execution States =====
 
   async createExecutionState(taskId: string, step: string): Promise<ExecutionStateResponse> {
-    const [state] = await this.drizzle.db
+    const [state] = await this.db
       .insert(executionStates)
       .values({ taskId, step, status: 'running', startedAt: new Date() })
       .returning();
@@ -290,7 +292,7 @@ export class TaskService {
       completedAt: Date;
     }>,
   ): Promise<ExecutionStateResponse> {
-    const [state] = await this.drizzle.db
+    const [state] = await this.db
       .update(executionStates)
       .set(update)
       .where(eq(executionStates.id, stateId))
@@ -301,7 +303,7 @@ export class TaskService {
   }
 
   async getExecutionStates(taskId: string): Promise<ExecutionStateResponse[]> {
-    const states = await this.drizzle.db
+    const states = await this.db
       .select()
       .from(executionStates)
       .where(eq(executionStates.taskId, taskId))
