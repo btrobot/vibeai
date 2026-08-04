@@ -26,7 +26,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 |----|------|------|------|---------|
 | auth | 4 | 8 | 10 | ✅ |
 | billing | 4 | 10 | 8 | ✅ |
-| engine | 3 | 12 | 8 | ✅ |
+| engine | 4 | 14 | 10 | ✅ |
 | gallery | 2 | 7 | 5 | ✅ |
 | gateway | 3 | 7 | 5 | ✅ |
 | storage | 1 | 7 | 7 | ✅ |
@@ -187,6 +187,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 4: WebSocket | `ws.service.test.ts` | 14 | 98.82% | ≥80% | ✅ |
 | Phase 5: Billing | `billing.service.test.ts` | 26 | 90.2% | ≥90% | ✅ |
 | Phase 6: Gallery Service | `gallery.service.test.ts` | 14 | 85.0% | ≥85% | ✅ |
+| Phase 6: Create Service | `create.service.test.ts` | 23 | — | ≥85% | ✅ |
 | Phase 6: User Service | `user.service.test.ts` | 4 | 100% | ≥80% | ✅ |
 | Phase 6: Admin Service | `admin.service.test.ts` | 2 | 100% | ≥60% | ✅ |
 | Phase 6: Spec Compliance | `spec-compliance.test.ts` | 22 | — | — | ✅ |
@@ -212,18 +213,18 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 3: Video Adapter | `video.adapter.test.ts` | 16 | 98% | ≥85% | ✅ |
 | Phase 3: LLM Adapter | `llm.adapter.test.ts` | 11 | 96% | ≥85% | ✅ |
 | Phase 3: Task Execution | `task-execution.service.test.ts` | 14 | 98.5% | ≥85% | ✅ |
-| **合计（后端）** | | **398** | — | — | **✅ 全部通过** |
-| **合计（前端）** | | **71** | — | — | **⚠️ 68/71 通过** |
+| **合计（后端）** | | **443** | — | — | **✅ 全部通过** |
+| **合计（前端）** | | **71** | — | — | **⚠️ 69/71 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **502** | — | — | **✅ 499/502 通过** |
+| **总计** | | **547** | — | — | **✅ 544/547 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ⏹️ 需手动构建后运行 |
 
 ### 已知问题
 - **tsx ESM loader 与 NestJS 装饰器不兼容**：集成测试无法通过 vitest 运行（`NestFactory.create` 在 tsx 环境下导致 `authService` 为 undefined）。解决方案：先 `pnpm build` 编译为 JavaScript，再通过 `node scripts/test-integration.js` 运行。
 - **JWT 重复 token 问题**：`generateTokens` 方法在相同秒内调用会生成相同的 JWT（`iat` 相同），导致 `sessions.refreshToken` 唯一约束冲突。已通过添加 `jti` 随机值修复。
 - **DrizzleMock 多查询限制**：`mockSingle` 在服务方法需要多次查询（如注册时先查询再插入）时只能返回第一个结果。解决方案：使用 `mockResolvedValueOnce([])` + `mockReturning` 组合模式。
-- **前端 3 个预存测试失败**：`DashboardPage.test.tsx`（找不到"处理中"文本）、`WorkspacePage.test.tsx`（同上）、`RegisterPage.test.tsx`（密码可见切换按钮 accessible name 为空）。均为 UI 文本/属性不匹配，非后端问题。
+- **前端 2 个预存测试失败**：`DashboardPage.test.tsx`（找不到"处理中"文本）、`RegisterPage.test.tsx`（密码可见切换按钮 accessible name 为空）。均为 UI 文本/属性不匹配，非后端问题。WorkspacePage 测试已修复（迁移到 Create 实体后通过）。
 
 ## 关键架构决策
 
@@ -233,6 +234,11 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - 异步任务模式，WebSocket 实时进度
 - 存储层 Provider 抽象，支持无缝切换
 - AI Gateway 三层架构: Capability → Router → Model
+- **Create 实体层**：Project → Create → Task → ExecutionState
+  - Create 代表用户的创意意图（一次灵感引发的创作/修改）
+  - Task 代表执行单元（当前 1:1，未来支持多步能力时 1:N）
+  - `sourceCreateId` 自引用 FK：null=原创，非 null=基于之前创作的修改
+  - `syncCreateStatus`（ENG-012）：Task 完成或失败时自动同步 Create 状态
 
 ## CI/CD 流水线
 

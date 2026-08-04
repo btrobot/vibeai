@@ -31,6 +31,12 @@ describe('GatewayService', () => {
         refundCredits: vi.fn().mockResolvedValue(undefined),
         deductCredits: vi.fn().mockResolvedValue(true),
       } as any,
+      {
+        createCreate: vi.fn().mockResolvedValue({ id: 'create-1' }),
+        updateStatus: vi.fn().mockResolvedValue(undefined),
+        incrementTaskCount: vi.fn().mockResolvedValue(undefined),
+        syncCreateStatus: vi.fn().mockResolvedValue(undefined),
+      } as any,
     );
   });
 
@@ -191,7 +197,7 @@ describe('GatewayService', () => {
 
   describe('submitGeneration', () => {
     it('提交有效能力时创建任务并返回 queued 状态', async () => {
-      const result = await service.submitGeneration('user-1', 'text-generation', { prompt: 'Hello' });
+      const result = await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'Hello' });
       expect(result).toBeDefined();
       expect(result.taskId).toBeDefined();
       expect(result.status).toBe('queued');
@@ -202,7 +208,7 @@ describe('GatewayService', () => {
 
     it('不存在的能力抛出 NotFoundException', async () => {
       await expect(
-        service.submitGeneration('user-1', 'non-existent', {}),
+        service.submitGeneration('user-1', 'proj-1', 'non-existent', {}),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -212,13 +218,14 @@ describe('GatewayService', () => {
       // 实际测试：用一个不存在的 preferredModel 能触发正常路由就行
       // 真正的"无模型"场景已在 routeCapability 返回 null 时测试
       await expect(
-        service.submitGeneration('user-1', 'non-existent', {}),
+        service.submitGeneration('user-1', 'proj-1', 'non-existent', {}),
       ).rejects.toThrow(NotFoundException);
     });
 
     it('提交时指定 preferredModel 并且模型支持该能力', async () => {
       const result = await service.submitGeneration(
         'user-1',
+        'proj-1',
         'text-generation',
         { prompt: 'Hello' },
         'kimi-k2-5-260127',
@@ -230,6 +237,7 @@ describe('GatewayService', () => {
       // SeeDream 5.0 是图片模型，不支持 text-generation
       const result = await service.submitGeneration(
         'user-1',
+        'proj-1',
         'text-generation',
         { prompt: 'Hello' },
         'doubao-seedream-5-0-260128',
@@ -277,14 +285,14 @@ describe('GatewayService', () => {
       // Mock reserveCredits to return false (insufficient credits)
       (service as any).billingService.reserveCredits = vi.fn().mockResolvedValue(false);
       await expect(
-        service.submitGeneration('user-low-credits', 'text-generation', { prompt: 'test' }),
+        service.submitGeneration('user-low-credits', 'proj-1', 'text-generation', { prompt: 'test' }),
       ).rejects.toThrow(BadRequestException);
     });
 
     // Spec compliance stubs for GTW-006 / GTW-008
     it('should persist generated results', async () => {
       // Verify submitGeneration creates a task with output field
-      const result = await service.submitGeneration('user-1', 'text-generation', { prompt: 'Hello' });
+      const result = await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'Hello' });
       expect(result).toBeDefined();
       expect(result.taskId).toBeDefined();
       // The actual persistence to StorageObject happens in TaskExecutionService.transferResult
@@ -305,7 +313,7 @@ describe('GatewayService', () => {
     it('DB 查不到模型时应回退到内存 builtInModelMap', async () => {
       // DB returns empty for getModel (both DB row lookup and fallback)
       // But builtInModelMap has the model, so it should use that
-      const result = await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+      const result = await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
 
       expect(result).toBeDefined();
       expect(result.status).toBe('queued');
@@ -320,7 +328,7 @@ describe('GatewayService', () => {
         throw new Error('DB connection lost');
       });
 
-      const result = await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+      const result = await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
 
       expect(result).toBeDefined();
       expect(result.status).toBe('queued');

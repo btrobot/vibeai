@@ -22,10 +22,35 @@ export const projects = pgTable('projects', {
   index('projects_created_at_idx').on(table.createdAt),
 ]);
 
+// ===== Creates Table =====
+// 创作记录 — 用户的一次创作意图，一个 Create 对应一次或多次 Task 执行（重试）
+export const creates = pgTable('creates', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  capabilitySlug: varchar('capability_slug', { length: 100 }).notNull(),
+  prompt: text('prompt').notNull(),
+  sourceCreateId: uuid('source_create_id'), // null=原创, 非null=基于该创作的修改（自引用 FK 在下方处理）
+  status: varchar('status', { length: 20 }).notNull().default('draft'), // draft | processing | completed | failed | cancelled
+  output: jsonb('output'),
+  modelSlug: varchar('model_slug', { length: 100 }),
+  taskCount: integer('task_count').notNull().default(0),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => [
+  index('creates_project_id_idx').on(table.projectId),
+  index('creates_user_id_idx').on(table.userId),
+  index('creates_status_idx').on(table.status),
+  index('creates_source_create_id_idx').on(table.sourceCreateId),
+  index('creates_created_at_idx').on(table.createdAt),
+]);
+
 // ===== Tasks Table =====
 export const tasks = pgTable('tasks', {
   id: uuid('id').defaultRandom().primaryKey(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  createId: uuid('create_id').references(() => creates.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   type: varchar('type', { length: 50 }).notNull(), // capability slug: text_generation, image_generation, video_generation
   status: varchar('status', { length: 20 }).notNull().default('queued'), // queued | submitting | completing | completed | failed | cancelled
@@ -48,6 +73,7 @@ export const tasks = pgTable('tasks', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (table) => [
   index('tasks_project_id_idx').on(table.projectId),
+  index('tasks_create_id_idx').on(table.createId),
   index('tasks_user_id_idx').on(table.userId),
   index('tasks_status_idx').on(table.status),
   index('tasks_type_idx').on(table.type),

@@ -172,37 +172,42 @@ describe('GatewayController', () => {
         capabilitySlug: 'image-generation',
         modelSlug: 'doubao-seedream-5-0',
         createdAt: '2025-01-01T00:00:00.000Z',
+        createId: 'create-1',
       };
       mockGatewayService.submitGeneration.mockResolvedValue(taskResponse);
 
       const result = await controller.generate(
         createMockRequest(),
-        { capabilitySlug: 'image-generation', input: { prompt: '一只猫' } },
+        { capabilitySlug: 'image-generation', input: { prompt: '一只猫' }, projectId: 'proj-1' },
       );
 
       expect(result).toEqual({ success: true, data: taskResponse });
       expect(mockGatewayService.submitGeneration).toHaveBeenCalledWith(
         'user-1',
+        'proj-1',
         'image-generation',
         { prompt: '一只猫' },
+        undefined,
         undefined,
       );
     });
 
     it('应传递 modelSlug 参数', async () => {
-      const taskResponse = { taskId: 'task-1', status: 'queued' as const, capabilitySlug: 'text-generation', modelSlug: 'kimi-k2-5', createdAt: '2025-01-01T00:00:00.000Z' };
+      const taskResponse = { taskId: 'task-1', status: 'queued' as const, capabilitySlug: 'text-generation', modelSlug: 'kimi-k2-5', createdAt: '2025-01-01T00:00:00.000Z', createId: 'create-1' };
       mockGatewayService.submitGeneration.mockResolvedValue(taskResponse);
 
       await controller.generate(
         createMockRequest(),
-        { capabilitySlug: 'text-generation', modelSlug: 'kimi-k2-5', input: { prompt: '你好' } },
+        { capabilitySlug: 'text-generation', modelSlug: 'kimi-k2-5', input: { prompt: '你好' }, projectId: 'proj-1' },
       );
 
       expect(mockGatewayService.submitGeneration).toHaveBeenCalledWith(
         'user-1',
+        'proj-1',
         'text-generation',
         { prompt: '你好' },
         'kimi-k2-5',
+        undefined,
       );
     });
   });
@@ -211,28 +216,28 @@ describe('GatewayController', () => {
 
   describe('POST /gateway/quick-create', () => {
     it('应通过配方提交生成任务', async () => {
-      const taskResponse = { taskId: 'task-1', status: 'queued' as const, capabilitySlug: 'image-generation', modelSlug: 'doubao-seedream-5-0', createdAt: '2025-01-01T00:00:00.000Z' };
+      const taskResponse = { taskId: 'task-1', status: 'queued' as const, capabilitySlug: 'image-generation', modelSlug: 'doubao-seedream-5-0', createdAt: '2025-01-01T00:00:00.000Z', createId: 'create-1' };
       mockGatewayService.quickCreate.mockResolvedValue(taskResponse);
 
       const result = await controller.quickCreate(
         createMockRequest(),
-        { recipeId: 'text-to-image', input: { prompt: '一只猫' } },
+        { recipeId: 'text-to-image', input: { prompt: '一只猫' }, projectId: 'proj-1' },
       );
 
       expect(result).toEqual({ success: true, data: taskResponse });
-      expect(mockGatewayService.quickCreate).toHaveBeenCalledWith('user-1', 'text-to-image', { prompt: '一只猫' });
+      expect(mockGatewayService.quickCreate).toHaveBeenCalledWith('user-1', 'proj-1', 'text-to-image', { prompt: '一只猫' });
     });
 
     it('应支持无 input 的配方调用', async () => {
-      const taskResponse = { taskId: 'task-2', status: 'queued' as const, capabilitySlug: 'text-generation', modelSlug: 'doubao-seed-2-0-pro', createdAt: '2025-01-01T00:00:00.000Z' };
+      const taskResponse = { taskId: 'task-2', status: 'queued' as const, capabilitySlug: 'text-generation', modelSlug: 'doubao-seed-2-0-pro', createdAt: '2025-01-01T00:00:00.000Z', createId: 'create-2' };
       mockGatewayService.quickCreate.mockResolvedValue(taskResponse);
 
       await controller.quickCreate(
         createMockRequest(),
-        { recipeId: 'prompt-enhance' },
+        { recipeId: 'prompt-enhance', projectId: 'proj-1' },
       );
 
-      expect(mockGatewayService.quickCreate).toHaveBeenCalledWith('user-1', 'prompt-enhance', undefined);
+      expect(mockGatewayService.quickCreate).toHaveBeenCalledWith('user-1', 'proj-1', 'prompt-enhance', undefined);
     });
   });
 

@@ -32,6 +32,12 @@ describe('Gateway Spec Tests', () => {
       { db } as any,
       { executeTask: vi.fn().mockResolvedValue(undefined) } as any,
       mockBillingService as any,
+      {
+        createCreate: vi.fn().mockResolvedValue({ id: 'create-1' }),
+        updateStatus: vi.fn().mockResolvedValue(undefined),
+        incrementTaskCount: vi.fn().mockResolvedValue(undefined),
+        syncCreateStatus: vi.fn().mockResolvedValue(undefined),
+      } as any,
     );
   });
 
@@ -95,7 +101,7 @@ describe('Gateway Spec Tests', () => {
   describe('GTW-004: model_capability_valid', () => {
     it('不存在的能力抛出 NotFoundException', async () => {
       await expect(
-        service.submitGeneration('user-1', 'non-existent', {}),
+        service.submitGeneration('user-1', 'proj-1', 'non-existent', {}),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -103,6 +109,7 @@ describe('Gateway Spec Tests', () => {
       // preferredModel 不支持该能力 → 回退到默认
       const result = await service.submitGeneration(
         'user-1',
+        'proj-1',
         'text-generation',
         { prompt: 'Hello' },
         'doubao-seedream-5-0-260128', // 图片模型不支持文本生成
@@ -113,7 +120,7 @@ describe('Gateway Spec Tests', () => {
     it('能力没有可用模型时抛出异常', async () => {
       // 使用不存在的能力
       await expect(
-        service.submitGeneration('user-1', 'fake-capability', {}),
+        service.submitGeneration('user-1', 'proj-1', 'fake-capability', {}),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -125,7 +132,7 @@ describe('Gateway Spec Tests', () => {
   // ============================================================
   describe('GTW-005: credit_reserve_before_submit', () => {
     it('提交任务时调用 reserveCredits', async () => {
-      await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+      await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
       expect(mockBillingService.reserveCredits).toHaveBeenCalledTimes(1);
       expect(mockBillingService.reserveCredits).toHaveBeenCalledWith(
         'user-1',
@@ -138,7 +145,7 @@ describe('Gateway Spec Tests', () => {
     it('信用不足时拒绝创建任务', async () => {
       mockBillingService.reserveCredits.mockResolvedValue(false);
       await expect(
-        service.submitGeneration('user-1', 'text-generation', { prompt: 'test' }),
+        service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' }),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -146,7 +153,7 @@ describe('Gateway Spec Tests', () => {
       mockBillingService.reserveCredits.mockResolvedValue(false);
       const insertSpy = vi.spyOn(db, 'insert');
       try {
-        await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+        await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
       } catch {
         // expected
       }
@@ -159,7 +166,7 @@ describe('Gateway Spec Tests', () => {
         throw new Error('DB connection failed');
       });
       await expect(
-        service.submitGeneration('user-1', 'text-generation', { prompt: 'test' }),
+        service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' }),
       ).rejects.toThrow(BadRequestException);
       expect(mockBillingService.refundCredits).toHaveBeenCalledWith(
         'user-1', 'pending', expect.any(Number), '任务创建失败退款',
@@ -177,7 +184,7 @@ describe('Gateway Spec Tests', () => {
         return { values: () => ({ then: (cb: any) => cb() }) } as any;
       });
 
-      await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+      await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
 
       expect(callOrder.indexOf('reserveCredits')).toBeLessThan(callOrder.indexOf('insert'));
     });
@@ -190,7 +197,7 @@ describe('Gateway Spec Tests', () => {
   // ============================================================
   describe('GTW-006: result_persist', () => {
     it('submitGeneration 创建的任务包含 output 字段用于存储结果', async () => {
-      const result = await service.submitGeneration('user-1', 'text-generation', { prompt: 'Hello' });
+      const result = await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'Hello' });
       expect(result).toBeDefined();
       expect(result.taskId).toBeDefined();
       expect(result.status).toBe('queued');
@@ -199,7 +206,7 @@ describe('Gateway Spec Tests', () => {
     });
 
     it('任务返回结果包含 estimatedCompletionAt（超时时间）', async () => {
-      const result = await service.submitGeneration('user-1', 'text-generation', { prompt: 'Hello' });
+      const result = await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'Hello' });
       expect(result.estimatedCompletionAt).toBeDefined();
       // 30 分钟超时
       const expires = new Date(result.estimatedCompletionAt!).getTime();
@@ -338,7 +345,7 @@ describe('Gateway Spec Tests', () => {
   // ============================================================
   describe('操作: submitGeneration', () => {
     it('创建 Task 记录（status=queued）', async () => {
-      const result = await service.submitGeneration('user-1', 'text-generation', { prompt: 'Hello' });
+      const result = await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'Hello' });
       expect(result.status).toBe('queued');
       expect(result.taskId).toBeDefined();
       expect(result.capabilitySlug).toBe('text-generation');
@@ -348,7 +355,7 @@ describe('Gateway Spec Tests', () => {
       const execSpy = vi.fn().mockResolvedValue(undefined);
       (service as any).taskExecution = { executeTask: execSpy };
 
-      await service.submitGeneration('user-1', 'text-generation', { prompt: 'Hello' });
+      await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'Hello' });
 
       // executeTask should have been called (fire-and-forget)
       expect(execSpy).toHaveBeenCalled();
@@ -357,13 +364,13 @@ describe('Gateway Spec Tests', () => {
     it('错误场景: 信用不足返回 402 语义（BadRequestException）', async () => {
       mockBillingService.reserveCredits.mockResolvedValue(false);
       await expect(
-        service.submitGeneration('user-1', 'text-generation', { prompt: 'test' }),
+        service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' }),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('错误场景: 模型不存在返回 404', async () => {
       await expect(
-        service.submitGeneration('user-1', 'non-existent', {}),
+        service.submitGeneration('user-1', 'proj-1', 'non-existent', {}),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -373,7 +380,7 @@ describe('Gateway Spec Tests', () => {
   // ============================================================
   describe('操作: quickCreate', () => {
     it('根据 recipeId 查找预设配置', async () => {
-      const result = await service.quickCreate('user-1', 'text-to-image', { prompt: 'a cat' });
+      const result = await service.quickCreate('user-1', 'proj-1', 'text-to-image', { prompt: 'a cat' });
       expect(result).toBeDefined();
       expect(result.taskId).toBeDefined();
       expect(result.capabilitySlug).toBe('image-generation');
@@ -382,10 +389,11 @@ describe('Gateway Spec Tests', () => {
     it('合并用户输入参数（defaultInput + 用户 input）', async () => {
       const submitSpy = vi.spyOn(service, 'submitGeneration');
 
-      await service.quickCreate('user-1', 'text-to-image', { prompt: 'a cat' });
+      await service.quickCreate('user-1', 'proj-1', 'text-to-image', { prompt: 'a cat' });
 
       expect(submitSpy).toHaveBeenCalledWith(
         'user-1',
+        'proj-1',
         'image-generation',
         expect.objectContaining({
           prompt: 'a cat',
@@ -397,17 +405,18 @@ describe('Gateway Spec Tests', () => {
 
     it('Recipe 不存在时抛出 NotFoundException（404）', async () => {
       await expect(
-        service.quickCreate('user-1', 'non-existent-recipe', {}),
+        service.quickCreate('user-1', 'proj-1', 'non-existent-recipe', {}),
       ).rejects.toThrow(NotFoundException);
     });
 
     it('无用户 input 时使用 recipe 默认参数', async () => {
       const submitSpy = vi.spyOn(service, 'submitGeneration');
 
-      await service.quickCreate('user-1', 'text-to-image');
+      await service.quickCreate('user-1', 'proj-1', 'text-to-image');
 
       expect(submitSpy).toHaveBeenCalledWith(
         'user-1',
+        'proj-1',
         'image-generation',
         expect.objectContaining({ size: '2K' }),
         'doubao-seedream-5-0',

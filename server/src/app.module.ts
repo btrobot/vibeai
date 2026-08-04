@@ -8,6 +8,7 @@ import { GatewayModule } from './modules/gateway/gateway.module';
 import { WsModule } from './modules/ws/ws.module';
 import { ProjectModule } from './modules/project/project.module';
 import { TaskModule } from './modules/task/task.module';
+import { CreateModule } from './modules/create/create.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { GalleryModule } from './modules/gallery/gallery.module';
@@ -34,6 +35,7 @@ import { DrizzleModule } from './common/drizzle.module';
     GatewayModule,
     ProjectModule,
     TaskModule,
+    CreateModule,
     BillingModule,
     AdminModule,
     GalleryModule,

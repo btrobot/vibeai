@@ -56,7 +56,7 @@ interface SpecStateMachine {
 interface SpecFile {
   domain: string; version: string;
   entities: SpecEntity[]; operations: SpecOperation[];
-  rules: SpecRule[]; state_machine?: SpecStateMachine;
+  rules: SpecRule[]; state_machine?: SpecStateMachine; state_machines?: SpecStateMachine[];
   seed_data?: Record<string, unknown>[];
   _file?: string;
 }
@@ -420,37 +420,42 @@ describe('5. 状态机', () => {
 
   it('所有状态机转换合法', () => {
     for (const spec of _specs) {
-      if (!spec.state_machine) continue;
-      const sm = spec.state_machine;
-
-      for (const transition of sm.transitions) {
-        expect(sm.states[transition.from]).toBeDefined(
-          `状态机 ${sm.entity} 起始状态 ${transition.from} 未定义`,
-        );
-        for (const to of transition.to) {
-          expect(sm.states[to]).toBeDefined(
-            `状态机 ${sm.entity} 目标状态 ${to} 未定义`,
+      // Support both state_machine (singular) and state_machines (array)
+      // Only process machines with Record-style states (skip array-style from auth/billing)
+      const allMachines: SpecStateMachine[] = spec.state_machines ?? (spec.state_machine ? [spec.state_machine] : []);
+      const machines = allMachines.filter(sm => sm.field && !Array.isArray(sm.states));
+      for (const sm of machines) {
+        for (const transition of sm.transitions) {
+          expect(sm.states[transition.from]).toBeDefined(
+            `状态机 ${sm.entity} 起始状态 ${transition.from} 未定义`,
           );
+          for (const to of transition.to) {
+            expect(sm.states[to]).toBeDefined(
+              `状态机 ${sm.entity} 目标状态 ${to} 未定义`,
+            );
+          }
         }
-      }
 
-      // 不存在自循环转换
-      const hasSelfLoop = sm.transitions.some(t => t.to.some(to => t.from === to));
-      expect(hasSelfLoop).toBe(false);
+        // 不存在自循环转换
+        const hasSelfLoop = sm.transitions.some(t => t.to.some(to => t.from === to));
+        expect(hasSelfLoop).toBe(false);
+      }
     }
   });
 
   it('状态机字段名在 DB schema 中有对应列', () => {
     if (!_schemaTables) _schemaTables = loadSchemaTables();
     for (const spec of _specs) {
-      if (!spec.state_machine) continue;
-      const sm = spec.state_machine;
-      // 查找实体对应的表
-      const entity = spec.entities.find(e => e.name === sm.entity);
-      expect(entity).toBeDefined(`状态机实体 ${sm.entity} 未定义`);
-      if (entity) {
-        const fieldExists = entity.fields.some(f => f.name === sm.field);
-        expect(fieldExists).toBe(true, `${spec.domain}.${sm.entity} 缺少状态字段 ${sm.field}`);
+      const allMachines: SpecStateMachine[] = spec.state_machines ?? (spec.state_machine ? [spec.state_machine] : []);
+      const machines = allMachines.filter(sm => sm.field && !Array.isArray(sm.states));
+      for (const sm of machines) {
+        // 查找实体对应的表
+        const entity = spec.entities.find(e => e.name === sm.entity);
+        expect(entity).toBeDefined(`状态机实体 ${sm.entity} 未定义`);
+        if (entity) {
+          const fieldExists = entity.fields.some(f => f.name === sm.field);
+          expect(fieldExists).toBe(true, `${spec.domain}.${sm.entity} 缺少状态字段 ${sm.field}`);
+        }
       }
     }
   });

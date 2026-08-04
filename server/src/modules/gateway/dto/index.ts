@@ -1,10 +1,12 @@
 import { z } from 'zod';
 
 export const GenerateSchema = z.object({
+  projectId: z.string().min(1, '项目 ID 不能为空'),
   capabilitySlug: z.string().min(1, '能力标识不能为空'),
   modelSlug: z.string().optional(),
   input: z.record(z.unknown()),
   config: z.record(z.unknown()).optional(),
+  sourceCreateId: z.string().optional(),
 });
 
 export const GenerateResponseSchema = z.object({
@@ -34,6 +36,7 @@ export const ChatSchema = z.object({
 export type ChatInput = z.infer<typeof ChatSchema>;
 
 export const QuickCreateSchema = z.object({
+  projectId: z.string().min(1, '项目 ID 不能为空'),
   recipeId: z.string().min(1, '方案 ID 不能为空'),
   input: z.record(z.unknown()).optional(),
 });

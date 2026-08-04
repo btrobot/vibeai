@@ -34,6 +34,10 @@ const mockAdapterRegistry = {
   getAdapter: vi.fn().mockReturnValue(mockAdapter),
 };
 
+const mockCreateService = {
+  syncCreateStatus: vi.fn().mockResolvedValue(undefined),
+};
+
 describe('Engine Spec Tests', () => {
   let service: TaskExecutionService;
   let db: ReturnType<typeof createDrizzleMockForNestJS>;
@@ -57,6 +61,7 @@ describe('Engine Spec Tests', () => {
       mockWsService as any,
       mockStorageService as any,
       mockBillingService as any,
+      mockCreateService as any,
       mockAdapterRegistry as any,
     );
   });

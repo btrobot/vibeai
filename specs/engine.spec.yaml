@@ -1,6 +1,6 @@
 domain: engine
-version: '2.0'
-last_updated: '2025-01-15'
+version: '3.0'
+last_updated: '2025-01-20'
 entities:
   - name: Project
     table: projects
@@ -66,6 +66,90 @@ entities:
         fields:
           - createdAt
     timestamps: true
+  - name: Create
+    table: creates
+    description: 创作记录 — 用户的一次创作意图
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: projectId
+        type: uuid
+        notNull: true
+        fk:
+          table: projects
+          field: id
+          onDelete: cascade
+      - name: userId
+        type: uuid
+        notNull: true
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
+      - name: capabilitySlug
+        type: varchar(100)
+        notNull: true
+        desc: AI 能力标识
+      - name: prompt
+        type: text
+        notNull: true
+        desc: 用户输入的提示词
+      - name: sourceCreateId
+        type: uuid
+        nullable: true
+        fk:
+          table: creates
+          field: id
+          onDelete: set null
+        desc: 溯源创作 ID，null=原创，非null=基于该创作的修改
+      - name: status
+        type: varchar(20)
+        notNull: true
+        default: draft
+        desc: draft | processing | completed | failed | cancelled
+      - name: output
+        type: jsonb
+        nullable: true
+        desc: 最终输出摘要
+      - name: modelSlug
+        type: varchar(100)
+        nullable: true
+        desc: 用户指定的模型 slug
+      - name: taskCount
+        type: integer
+        notNull: true
+        default: 0
+        desc: 执行尝试次数（含重试）
+      - name: errorMessage
+        type: text
+        nullable: true
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: creates_project_id_idx
+        fields:
+          - projectId
+      - name: creates_user_id_idx
+        fields:
+          - userId
+      - name: creates_status_idx
+        fields:
+          - status
+      - name: creates_source_create_id_idx
+        fields:
+          - sourceCreateId
+      - name: creates_created_at_idx
+        fields:
+          - createdAt
+    timestamps: true
   - name: Task
     table: tasks
     description: AI 生成任务
@@ -81,6 +165,14 @@ entities:
           table: projects
           field: id
           onDelete: set null
+      - name: createId
+        type: uuid
+        nullable: true
+        fk:
+          table: creates
+          field: id
+          onDelete: cascade
+        desc: 所属创作记录 ID
       - name: userId
         type: uuid
         notNull: true
@@ -177,6 +269,9 @@ entities:
       - name: tasks_source_task_id_idx
         fields:
           - sourceTaskId
+      - name: tasks_create_id_idx
+        fields:
+          - createId
     timestamps: true
   - name: ExecutionState
     table: execution_states
@@ -296,6 +391,53 @@ operations:
       - status: 404
         condition: 项目不存在
         message: 项目不存在
+    test: true
+  - name: listCreates
+    method: GET
+    path: /projects/:projectId/creates
+    description: 获取项目下的创作记录列表
+    auth: jwt
+    pre:
+      - 用户已登录
+      - 项目存在且属于当前用户
+    post:
+      - 返回该项目下的 Create 列表
+    errors:
+      - status: 404
+        condition: 项目不存在
+        message: 项目不存在
+    test: true
+  - name: getCreate
+    method: GET
+    path: /creates/:id
+    description: 获取创作记录详情（含关联 Task 状态）
+    auth: jwt
+    pre:
+      - 用户已登录
+      - 创作记录存在且属于当前用户
+    post:
+      - 返回 Create 详情 + 关联 Task 的执行状态
+    errors:
+      - status: 404
+        condition: 创作记录不存在
+        message: 创作记录不存在
+    test: true
+  - name: retryCreate
+    method: POST
+    path: /creates/:id/retry
+    description: 重试失败的创作
+    auth: jwt
+    pre:
+      - 用户已登录
+      - 创作记录存在且属于当前用户
+      - 创作记录状态为 failed
+    effect:
+      - 创建新的 Task 关联到该 Create
+      - 重置 Create 状态为 processing
+    errors:
+      - status: 422
+        condition: 创作记录状态不可重试
+        message: 只有失败的创作可以重试
     test: true
   - name: createTask
     method: N/A
@@ -443,6 +585,20 @@ rules:
     description: 任务超过 expiresAt 未完成时自动标记 failed 并退还信用
     enforcement: 定时扫描 expiresAt < now() 且 status 为 submitting 的任务
     test: should fail task and refund credits
+  - name: create_owner_only
+    id: ENG-011
+    severity: error
+    level: error
+    description: 只有创作记录所有者可查看/重试
+    enforcement: 所有 Create 操作检查 userId = jwt.userId
+    test: should throw NotFoundException when create not found
+  - name: create_status_sync
+    id: ENG-012
+    severity: error
+    level: error
+    description: Task 状态变更时必须同步更新关联 Create 的状态
+    enforcement: taskExecution 完成或失败时调用 createService.syncCreateStatus
+    test: should sync create status when task completes
 state_machine:
   entity: Task
   field: status
@@ -481,3 +637,71 @@ state_machine:
     - completed
     - failed
     - cancelled
+state_machines:
+  - entity: Task
+    field: status
+    description: AI 生成任务执行状态机
+    states:
+      queued: 任务已创建，等待执行
+      submitting: 正在调用 SDK 执行（含 SDK 内部轮询）
+      completing: SDK 返回结果，正在转存到存储
+      completed: 任务完成，终态
+      failed: 任务失败，终态
+      cancelled: 任务取消，终态
+    transitions:
+      - from: queued
+        to:
+          - submitting
+          - cancelled
+          - failed
+        desc: 开始执行或用户取消或创建失败
+      - from: submitting
+        to:
+          - completing
+          - failed
+          - cancelled
+        desc: SDK 返回结果或调用失败或用户取消
+      - from: completing
+        to:
+          - completed
+          - failed
+        desc: 转存完成或转存失败
+      - from: failed
+        to:
+          - queued
+        desc: 用户重试
+    initial: queued
+    terminal:
+      - completed
+      - failed
+      - cancelled
+  - entity: Create
+    field: status
+    description: 创作记录状态机
+    states:
+      draft: 刚创建，尚未提交执行
+      processing: 关联 Task 正在执行中
+      completed: 创作完成，终态
+      failed: 创作失败，终态
+      cancelled: 创作取消，终态
+    transitions:
+      - from: draft
+        to:
+          - processing
+          - failed
+        desc: 提交执行或创建失败
+      - from: processing
+        to:
+          - completed
+          - failed
+          - cancelled
+        desc: 执行完成/失败/取消
+      - from: failed
+        to:
+          - processing
+        desc: 用户重试
+    initial: draft
+    terminal:
+      - completed
+      - failed
+      - cancelled

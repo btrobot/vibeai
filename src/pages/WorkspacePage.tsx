@@ -12,6 +12,8 @@ import {
   Video,
   FileText,
   MessageSquare,
+  GitBranch,
+  RotateCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,14 +31,18 @@ interface ProjectDetail {
   completedTaskCount: number;
 }
 
-interface Task {
+interface Create {
   id: string;
-  type: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
-  progress: number;
-  input: Record<string, unknown>;
+  capabilitySlug: string;
+  prompt: string;
+  sourceCreateId: string | null;
+  status: 'draft' | 'processing' | 'completed' | 'failed' | 'cancelled';
   output: Record<string, unknown> | null;
+  modelSlug: string | null;
+  taskCount: number;
   errorMessage: string | null;
+  taskStatus: string | null;
+  taskProgress: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,11 +61,12 @@ export default function WorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const [project, setProject] = useState<ProjectDetail | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [creates, setCreates] = useState<Create[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCapability, setActiveCapability] = useState('text-generation');
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [sourceCreateId, setSourceCreateId] = useState<string | null>(null);
 
   const getAuthHeaders = (): Record<string, string> => {
     const stored = localStorage.getItem('auth_tokens');
@@ -70,15 +77,15 @@ export default function WorkspacePage() {
 
   const fetchProject = async () => {
     try {
-      const [projectRes, tasksRes] = await Promise.all([
+      const [projectRes, createsRes] = await Promise.all([
         fetch(`/api/projects/${projectId}`, { headers: { ...getAuthHeaders() } }),
-        fetch(`/api/tasks?projectId=${projectId}&pageSize=50`, { headers: { ...getAuthHeaders() } }),
+        fetch(`/api/projects/${projectId}/creates?pageSize=50`, { headers: { ...getAuthHeaders() } }),
       ]);
 
       if (projectRes.ok) setProject(await projectRes.json());
-      if (tasksRes.ok) {
-        const tasksData = await tasksRes.json();
-        setTasks(tasksData.items ?? []);
+      if (createsRes.ok) {
+        const createsData = await createsRes.json();
+        setCreates(createsData.items ?? []);
       }
     } catch {
       // Silently fail
@@ -106,11 +113,13 @@ export default function WorkspacePage() {
           projectId,
           capabilitySlug: activeCapability,
           input: { prompt: prompt.trim() },
+          sourceCreateId: sourceCreateId ?? undefined,
         }),
       });
 
       if (res.ok) {
         setPrompt('');
+        setSourceCreateId(null);
         fetchProject();
       }
     } catch {
@@ -118,6 +127,24 @@ export default function WorkspacePage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleRetry = async (createId: string) => {
+    try {
+      const res = await fetch(`/api/creates/${createId}/retry`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders() },
+      });
+      if (res.ok) fetchProject();
+    } catch {
+      // Silently fail
+    }
+  };
+
+  const handleModify = (create: Create) => {
+    setSourceCreateId(create.id);
+    setPrompt(create.prompt);
+    setActiveCapability(create.capabilitySlug);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -128,7 +155,7 @@ export default function WorkspacePage() {
   };
 
   const statusConfig: Record<string, { icon: typeof Clock; label: string; variant: 'default' | 'primary' | 'brand' | 'destructive'; spin?: boolean }> = {
-    pending: { icon: Clock, label: '排队中', variant: 'default' },
+    draft: { icon: Clock, label: '草稿', variant: 'default' },
     processing: { icon: Loader2, label: '生成中...', variant: 'primary', spin: true },
     completed: { icon: CheckCircle2, label: '已完成', variant: 'brand' },
     failed: { icon: XCircle, label: '生成失败', variant: 'destructive' },
@@ -191,9 +218,9 @@ export default function WorkspacePage() {
           })}
         </div>
 
-        {/* Task List */}
+        {/* Create List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {tasks.length === 0 ? (
+          {creates.length === 0 ? (
             <EmptyState
               icon={Sparkles}
               title="输入提示词开始创作"
@@ -201,55 +228,79 @@ export default function WorkspacePage() {
               className="py-16"
             />
           ) : (
-            tasks.map((task) => {
-              const cfg = statusConfig[task.status] || statusConfig.pending;
+            creates.map((create) => {
+              const cfg = statusConfig[create.status] || statusConfig.draft;
               const Icon = cfg.icon;
+              const capLabel = capabilities.find((c) => c.slug === create.capabilitySlug)?.label || create.capabilitySlug;
               return (
                 <div
-                  key={task.id}
+                  key={create.id}
                   className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/20"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-foreground">
-                        {capabilities.find((c) => c.slug === task.type)?.label || task.type}
-                      </span>
+                      {create.sourceCreateId && (
+                        <GitBranch className="h-3 w-3 text-muted-foreground" aria-label="修改自之前的创作" />
+                      )}
+                      <span className="text-xs font-medium text-foreground">{capLabel}</span>
                       <Badge variant={cfg.variant}>
                         <Icon className={`h-3 w-3 ${cfg.spin ? 'animate-spin' : ''}`} />
                         {cfg.label}
                       </Badge>
                     </div>
+                    {create.status === 'failed' && (
+                      <button
+                        onClick={() => handleRetry(create.id)}
+                        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                      >
+                        <RotateCw className="h-3 w-3" />
+                        重试
+                      </button>
+                    )}
                   </div>
 
-                  {task.status === 'processing' && (
-                    <Progress value={task.progress} size="slim" className="mt-2" />
+                  <p className="text-sm text-foreground mb-1">{create.prompt}</p>
+
+                  {create.status === 'processing' && (
+                    <Progress value={create.taskProgress} size="slim" className="mt-2" />
                   )}
 
-                  {task.status === 'failed' && task.errorMessage && (
-                    <p className="text-xs text-destructive mt-2">{task.errorMessage}</p>
+                  {create.status === 'failed' && create.errorMessage && (
+                    <p className="text-xs text-destructive mt-2">{create.errorMessage}</p>
                   )}
 
-                  {task.status === 'completed' && task.output && (
+                  {create.status === 'completed' && create.output && (
                     <div className="mt-2 rounded-lg bg-background p-3">
-                      {task.type === 'image-generation' || task.type === 'background-removal' || task.type === 'scene-composition' || task.type === 'model-dressing' ? (
-                        (task.output as { images?: string[] }).images?.map((url: string, i: number) => (
+                      {create.capabilitySlug === 'image-generation' || create.capabilitySlug === 'background-removal' || create.capabilitySlug === 'scene-composition' || create.capabilitySlug === 'model-dressing' ? (
+                        (create.output as { images?: string[] }).images?.map((url: string, i: number) => (
                           <img key={i} src={url} alt="" className="max-h-48 rounded object-contain" />
                         ))
-                      ) : task.type === 'video-generation' ? (
-                        (task.output as { videos?: string[] }).videos?.map((url: string, i: number) => (
+                      ) : create.capabilitySlug === 'video-generation' ? (
+                        (create.output as { videos?: string[] }).videos?.map((url: string, i: number) => (
                           <video key={i} src={url} controls className="max-h-48 rounded" />
                         ))
                       ) : (
                         <p className="text-xs text-foreground whitespace-pre-wrap">
-                          {(task.output as { text?: string }).text || JSON.stringify(task.output, null, 2)}
+                          {(create.output as { text?: string }).text || JSON.stringify(create.output, null, 2)}
                         </p>
                       )}
                     </div>
                   )}
 
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {new Date(task.createdAt).toLocaleString('zh-CN')}
-                  </p>
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(create.createdAt).toLocaleString('zh-CN')}
+                    </p>
+                    {create.status === 'completed' && (
+                      <button
+                        onClick={() => handleModify(create)}
+                        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                      >
+                        <GitBranch className="h-3 w-3" />
+                        基于此修改
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })
@@ -258,6 +309,18 @@ export default function WorkspacePage() {
 
         {/* Input Area */}
         <div className="border-t border-border p-4">
+          {sourceCreateId && (
+            <div className="mb-2 flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5">
+              <GitBranch className="h-3 w-3 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">基于之前的创作修改</span>
+              <button
+                onClick={() => { setSourceCreateId(null); setPrompt(''); }}
+                className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+              >
+                取消
+              </button>
+            </div>
+          )}
           <div className="flex gap-3">
             <textarea
               value={prompt}

@@ -276,9 +276,38 @@ export const UpdateProjectSchema = CreateProjectSchema.partial();
 export type CreateProjectInput = z.infer<typeof CreateProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof UpdateProjectSchema>;
 
+// ===== Create Types =====
+
+export enum CreateStatus {
+  DRAFT = 'draft',
+  PROCESSING = 'processing',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  CANCELLED = 'cancelled',
+}
+
+export interface CreateResponse {
+  id: string;
+  projectId: string;
+  userId: string;
+  capabilitySlug: string;
+  prompt: string;
+  sourceCreateId: string | null;
+  status: CreateStatus;
+  output: Record<string, unknown> | null;
+  modelSlug: string | null;
+  taskCount: number;
+  errorMessage: string | null;
+  taskStatus: TaskStatus | null;
+  taskProgress: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TaskResponse {
   id: string;
   projectId: string | null;
+  createId: string | null;
   userId: string;
   type: string;
   status: TaskStatus;

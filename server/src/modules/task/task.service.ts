@@ -18,6 +18,7 @@ export class TaskService {
     return {
       id: t.id,
       projectId: t.projectId,
+      createId: t.createId,
       userId: t.userId,
       type: t.type,
       status: t.status as TaskResponse['status'],

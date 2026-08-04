@@ -82,10 +82,10 @@ export class GatewayController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async generate(@Req() req: any, @Body() body: GenerateInput) {
-    const { capabilitySlug, modelSlug, input } = body;
+    const { projectId, capabilitySlug, modelSlug, input, sourceCreateId } = body;
     const userId = req.user.userId;
 
-    const result = await this.gatewayService.submitGeneration(userId, capabilitySlug, input, modelSlug);
+    const result = await this.gatewayService.submitGeneration(userId, projectId, capabilitySlug, input, modelSlug, sourceCreateId);
     return { success: true, data: result };
   }
 
@@ -96,7 +96,7 @@ export class GatewayController {
   @HttpCode(HttpStatus.ACCEPTED)
   async quickCreate(@Req() req: any, @Body() body: QuickCreateInput) {
     const userId = req.user.userId;
-    const result = await this.gatewayService.quickCreate(userId, body.recipeId, body.input);
+    const result = await this.gatewayService.quickCreate(userId, body.projectId, body.recipeId, body.input);
     return { success: true, data: result };
   }
 

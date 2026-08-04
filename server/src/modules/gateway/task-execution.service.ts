@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { WsService } from '../ws/ws.service';
 import { StorageService } from '../storage/storage.service';
 import { BillingService } from '../billing/billing.service';
+import { CreateService } from '../create/create.service';
 import { AdapterRegistry } from './adapters/adapter-registry';
 import type { AdapterModel, ExecutionContext } from './adapters/protocol-adapter.interface';
 
@@ -19,6 +20,7 @@ export class TaskExecutionService {
     private wsService: WsService,
     private storageService: StorageService,
     private billingService: BillingService,
+    private createService: CreateService,
     private adapterRegistry: AdapterRegistry,
   ) {}
 
@@ -84,6 +86,12 @@ export class TaskExecutionService {
       // Settle credits (confirm deduction)
       await this.billingService.settleCredits(taskId);
 
+      // ENG-012: Sync Create status
+      const [completedTask] = await this.db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      if (completedTask?.createId) {
+        await this.createService.syncCreateStatus(completedTask.createId, 'completed', transferredOutput);
+      }
+
       this.wsService.sendToUser(userId, {
         type: 'task:completed',
         payload: { taskId, output: transferredOutput },
@@ -107,6 +115,16 @@ export class TaskExecutionService {
         await this.billingService.refundCredits(userId, taskId, model.costCredits, '任务失败退款');
       } catch (refundErr) {
         this.logger.error(`Failed to refund credits for task ${taskId}: ${refundErr}`);
+      }
+
+      // ENG-012: Sync Create status
+      try {
+        const [failedTask] = await this.db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+        if (failedTask?.createId) {
+          await this.createService.syncCreateStatus(failedTask.createId, 'failed', undefined, e.message);
+        }
+      } catch (syncErr) {
+        this.logger.error(`Failed to sync create status for task ${taskId}: ${syncErr}`);
       }
 
       this.wsService.sendToUser(userId, {

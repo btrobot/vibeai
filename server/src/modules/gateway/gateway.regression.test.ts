@@ -43,6 +43,12 @@ describe('AI Gateway 回归测试', () => {
       { db } as any,
       mockTaskExecution as any,
       mockBillingService as any,
+      {
+        createCreate: vi.fn().mockResolvedValue({ id: 'create-1' }),
+        updateStatus: vi.fn().mockResolvedValue(undefined),
+        incrementTaskCount: vi.fn().mockResolvedValue(undefined),
+        syncCreateStatus: vi.fn().mockResolvedValue(undefined),
+      } as any,
     );
   });
 
@@ -95,7 +101,7 @@ describe('AI Gateway 回归测试', () => {
       // getModel 先查 DB（mock 返回空）→ 回退到内存 map
       // 内存 map 没有短 slug → 返回 null → 回退到默认模型
       // 这是已知行为：DB 有种子数据时能找到，内存回退时找不到
-      const result = await service.quickCreate('user-1', 'text-to-image', { prompt: 'a cat' });
+      const result = await service.quickCreate('user-1', 'proj-1', 'text-to-image', { prompt: 'a cat' });
 
       // 任务应该成功创建（使用默认模型）
       expect(result.taskId).toBeDefined();
@@ -109,7 +115,7 @@ describe('AI Gateway 回归测试', () => {
       const seedModel = SEED_MODELS.find((m) => m.slug === 'doubao-seedream-5-0')!;
       mockSingle(db, seedModel as any);
 
-      const result = await service.quickCreate('user-1', 'text-to-image', { prompt: 'a cat' });
+      const result = await service.quickCreate('user-1', 'proj-1', 'text-to-image', { prompt: 'a cat' });
 
       // 应该使用 recipe 指定的模型（从 DB 找到）
       // 注意: 由于 router 仍使用内存模型，preferredModel 能力检查会失败
@@ -140,6 +146,7 @@ describe('AI Gateway 回归测试', () => {
         mockWsService as any,
         mockStorageService as any,
         mockBillingService as any,
+        { syncCreateStatus: vi.fn().mockResolvedValue(undefined) } as any,
         mockAdapterRegistry as any,
       );
     });
@@ -189,7 +196,7 @@ describe('AI Gateway 回归测试', () => {
   // ============================================================
   describe('REG-004: 信用预扣 taskId 审计追踪', () => {
     it('reserveCredits 被调用时 taskId 为 "pending"（已知设计限制）', async () => {
-      await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+      await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
 
       // 当前行为: 使用 'pending' 作为 taskId
       // 这是因为 taskId 在 reserveCredits 之后才生成
@@ -207,7 +214,7 @@ describe('AI Gateway 回归测试', () => {
       });
 
       await expect(
-        service.submitGeneration('user-1', 'text-generation', { prompt: 'test' }),
+        service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' }),
       ).rejects.toThrow(BadRequestException);
 
       expect(mockBillingService.refundCredits).toHaveBeenCalledWith(
@@ -222,7 +229,7 @@ describe('AI Gateway 回归测试', () => {
       // 成功路径: reserveCredits('pending') → 创建 task → executeTask 中 refundCredits(taskId)
       // 两个 taskId 不一致: 'pending' vs 实际 taskId
       // 这是已知设计限制: 预扣时 taskId 尚未生成
-      const result = await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+      const result = await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
 
       // reserveCredits 使用 'pending'
       expect(mockBillingService.reserveCredits).toHaveBeenCalledWith(
@@ -262,6 +269,7 @@ describe('AI Gateway 回归测试', () => {
         mockWsService as any,
         mockStorageService as any,
         mockBillingService as any,
+        { syncCreateStatus: vi.fn().mockResolvedValue(undefined) } as any,
         mockAdapterRegistry as any,
       );
     });
@@ -350,7 +358,7 @@ describe('AI Gateway 回归测试', () => {
       });
 
       await expect(
-        service.submitGeneration('user-1', 'text-generation', { prompt: 'test' }),
+        service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' }),
       ).rejects.toThrow(BadRequestException);
 
       expect(mockBillingService.refundCredits).toHaveBeenCalledTimes(1);
@@ -368,7 +376,7 @@ describe('AI Gateway 回归测试', () => {
       });
 
       try {
-        await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+        await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
       } catch {
         // expected
       }
@@ -381,7 +389,7 @@ describe('AI Gateway 回归测试', () => {
       const insertSpy = vi.spyOn(db, 'insert');
 
       await expect(
-        service.submitGeneration('user-1', 'text-generation', { prompt: 'test' }),
+        service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' }),
       ).rejects.toThrow(BadRequestException);
 
       expect(insertSpy).not.toHaveBeenCalled();
@@ -416,6 +424,7 @@ describe('AI Gateway 回归测试', () => {
         mockWsService as any,
         mockStorageService as any,
         mockBillingService as any,
+        { syncCreateStatus: vi.fn().mockResolvedValue(undefined) } as any,
         mockAdapterRegistry as any,
       );
     });
@@ -541,7 +550,7 @@ describe('AI Gateway 回归测试', () => {
         return { values: () => ({ then: (cb: any) => cb() }) } as any;
       });
 
-      await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+      await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
 
       const reserveIdx = callOrder.indexOf('reserveCredits');
       const insertIdx = callOrder.indexOf('insert');
@@ -561,7 +570,7 @@ describe('AI Gateway 回归测试', () => {
     it('executeTask 抛异常时 submitGeneration 仍返回 queued', async () => {
       mockTaskExecution.executeTask.mockRejectedValue(new Error('Async execution failed'));
 
-      const result = await service.submitGeneration('user-1', 'text-generation', { prompt: 'test' });
+      const result = await service.submitGeneration('user-1', 'proj-1', 'text-generation', { prompt: 'test' });
 
       expect(result.status).toBe('queued');
       expect(result.taskId).toBeDefined();
@@ -595,6 +604,7 @@ describe('AI Gateway 回归测试', () => {
         mockWsService as any,
         mockStorageService as any,
         mockBillingService as any,
+        { syncCreateStatus: vi.fn().mockResolvedValue(undefined) } as any,
         mockAdapterRegistry as any,
       );
     });
@@ -800,7 +810,7 @@ describe('AI Gateway 回归测试', () => {
 
     it('submitGeneration 传入不存在的 preferredModel 应回退到默认', async () => {
       const result = await service.submitGeneration(
-        'user-1', 'text-generation', { prompt: 'test' }, 'non-existent-model',
+        'user-1', 'proj-1', 'text-generation', { prompt: 'test' }, 'non-existent-model',
       );
       // 回退到默认模型，任务仍然创建成功
       expect(result.taskId).toBeDefined();

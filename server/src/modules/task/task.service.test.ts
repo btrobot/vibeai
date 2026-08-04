@@ -9,6 +9,7 @@ import type { DrizzleMock } from '../../test/drizzle-mock';
 const taskRecord = {
   id: 'task-1',
   projectId: 'proj-1',
+  createId: 'create-1',
   userId: 'user-1',
   type: 'image-generation',
   status: 'queued',

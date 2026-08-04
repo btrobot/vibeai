@@ -11,12 +11,14 @@ import type { ModelDefinition } from './models/index';
 import { eq, and, sql } from 'drizzle-orm';
 import { TaskExecutionService } from './task-execution.service';
 import { BillingService } from '../billing/billing.service';
+import { CreateService } from '../create/create.service';
 import { SEED_MODELS, SEED_RECIPES } from './seeds/model-seeds';
 import type { AdapterModel } from './adapters/protocol-adapter.interface';
 
 // ===== Gateway Types =====
 export interface GenerationTaskResponse {
   taskId: string;
+  createId: string;
   capabilitySlug: string;
   modelSlug: string;
   status: 'queued' | 'submitting' | 'completing' | 'completed' | 'failed';
@@ -32,6 +34,7 @@ export class GatewayService {
     private readonly drizzle: DrizzleService,
     private readonly taskExecution: TaskExecutionService,
     private readonly billingService: BillingService,
+    private readonly createService: CreateService,
   ) {}
 
   // ===== Seed =====
@@ -159,9 +162,11 @@ export class GatewayService {
 
   async submitGeneration(
     userId: string,
+    projectId: string,
     capabilitySlug: string,
     input: Record<string, unknown>,
     preferredModel?: string,
+    sourceCreateId?: string,
   ): Promise<GenerationTaskResponse> {
     // Validate capability
     const capability = builtInCapabilityMap.get(capabilitySlug);
@@ -233,7 +238,18 @@ export class GatewayService {
       throw new BadRequestException('信用额度不足');
     }
 
-    // Create task record in unified tasks table
+    // Create Create record (user's creative intent)
+    const prompt = (input.prompt as string) || JSON.stringify(input);
+    const { id: createId } = await this.createService.createCreate({
+      projectId,
+      userId,
+      capabilitySlug,
+      prompt,
+      modelSlug: model.slug,
+      sourceCreateId: sourceCreateId ?? null,
+    });
+
+    // Create task record linked to the Create
     const taskId = uuidv4();
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 30 * 60 * 1000); // 30 min timeout
@@ -241,6 +257,8 @@ export class GatewayService {
     try {
       await this.drizzle.db.insert(tasks).values({
         id: taskId,
+        createId,
+        projectId,
         userId,
         type: capabilitySlug,
         capabilitySlug,
@@ -252,10 +270,15 @@ export class GatewayService {
         createdAt: now,
         updatedAt: now,
       } as any);
+
+      // Update Create status to processing + increment task count
+      await this.createService.updateStatus(createId, 'processing' as any);
+      await this.createService.incrementTaskCount(createId);
     } catch (error) {
       this.logger.error(`Failed to create task: ${error}`);
       // Refund if task creation failed
       await this.billingService.refundCredits(userId, 'pending', model.costCredits, '任务创建失败退款');
+      await this.createService.updateStatus(createId, 'failed' as any, { errorMessage: '任务创建失败' });
       throw new BadRequestException('任务创建失败');
     }
 
@@ -268,6 +291,7 @@ export class GatewayService {
 
     return {
       taskId,
+      createId,
       status: 'queued',
       capabilitySlug,
       modelSlug: model.slug,
@@ -280,6 +304,7 @@ export class GatewayService {
 
   async quickCreate(
     userId: string,
+    projectId: string,
     recipeId: string,
     input?: Record<string, unknown>,
   ): Promise<GenerationTaskResponse> {
@@ -291,7 +316,7 @@ export class GatewayService {
     // Merge default input with user input
     const mergedInput = { ...recipe.defaultInput, ...input };
 
-    return this.submitGeneration(userId, recipe.capabilitySlug, mergedInput, recipe.modelSlug);
+    return this.submitGeneration(userId, projectId, recipe.capabilitySlug, mergedInput, recipe.modelSlug);
   }
 
   // ===== Task Query =====

@@ -9,9 +9,10 @@ import { AdapterRegistry } from './adapters/adapter-registry';
 import { DrizzleModule } from '../../common/drizzle.module';
 import { StorageModule } from '../storage/storage.module';
 import { BillingModule } from '../billing/billing.module';
+import { CreateModule } from '../create/create.module';
 
 @Module({
-  imports: [DrizzleModule, StorageModule, BillingModule],
+  imports: [DrizzleModule, StorageModule, BillingModule, CreateModule],
   controllers: [GatewayController],
   providers: [GatewayService, TaskExecutionService, LlmAdapter, ImageAdapter, VideoAdapter, AdapterRegistry],
   exports: [GatewayService, TaskExecutionService],

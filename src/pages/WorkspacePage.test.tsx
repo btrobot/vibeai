@@ -5,8 +5,8 @@
  * - 加载中状态
  * - 项目详情渲染
  * - 能力标签切换
- * - 任务提交
- * - 任务列表展示
+ * - 创作提交
+ * - 创作列表展示
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -27,9 +27,9 @@ const mockProject = {
   completedTaskCount: 1,
 };
 
-const mockTasks = [
-  { id: 'task-1', type: 'text-generation', status: 'completed', progress: 100, input: { prompt: 'test' }, output: { result: 'ok' }, errorMessage: null, createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:01:00Z' },
-  { id: 'task-2', type: 'image-generation', status: 'processing', progress: 45, input: { prompt: 'test2' }, output: null, errorMessage: null, createdAt: '2026-01-15T11:00:00Z', updatedAt: '2026-01-15T11:00:30Z' },
+const mockCreates = [
+  { id: 'create-1', capabilitySlug: 'text-generation', prompt: 'test', sourceCreateId: null, status: 'completed', output: { text: 'ok' }, modelSlug: 'kimi-k2-5', taskCount: 1, errorMessage: null, taskStatus: 'completed', taskProgress: 100, createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:01:00Z' },
+  { id: 'create-2', capabilitySlug: 'image-generation', prompt: 'test2', sourceCreateId: null, status: 'processing', output: null, modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskStatus: 'submitting', taskProgress: 45, createdAt: '2026-01-15T11:00:00Z', updatedAt: '2026-01-15T11:00:30Z' },
 ];
 
 function renderWorkspace(projectId = 'proj-1') {
@@ -61,8 +61,8 @@ describe('WorkspacePage', () => {
       http.get('/api/projects/proj-1', () =>
         HttpResponse.json(mockProject),
       ),
-      http.get('/api/tasks', () =>
-        HttpResponse.json({ total: 2, items: mockTasks }),
+      http.get('/api/projects/proj-1/creates', () =>
+        HttpResponse.json({ total: 2, items: mockCreates }),
       ),
     );
 
@@ -80,8 +80,8 @@ describe('WorkspacePage', () => {
       http.get('/api/projects/proj-1', () =>
         HttpResponse.json(mockProject),
       ),
-      http.get('/api/tasks', () =>
-        HttpResponse.json({ total: 2, items: mockTasks }),
+      http.get('/api/projects/proj-1/creates', () =>
+        HttpResponse.json({ total: 2, items: mockCreates }),
       ),
     );
 
@@ -103,8 +103,8 @@ describe('WorkspacePage', () => {
       http.get('/api/projects/proj-1', () =>
         HttpResponse.json(mockProject),
       ),
-      http.get('/api/tasks', () =>
-        HttpResponse.json({ total: 2, items: mockTasks }),
+      http.get('/api/projects/proj-1/creates', () =>
+        HttpResponse.json({ total: 2, items: mockCreates }),
       ),
     );
 
@@ -124,13 +124,13 @@ describe('WorkspacePage', () => {
     expect(textarea).toBeInTheDocument();
   });
 
-  it('应该渲染任务列表', async () => {
+  it('应该渲染创作列表', async () => {
     server.use(
       http.get('/api/projects/proj-1', () =>
         HttpResponse.json(mockProject),
       ),
-      http.get('/api/tasks', () =>
-        HttpResponse.json({ total: 2, items: mockTasks }),
+      http.get('/api/projects/proj-1/creates', () =>
+        HttpResponse.json({ total: 2, items: mockCreates }),
       ),
     );
 
@@ -140,8 +140,8 @@ describe('WorkspacePage', () => {
       expect(screen.getByText('视频生成')).toBeInTheDocument();
     });
 
-    // 任务状态
+    // 创作状态
     expect(screen.getByText('已完成')).toBeInTheDocument();
-    expect(screen.getByText('处理中')).toBeInTheDocument();
+    expect(screen.getByText('生成中...')).toBeInTheDocument();
   });
 });
