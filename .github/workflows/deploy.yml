@@ -9,7 +9,7 @@ concurrency:
 
 env:
   IMAGE_NAME: ${{ github.repository }}
-  APP_PORT: 5001
+  APP_PORT: 6000
   CONTAINER_NAME: vibeai-container
   REGISTRY: ghcr.io
 
