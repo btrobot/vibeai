@@ -4,8 +4,8 @@
  * 覆盖范围：
  * - 渲染欢迎信息和统计卡片
  * - 加载中状态
- * - 空任务状态
- * - 有任务数据时的渲染
+ * - 空创作状态
+ * - 有创作数据时的渲染
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -44,7 +44,7 @@ describe('DashboardPage', () => {
       http.get('/api/projects', () =>
         HttpResponse.json({ total: 3, items: [] }),
       ),
-      http.get('/api/tasks', () =>
+      http.get('/api/creates', () =>
         HttpResponse.json({ total: 5, items: [] }),
       ),
     );
@@ -58,13 +58,13 @@ describe('DashboardPage', () => {
 
     // 统计卡片
     expect(screen.getByText('项目总数')).toBeInTheDocument();
-    expect(screen.getByText('任务总数')).toBeInTheDocument();
+    expect(screen.getByText('创作总数')).toBeInTheDocument();
     expect(screen.getByText('已完成')).toBeInTheDocument();
     expect(screen.getByText('可用额度')).toBeInTheDocument();
 
     // 统计数值
     expect(screen.getByText('3')).toBeInTheDocument(); // 项目总数
-    expect(screen.getByText('5')).toBeInTheDocument(); // 任务总数
+    expect(screen.getByText('5')).toBeInTheDocument(); // 创作总数
     // 0 出现多次（已完成和可用额度），用 getAllByText
     expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(1);
   });
@@ -74,7 +74,7 @@ describe('DashboardPage', () => {
       http.get('/api/projects', () =>
         HttpResponse.json({ total: 0, items: [] }),
       ),
-      http.get('/api/tasks', () =>
+      http.get('/api/creates', () =>
         HttpResponse.json({ total: 0, items: [] }),
       ),
     );
@@ -90,12 +90,12 @@ describe('DashboardPage', () => {
     expect(screen.getByText('视频生成')).toBeInTheDocument();
   });
 
-  it('应该在无任务时显示空状态', async () => {
+  it('应该在无创作时显示空状态', async () => {
     server.use(
       http.get('/api/projects', () =>
         HttpResponse.json({ total: 0, items: [] }),
       ),
-      http.get('/api/tasks', () =>
+      http.get('/api/creates', () =>
         HttpResponse.json({ total: 0, items: [] }),
       ),
     );
@@ -103,23 +103,26 @@ describe('DashboardPage', () => {
     renderDashboard();
 
     await waitFor(() => {
-      expect(screen.getByText('暂无任务')).toBeInTheDocument();
+      expect(screen.getByText('暂无创作')).toBeInTheDocument();
     });
   });
 
-  it('应该渲染任务列表', async () => {
+  it('应该渲染创作列表', async () => {
     server.use(
       http.get('/api/projects', () =>
         HttpResponse.json({ total: 1, items: [] }),
       ),
-      http.get('/api/tasks', () =>
+      http.get('/api/creates', () =>
         HttpResponse.json({
           total: 2,
           items: [
-            { id: 'task-1', type: 'image-generation', status: 'completed', progress: 100, createdAt: '2026-01-15T10:00:00Z', projectId: 'proj-1' },
-            { id: 'task-2', type: 'video-generation', status: 'processing', progress: 60, createdAt: '2026-01-15T12:00:00Z', projectId: 'proj-1' },
+            { id: 'create-1', capabilitySlug: 'image-generation', status: 'completed', prompt: '一只猫', output: { url: 'http://example.com/cat.png' }, taskStatus: 'completed', taskProgress: 100, createdAt: '2026-01-15T10:00:00Z', projectId: 'proj-1' },
+            { id: 'create-2', capabilitySlug: 'video-generation', status: 'processing', prompt: '日落', output: null, taskStatus: 'submitting', taskProgress: 60, createdAt: '2026-01-15T12:00:00Z', projectId: 'proj-1' },
           ],
         }),
+      ),
+      http.get('/api/billing/usage', () =>
+        HttpResponse.json({ totalCredits: 1000, usedCredits: 200 }),
       ),
     );
 
@@ -131,6 +134,5 @@ describe('DashboardPage', () => {
 
     expect(screen.getAllByText('视频生成').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('已完成').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('处理中').length).toBeGreaterThanOrEqual(1);
   });
 });

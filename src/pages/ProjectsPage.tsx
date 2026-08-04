@@ -27,8 +27,8 @@ interface Project {
   status: 'active' | 'archived' | 'completed';
   tags: string[];
   coverUrl: string | null;
-  taskCount: number;
-  completedTaskCount: number;
+  totalCreates: number;
+  completedCreates: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -223,7 +223,7 @@ export default function ProjectsPage() {
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                    {project.completedTaskCount}/{project.taskCount}
+                    {project.completedCreates}/{project.totalCreates}
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" aria-hidden="true" />

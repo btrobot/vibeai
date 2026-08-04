@@ -20,14 +20,15 @@ import { EmptyState } from '@/components/ui/empty-state';
 
 interface DashboardStats {
   totalProjects: number;
-  totalTasks: number;
-  completedTasks: number;
+  totalCreates: number;
+  completedCreates: number;
   usedCredits: number;
-  recentTasks: Array<{
+  recentCreates: Array<{
     id: string;
-    type: string;
+    capabilitySlug: string;
     status: string;
-    progress: number;
+    taskProgress: number;
+    prompt: string;
     createdAt: string;
     projectId: string;
   }>;
@@ -46,24 +47,25 @@ export default function DashboardPage() {
         const tokens = stored ? JSON.parse(stored) : null;
         if (!tokens?.accessToken) return;
 
-        const [projectsRes, tasksRes] = await Promise.all([
+        const [projectsRes, createsRes] = await Promise.all([
           fetch('/api/projects', {
             headers: { Authorization: `Bearer ${tokens.accessToken}` },
           }),
-          fetch('/api/tasks?pageSize=5', {
+          fetch('/api/creates?pageSize=5', {
             headers: { Authorization: `Bearer ${tokens.accessToken}` },
           }),
         ]);
 
         const projects = await projectsRes.json();
-        const tasks = await tasksRes.json();
+        const createsData = await createsRes.json();
+        const createItems = createsData?.items ?? createsData?.data?.items ?? [];
 
         setStats({
-          totalProjects: projects?.total ?? 0,
-          totalTasks: tasks?.total ?? 0,
-          completedTasks: tasks?.items?.filter((t: { status: string }) => t.status === 'completed').length ?? 0,
+          totalProjects: projects?.total ?? projects?.data?.total ?? 0,
+          totalCreates: createsData?.total ?? createsData?.data?.total ?? 0,
+          completedCreates: createItems.filter((c: { status: string }) => c.status === 'completed').length,
           usedCredits: 0,
-          recentTasks: (tasks?.items ?? []).slice(0, 5),
+          recentCreates: createItems.slice(0, 5),
         });
       } catch {
         // Silently fail
@@ -76,20 +78,20 @@ export default function DashboardPage() {
 
   const statCards = [
     { label: '项目总数', value: stats?.totalProjects ?? 0, icon: FolderKanban, color: 'text-primary' },
-    { label: '任务总数', value: stats?.totalTasks ?? 0, icon: Image, color: 'text-foreground' },
-    { label: '已完成', value: stats?.completedTasks ?? 0, icon: TrendingUp, color: 'text-brand' },
+    { label: '创作总数', value: stats?.totalCreates ?? 0, icon: Image, color: 'text-foreground' },
+    { label: '已完成', value: stats?.completedCreates ?? 0, icon: TrendingUp, color: 'text-brand' },
     { label: '可用额度', value: user?.credits ?? 0, icon: Sparkles, color: 'text-foreground' },
   ];
 
   const statusConfig: Record<string, { label: string; variant: 'default' | 'primary' | 'brand' | 'warning' | 'destructive' }> = {
-    pending: { label: '排队中', variant: 'default' },
+    draft: { label: '草稿', variant: 'default' },
     processing: { label: '生成中...', variant: 'primary' },
     completed: { label: '已完成', variant: 'brand' },
     failed: { label: '生成失败', variant: 'destructive' },
     cancelled: { label: '已取消', variant: 'default' },
   };
 
-  const typeLabels: Record<string, string> = {
+  const capabilityLabels: Record<string, string> = {
     'text-generation': '文本生成',
     'image-generation': '图像生成',
     'video-generation': '视频生成',
@@ -170,10 +172,10 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Tasks */}
+      {/* Recent Creates */}
       <div className="rounded-xl border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold text-foreground">最近任务</h2>
+          <h2 className="text-sm font-semibold text-foreground">最近创作</h2>
           <Button variant="link" size="sm" onClick={() => navigate('/projects')}>
             查看全部
           </Button>
@@ -192,35 +194,36 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
-        ) : !stats?.recentTasks?.length ? (
+        ) : !stats?.recentCreates?.length ? (
           <EmptyState
             icon={AlertCircle}
-            title="暂无任务"
+            title="暂无创作"
             description="开始你的第一次创作吧"
-            action={{ label: '开始创作', onClick: () => navigate('/tools/background-removal') }}
+            action={{ label: '开始创作', onClick: () => navigate('/projects') }}
             className="py-12"
           />
         ) : (
           <div className="divide-y divide-border">
-            {stats.recentTasks.map((task) => {
-              const status = statusConfig[task.status] || { label: task.status, variant: 'default' as const };
-              const type = typeLabels[task.type] || task.type;
+            {stats.recentCreates.map((create) => {
+              const status = statusConfig[create.status] || { label: create.status, variant: 'default' as const };
+              const capLabel = capabilityLabels[create.capabilitySlug] || create.capabilitySlug;
               return (
                 <div
-                  key={task.id}
+                  key={create.id}
                   className="flex items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-surface-hover"
                 >
                   <Clock className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-foreground truncate">{type}</p>
+                    <p className="text-foreground truncate">{capLabel}</p>
+                    <p className="text-xs text-muted-foreground truncate">{create.prompt}</p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(task.createdAt).toLocaleString('zh-CN')}
+                      {new Date(create.createdAt).toLocaleString('zh-CN')}
                     </p>
                   </div>
                   <Badge variant={status.variant}>{status.label}</Badge>
-                  {task.status === 'processing' && (
+                  {create.status === 'processing' && (
                     <div className="w-20">
-                      <Progress value={task.progress} size="slim" />
+                      <Progress value={create.taskProgress} size="slim" />
                     </div>
                   )}
                 </div>

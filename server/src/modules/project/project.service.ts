@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DrizzleService } from '../../common/drizzle.service';
-import { projects, tasks } from '../../db/schema/task-engine';
+import { projects, creates } from '../../db/schema/task-engine';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
 import type { CreateProjectInput, UpdateProjectInput, ProjectResponse } from '../../shared-types';
 
@@ -19,8 +19,8 @@ export class ProjectService {
       coverImage: p.coverImage,
       status: p.status as ProjectResponse['status'],
       tags: p.tags ?? [],
-      totalTasks: p.totalTasks,
-      completedTasks: p.completedTasks,
+      totalCreates: p.totalTasks,
+      completedCreates: p.completedTasks,
       createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : String(p.createdAt),
       updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : String(p.updatedAt),
     };
@@ -104,14 +104,14 @@ export class ProjectService {
     this.logger.log(`Project deleted: ${id}`);
   }
 
-  async updateTaskCounts(projectId: string): Promise<void> {
+  async updateCreateCounts(projectId: string): Promise<void> {
     const [result] = await this.drizzle.db
       .select({
         total: count(),
-        completed: sql<number>`count(*) filter (where ${tasks.status} = 'completed')`,
+        completed: sql<number>`count(*) filter (where ${creates.status} = 'completed')`,
       })
-      .from(tasks)
-      .where(eq(tasks.projectId, projectId));
+      .from(creates)
+      .where(eq(creates.projectId, projectId));
 
     if (result) {
       await this.drizzle.db

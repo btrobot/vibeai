@@ -7,6 +7,21 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class CreateController {
   constructor(private readonly createService: CreateService) {}
 
+  @Get('creates')
+  async listAll(
+    @Req() req: any,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const result = await this.createService.listAllCreates(req.user.userId, {
+      status,
+      page: Math.max(1, Number(page) || 1),
+      pageSize: Math.min(100, Math.max(1, Number(pageSize) || 20)),
+    });
+    return { success: true, data: result };
+  }
+
   @Get('projects/:projectId/creates')
   async list(
     @Req() req: any,

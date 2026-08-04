@@ -4,6 +4,7 @@ import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { galleryWorks, galleryLikes } from '../../db/schema/gallery';
+import { creates } from '../../db/schema/task-engine';
 import { eq, and, desc, asc, sql, count } from 'drizzle-orm';
 
 @Injectable()
@@ -67,6 +68,7 @@ export class GalleryService {
   }
 
   async publishWork(userId: string, input: {
+    createId?: string;
     taskId?: string;
     title?: string;
     imageUrl?: string;
@@ -77,15 +79,47 @@ export class GalleryService {
     capabilitySlug?: string;
     thumbnailUrl?: string;
   }) {
+    // If createId is provided, auto-populate fields from the Create record
+    let autoTitle = input.title;
+    let autoPrompt = input.prompt;
+    let autoModelSlug = input.modelSlug;
+    let autoCapabilitySlug = input.capabilitySlug;
+    let autoImageUrl = input.imageUrl;
+    let autoVideoUrl = input.videoUrl;
+
+    if (input.createId) {
+      const [create] = await this.db.select().from(creates)
+        .where(and(eq(creates.id, input.createId), eq(creates.userId, userId)))
+        .limit(1);
+
+      if (create) {
+        autoPrompt = autoPrompt || create.prompt;
+        autoModelSlug = autoModelSlug || create.modelSlug;
+        autoCapabilitySlug = autoCapabilitySlug || create.capabilitySlug;
+
+        // Extract URLs from create output
+        const output = (create.output ?? {}) as Record<string, unknown>;
+        if (!autoImageUrl && Array.isArray(output.images) && output.images.length > 0) {
+          autoImageUrl = String((output.images as string[])[0]);
+        }
+        if (!autoVideoUrl && Array.isArray(output.videos) && output.videos.length > 0) {
+          autoVideoUrl = String((output.videos as string[])[0]);
+        }
+        if (!autoTitle) {
+          autoTitle = create.prompt.slice(0, 50);
+        }
+      }
+    }
+
     const [work] = await this.db.insert(galleryWorks).values({
       userId,
-      title: input.title || '',
-      imageUrl: input.imageUrl || null,
-      videoUrl: input.videoUrl || null,
+      title: autoTitle || '',
+      imageUrl: autoImageUrl || null,
+      videoUrl: autoVideoUrl || null,
       type: input.type,
-      prompt: input.prompt || null,
-      modelSlug: input.modelSlug || null,
-      capabilitySlug: input.capabilitySlug || null,
+      prompt: autoPrompt || null,
+      modelSlug: autoModelSlug || null,
+      capabilitySlug: autoCapabilitySlug || null,
       thumbnailUrl: input.thumbnailUrl || null,
       isPublished: true,
     }).returning();

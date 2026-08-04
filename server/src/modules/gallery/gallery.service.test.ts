@@ -167,4 +167,56 @@ describe('GalleryService', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  describe('从 Create 发布', () => {
+    it('通过 createId 发布时自动填充字段', async () => {
+      const mockCreate = {
+        id: 'create-1',
+        userId: 'user-1',
+        prompt: '一只橘色的猫',
+        capabilitySlug: 'text-to-image',
+        modelSlug: 'doubao-seedream-5-0',
+        output: { images: ['https://cdn.vibeai.com/cat.png'] },
+        status: 'completed',
+      };
+      const work = buildGalleryWork({ title: '一只橘色的猫', userId: 'user-1' });
+      // First query: select create → mockCreate; Second query: insert work → work
+      db._result = [mockCreate, work];
+
+      const result = await service.publishWork('user-1', {
+        createId: 'create-1',
+        type: 'image',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+    });
+
+    it('createId 不存在时仍能发布（字段为空）', async () => {
+      const work = buildGalleryWork({ title: '自定义标题', userId: 'user-1' });
+      // First query: select create → empty; Second query: insert work → work
+      db._result = [[], work];
+
+      const result = await service.publishWork('user-1', {
+        createId: 'nonexistent',
+        title: '自定义标题',
+        type: 'image',
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('不提供 createId 时使用传入参数', async () => {
+      const work = buildGalleryWork({ title: '直接发布', userId: 'user-1' });
+      db._result = [work];
+
+      const result = await service.publishWork('user-1', {
+        title: '直接发布',
+        type: 'image',
+        imageUrl: 'https://cdn.vibeai.com/direct.jpg',
+      });
+
+      expect(result.success).toBe(true);
+    });
+  });
 });

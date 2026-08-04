@@ -407,6 +407,17 @@ operations:
         condition: 项目不存在
         message: 项目不存在
     test: true
+  - name: listAllCreates
+    method: GET
+    path: /creates
+    description: 获取当前用户的所有创作记录（跨项目，用于仪表盘）
+    auth: jwt
+    pre:
+      - 用户已登录
+    post:
+      - 返回当前用户的 Create 列表（按创建时间倒序）
+    errors: []
+    test: true
   - name: getCreate
     method: GET
     path: /creates/:id

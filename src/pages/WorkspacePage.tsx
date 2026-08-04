@@ -14,6 +14,7 @@ import {
   MessageSquare,
   GitBranch,
   RotateCw,
+  Share2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -145,6 +146,33 @@ export default function WorkspacePage() {
     setSourceCreateId(create.id);
     setPrompt(create.prompt);
     setActiveCapability(create.capabilitySlug);
+  };
+
+  const handlePublish = async (create: Create) => {
+    const output = create.output as Record<string, unknown> | null;
+    const isImage = ['image-generation', 'background-removal', 'scene-composition', 'model-dressing'].includes(create.capabilitySlug);
+    const isVideo = create.capabilitySlug === 'video-generation';
+    const type = isVideo ? 'video' : 'image';
+
+    try {
+      const res = await fetch('/api/gallery/works', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          createId: create.id,
+          type,
+          title: create.prompt.slice(0, 50),
+        }),
+      });
+      if (res.ok) {
+        alert('已发布到画廊');
+      }
+    } catch {
+      // Silently fail
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -292,13 +320,22 @@ export default function WorkspacePage() {
                       {new Date(create.createdAt).toLocaleString('zh-CN')}
                     </p>
                     {create.status === 'completed' && (
-                      <button
-                        onClick={() => handleModify(create)}
-                        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-                      >
-                        <GitBranch className="h-3 w-3" />
-                        基于此修改
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handlePublish(create)}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                        >
+                          <Share2 className="h-3 w-3" />
+                          发布
+                        </button>
+                        <button
+                          onClick={() => handleModify(create)}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                        >
+                          <GitBranch className="h-3 w-3" />
+                          基于此修改
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

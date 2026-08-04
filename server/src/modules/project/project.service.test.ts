@@ -154,13 +154,13 @@ describe('ProjectService', () => {
     });
   });
 
-  describe('updateTaskCounts', () => {
-    it('should update task counts', async () => {
+  describe('updateCreateCounts', () => {
+    it('should update create counts', async () => {
       // First select: count query
       // Second select: update query
       mockSingle(db, { total: 10, completed: 6 });
 
-      await expect(service.updateTaskCounts('proj-1')).resolves.toBeUndefined();
+      await expect(service.updateCreateCounts('proj-1')).resolves.toBeUndefined();
     });
   });
 

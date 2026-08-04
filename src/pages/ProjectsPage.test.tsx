@@ -19,8 +19,8 @@ import ProjectsPage from './ProjectsPage';
 
 const mockProjects = {
   items: [
-    { id: 'proj-1', name: '测试项目A', description: '描述A', status: 'active', tags: ['test'], taskCount: 3, completedTaskCount: 2, createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:00:00Z' },
-    { id: 'proj-2', name: '测试项目B', description: '描述B', status: 'completed', tags: ['demo'], taskCount: 5, completedTaskCount: 5, createdAt: '2026-01-10T10:00:00Z', updatedAt: '2026-01-12T10:00:00Z' },
+    { id: 'proj-1', name: '测试项目A', description: '描述A', status: 'active', tags: ['test'], totalCreates: 3, completedCreates: 2, createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:00:00Z' },
+    { id: 'proj-2', name: '测试项目B', description: '描述B', status: 'completed', tags: ['demo'], totalCreates: 5, completedCreates: 5, createdAt: '2026-01-10T10:00:00Z', updatedAt: '2026-01-12T10:00:00Z' },
   ],
   total: 2,
 };

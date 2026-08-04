@@ -23,8 +23,8 @@ const mockProject = {
   description: '这是一个测试项目',
   status: 'active',
   tags: ['test', 'demo'],
-  taskCount: 2,
-  completedTaskCount: 1,
+  totalCreates: 2,
+  completedCreates: 1,
 };
 
 const mockCreates = [
@@ -143,5 +143,22 @@ describe('WorkspacePage', () => {
     // 创作状态
     expect(screen.getByText('已完成')).toBeInTheDocument();
     expect(screen.getByText('生成中...')).toBeInTheDocument();
+  });
+
+  it('已完成创作应该显示发布按钮', async () => {
+    server.use(
+      http.get('/api/projects/proj-1', () =>
+        HttpResponse.json(mockProject),
+      ),
+      http.get('/api/projects/proj-1/creates', () =>
+        HttpResponse.json({ total: 2, items: mockCreates }),
+      ),
+    );
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(screen.getByText('发布')).toBeInTheDocument();
+    });
   });
 });

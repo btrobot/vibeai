@@ -258,8 +258,8 @@ export interface ProjectResponse {
   coverImage: string | null;
   status: ProjectStatus;
   tags: string[];
-  totalTasks: number;
-  completedTasks: number;
+  totalCreates: number;
+  completedCreates: number;
   createdAt: string;
   updatedAt: string;
 }

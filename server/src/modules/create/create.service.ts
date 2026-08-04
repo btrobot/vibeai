@@ -180,6 +180,49 @@ export class CreateService {
   }
 
   /**
+   * List all creates for a user (across all projects) — used by Dashboard
+   */
+  async listAllCreates(
+    userId: string,
+    options: { status?: string; page?: number; pageSize?: number } = {},
+  ): Promise<{ items: CreateResponse[]; total: number }> {
+    const { status, page = 1, pageSize = 20 } = options;
+    const offset = (page - 1) * pageSize;
+    const conditions = [eq(creates.userId, userId)];
+
+    if (status) conditions.push(eq(creates.status, status));
+
+    const [totalResult] = await this.drizzle.db
+      .select({ count: count() })
+      .from(creates)
+      .where(and(...conditions));
+
+    const items = await this.drizzle.db
+      .select()
+      .from(creates)
+      .where(and(...conditions))
+      .orderBy(desc(creates.createdAt))
+      .limit(pageSize)
+      .offset(offset);
+
+    const result: CreateResponse[] = [];
+    for (const c of items) {
+      const [latestTask] = await this.drizzle.db
+        .select()
+        .from(tasks)
+        .where(eq(tasks.createId, c.id))
+        .orderBy(desc(tasks.createdAt))
+        .limit(1);
+      result.push(this.toResponse(c, latestTask));
+    }
+
+    return {
+      items: result,
+      total: totalResult?.count ?? 0,
+    };
+  }
+
+  /**
    * Retry a failed create (failed → processing, creates a new task)
    */
   async retryCreate(createId: string, userId: string): Promise<CreateResponse> {
