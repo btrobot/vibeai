@@ -28,7 +28,7 @@ export class LlmAdapter implements ProtocolAdapter {
       const baseUrl = process.env.COZE_LOOP_BASE_URL || 'https://api.coze.cn';
 
       if (!apiKey) {
-        this.logger.warn('COZE_LOOP_API_TOKEN not set, LLM adapter disabled');
+        this.logger.warn('COZE_LOOP_API_TOKEN not set, LLM adapter running in MOCK mode');
         return;
       }
 
@@ -45,8 +45,27 @@ export class LlmAdapter implements ProtocolAdapter {
     model: AdapterModel,
     context: ExecutionContext,
   ): Promise<ExecutionResult> {
+    const prompt = (input.prompt as string) || '';
+
+    // Mock mode: no API token configured
     if (!this.client) {
-      throw new Error('LLM 客户端未初始化，请检查 COZE_LOOP_API_TOKEN 配置');
+      this.logger.warn(`[MOCK] LLM streaming: model=${model.sdkModelId}, prompt="${prompt.substring(0, 50)}", taskId=${context.taskId}`);
+
+      const mockContent = this.generateMockText(prompt, model);
+      // Simulate streaming by sending chunks
+      const chunks = mockContent.match(/.{1,20}/g) || [mockContent];
+      for (const chunk of chunks) {
+        context.onProgress?.(0, chunk);
+        await this.delay(50);
+      }
+
+      return {
+        output: {
+          content: mockContent,
+          modelUsed: model.slug,
+          mock: true,
+        },
+      };
     }
 
     const messages = this.buildMessages(input);
@@ -76,6 +95,18 @@ export class LlmAdapter implements ProtocolAdapter {
         modelUsed: model.slug,
       },
     };
+  }
+
+  private generateMockText(prompt: string, model: AdapterModel): string {
+    return `[Mock LLM Response — ${model.name}]\n\n` +
+      `收到提示词: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"\n\n` +
+      `这是一条 Mock 模式返回的模拟响应。配置 COZE_LOOP_API_TOKEN 后将使用真实 AI 模型生成内容。\n\n` +
+      `模型信息:\n- Slug: ${model.slug}\n- SDK Model ID: ${model.sdkModelId}\n- 积分消耗: ${model.costCredits}\n\n` +
+      `生成时间: ${new Date().toISOString()}`;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

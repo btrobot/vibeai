@@ -28,7 +28,7 @@ export class ImageAdapter implements ProtocolAdapter {
       const baseUrl = process.env.COZE_LOOP_BASE_URL || 'https://api.coze.cn';
 
       if (!apiKey) {
-        this.logger.warn('COZE_LOOP_API_TOKEN not set, Image adapter disabled');
+        this.logger.warn('COZE_LOOP_API_TOKEN not set, Image adapter running in MOCK mode');
         return;
       }
 
@@ -45,11 +45,24 @@ export class ImageAdapter implements ProtocolAdapter {
     model: AdapterModel,
     context: ExecutionContext,
   ): Promise<ExecutionResult> {
+    const prompt = (input.prompt as string) || '';
+
+    // Mock mode: no API token configured
     if (!this.client) {
-      throw new Error('图片生成客户端未初始化，请检查 COZE_LOOP_API_TOKEN 配置');
+      this.logger.warn(`[MOCK] Image generation: model=${model.sdkModelId}, prompt="${prompt.substring(0, 50)}", taskId=${context.taskId}`);
+      context.onProgress?.(50, '[Mock] 生成中...');
+      await this.delay(800);
+      context.onProgress?.(100, '[Mock] 生成完成');
+
+      return {
+        output: {
+          images: [{ url: 'https://picsum.photos/seed/' + encodeURIComponent(prompt.substring(0, 20)) + '/1024/1024' }],
+          modelUsed: model.slug,
+          mock: true,
+        },
+      };
     }
 
-    const prompt = (input.prompt as string) || '';
     const size = (input.size as string) ?? (model.defaultParams.size as string) ?? '2K';
     const watermark = (input.watermark as boolean) ?? (model.defaultParams.watermark as boolean) ?? true;
     const referenceImages = input.referenceImages as string[] | undefined;
@@ -82,5 +95,9 @@ export class ImageAdapter implements ProtocolAdapter {
       },
       rawResponse: response,
     };
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

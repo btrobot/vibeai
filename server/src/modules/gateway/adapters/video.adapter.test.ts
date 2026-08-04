@@ -321,14 +321,15 @@ describe('VideoAdapter', () => {
       ).rejects.toThrow('视频生成失败');
     });
 
-    it('客户端未初始化时抛出错误', async () => {
+    it('无 Token 时进入 Mock 模式返回伪造视频', async () => {
       delete process.env.COZE_LOOP_API_TOKEN;
       delete process.env.COZE_WORKLOAD_API_TOKEN;
       const noTokenAdapter = new VideoAdapter();
 
-      await expect(
-        noTokenAdapter.execute({ prompt: 'test' }, mockModel, mockContext),
-      ).rejects.toThrow('视频生成客户端未初始化');
+      const result = await noTokenAdapter.execute({ prompt: 'a sunset' }, mockModel, mockContext);
+      expect(result.output.mock).toBe(true);
+      expect(result.output.video).toBeDefined();
+      expect((result.output.video as { url: string }).url).toContain('.mp4');
     });
   });
 });

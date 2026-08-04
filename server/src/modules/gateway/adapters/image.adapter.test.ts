@@ -182,14 +182,15 @@ describe('ImageAdapter', () => {
       ).rejects.toThrow('图片生成失败');
     });
 
-    it('客户端未初始化时抛出错误', async () => {
+    it('无 Token 时进入 Mock 模式返回伪造图片', async () => {
       delete process.env.COZE_LOOP_API_TOKEN;
       delete process.env.COZE_WORKLOAD_API_TOKEN;
       const noTokenAdapter = new ImageAdapter();
 
-      await expect(
-        noTokenAdapter.execute({ prompt: 'test' }, mockModel, mockContext),
-      ).rejects.toThrow('图片生成客户端未初始化');
+      const result = await noTokenAdapter.execute({ prompt: 'a cat' }, mockModel, mockContext);
+      expect(result.output.mock).toBe(true);
+      expect(result.output.images).toBeDefined();
+      expect((result.output.images as Array<{ url: string }>).length).toBeGreaterThan(0);
     });
   });
 });

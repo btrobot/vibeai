@@ -178,15 +178,15 @@ describe('LlmAdapter', () => {
       expect(result.output.content).toBe('Hello, world!');
     });
 
-    it('客户端未初始化时抛出错误', async () => {
+    it('无 Token 时进入 Mock 模式返回伪造文本', async () => {
       // Create adapter without API token
       delete process.env.COZE_LOOP_API_TOKEN;
       delete process.env.COZE_WORKLOAD_API_TOKEN;
       const noTokenAdapter = new LlmAdapter();
 
-      await expect(
-        noTokenAdapter.execute({ prompt: 'test' }, mockModel, mockContext),
-      ).rejects.toThrow('LLM 客户端未初始化');
+      const result = await noTokenAdapter.execute({ prompt: 'hello' }, mockModel, mockContext);
+      expect(result.output.mock).toBe(true);
+      expect(result.output.content).toContain('Mock LLM Response');
     });
   });
 });
