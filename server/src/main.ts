@@ -15,7 +15,8 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { AppModule } from './app.module';
 import { WsService } from './modules/ws/ws.service';
-import { GatewayService } from './modules/gateway/gateway.service';
+// WsService token is 'WS_SERVICE'
+
 
 async function bootstrap() {
   // Run database migrations before starting the app
@@ -64,7 +65,7 @@ async function bootstrap() {
 
   // Seed AI models (moved from GatewayModule.onModuleInit to avoid DI issues with tsx)
   try {
-    const gatewayService = app.get(GatewayService);
+    const gatewayService = app.get('GATEWAY_SERVICE') as any;
     await gatewayService.seedModels();
   } catch (e) {
     console.error('Seed models failed:', (e as Error).message);
@@ -83,7 +84,7 @@ async function bootstrap() {
 
   // Initialize WebSocket server on the same HTTP server
   const httpServer = app.getHttpServer();
-  const wsService = app.get(WsService);
+  const wsService = app.get('WS_SERVICE') as any;
   wsService.initialize(httpServer);
 
   console.log(`Backend running on http://localhost:${port}`);
