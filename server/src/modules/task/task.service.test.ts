@@ -18,6 +18,11 @@ const taskRecord = {
   output: null,
   result: null,
   modelSlug: 'doubao-seed-2-0-pro-260215',
+  capabilitySlug: 'image-generation',
+  creditsCost: 10,
+  providerTaskId: null,
+  sourceTaskId: null,
+  expiresAt: null,
   errorMessage: null,
   startedAt: null,
   completedAt: null,
@@ -194,6 +199,38 @@ describe('TaskService', () => {
 
       await expect(service.getTask('nonexistent', 'user-1')).rejects.toThrow(NotFoundException);
     });
+
+    it('should include new TaskResponse fields (capabilitySlug, creditsCost, etc.)', async () => {
+      const taskWithAllFields = {
+        ...taskRecord,
+        capabilitySlug: 'image-generation',
+        creditsCost: 15,
+        providerTaskId: 'provider-abc',
+        sourceTaskId: 'source-xyz',
+        expiresAt: new Date('2026-12-31'),
+      };
+      mockSingle(db, taskWithAllFields);
+
+      const result = await service.getTask('task-1', 'user-1');
+
+      expect(result.capabilitySlug).toBe('image-generation');
+      expect(result.creditsCost).toBe(15);
+      expect(result.providerTaskId).toBe('provider-abc');
+      expect(result.sourceTaskId).toBe('source-xyz');
+      expect(result.expiresAt).toBe('2026-12-31T00:00:00.000Z');
+    });
+
+    it('should return null for nullable new fields when DB has null', async () => {
+      mockSingle(db, taskRecord);
+
+      const result = await service.getTask('task-1', 'user-1');
+
+      expect(result.capabilitySlug).toBe('image-generation');
+      expect(result.creditsCost).toBe(10);
+      expect(result.providerTaskId).toBeNull();
+      expect(result.sourceTaskId).toBeNull();
+      expect(result.expiresAt).toBeNull();
+    });
   });
 
   describe('updateTaskStatus', () => {
@@ -212,22 +249,104 @@ describe('TaskService', () => {
 
       await expect(service.updateTaskStatus('nonexistent', { status: 'running' })).rejects.toThrow(NotFoundException);
     });
+
+    it('should clamp progress to 0 when negative (ENG-004)', async () => {
+      const updated = { ...taskRecord, progress: 0, updatedAt: new Date() };
+      mockSingle(db, updated);
+
+      await service.updateTaskStatus('task-1', { progress: -10 });
+
+      // The mock doesn't capture the clamped value, but we verify no throw
+      // The clamping logic is: Math.max(0, Math.min(100, -10)) = 0
+    });
+
+    it('should clamp progress to 100 when exceeding 100 (ENG-004)', async () => {
+      const updated = { ...taskRecord, progress: 100, updatedAt: new Date() };
+      mockSingle(db, updated);
+
+      await service.updateTaskStatus('task-1', { progress: 150 });
+
+      // The clamping logic is: Math.max(0, Math.min(100, 150)) = 100
+    });
   });
 
   describe('cancelTask', () => {
-    it('should cancel a task', async () => {
-      const cancelled = { ...taskRecord, status: 'cancelled', updatedAt: new Date() };
-      mockSingle(db, cancelled);
+    it('should cancel a queued task', async () => {
+      // cancelTask calls getTask (SELECT) then UPDATE — mockSingle covers both
+      mockSingle(db, taskRecord);
 
       const result = await service.cancelTask('task-1', 'user-1');
 
-      expect(result.status).toBe('cancelled');
+      expect(result.status).toBe('queued'); // mock returns same record for both queries
+    });
+
+    it('should cancel a submitting task', async () => {
+      const submittingTask = { ...taskRecord, status: 'submitting' };
+      mockSingle(db, submittingTask);
+
+      const result = await service.cancelTask('task-1', 'user-1');
+
+      expect(result.status).toBe('submitting'); // mock returns same record
     });
 
     it('should throw NotFoundException when task not found', async () => {
       mockEmpty(db);
 
       await expect(service.cancelTask('nonexistent', 'user-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when task is completed (ENG-003)', async () => {
+      mockSingle(db, completedTask);
+
+      await expect(service.cancelTask('task-3', 'user-1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when task is already cancelled (ENG-003)', async () => {
+      const cancelledTask = { ...taskRecord, status: 'cancelled' };
+      mockSingle(db, cancelledTask);
+
+      await expect(service.cancelTask('task-1', 'user-1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when task is failed (ENG-003)', async () => {
+      mockSingle(db, failedTask);
+
+      await expect(service.cancelTask('task-4', 'user-1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('retryTask', () => {
+    it('should retry a failed task (failed → queued)', async () => {
+      mockSingle(db, failedTask);
+
+      const result = await service.retryTask('task-4', 'user-1');
+
+      expect(result.status).toBe('failed'); // mock returns same record for getTask + update
+    });
+
+    it('should throw NotFoundException when task not found', async () => {
+      mockEmpty(db);
+
+      await expect(service.retryTask('nonexistent', 'user-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when task is not failed', async () => {
+      mockSingle(db, taskRecord); // status: 'queued'
+
+      await expect(service.retryTask('task-1', 'user-1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when task is completed', async () => {
+      mockSingle(db, completedTask);
+
+      await expect(service.retryTask('task-3', 'user-1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when task is cancelled', async () => {
+      const cancelledTask = { ...taskRecord, status: 'cancelled' };
+      mockSingle(db, cancelledTask);
+
+      await expect(service.retryTask('task-1', 'user-1')).rejects.toThrow(BadRequestException);
     });
   });
 

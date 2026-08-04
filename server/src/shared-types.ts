@@ -288,6 +288,11 @@ export interface TaskResponse {
   output: Record<string, unknown> | null;
   result: Record<string, unknown> | null;
   modelSlug: string | null;
+  capabilitySlug: string | null;
+  creditsCost: number;
+  providerTaskId: string | null;
+  sourceTaskId: string | null;
+  expiresAt: string | null;
   errorMessage: string | null;
   startedAt: string | null;
   completedAt: string | null;

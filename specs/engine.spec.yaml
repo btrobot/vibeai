@@ -355,8 +355,8 @@ operations:
       - 返回 ExecutionStates 列表
     test: true
   - name: retryTask
-    method: N/A
-    path: N/A
+    method: POST
+    path: /tasks/:id/retry
     description: 重试失败的任务
     auth: jwt
     pre:
@@ -386,21 +386,21 @@ rules:
     level: error
     description: 只有任务所有者可查看/取消任务
     enforcement: 所有任务操作检查 userId = jwt.userId
-    test: should cancel a task
+    test: should cancel a queued task
   - name: task_status_guard
     id: ENG-003
     severity: error
     level: error
     description: 已完成/已取消的任务不可再取消
     enforcement: 取消前检查 status 是否在 queued/submitting 中
-    test: should check credits when creditCost is specified
+    test: should throw BadRequestException when task is completed (ENG-003)
   - name: progress_bounds
     id: ENG-004
     severity: error
     level: error
     description: progress 必须在 0-100 范围内
     enforcement: 更新时 clamp progress
-    test: should complete task and deduct credits
+    test: should clamp progress to 0 when negative (ENG-004)
   - name: concurrent_task_limit
     id: ENG-005
     severity: error

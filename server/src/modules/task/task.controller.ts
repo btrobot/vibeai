@@ -38,6 +38,12 @@ export class TaskController {
     return { success: true, data: task };
   }
 
+  @Post(':id/retry')
+  async retry(@Req() req: any, @Param('id') id: string) {
+    const task = await this.taskService.retryTask(id, req.user.userId);
+    return { success: true, data: task };
+  }
+
   @Get(':id/states')
   async getExecutionStates(@Req() req: any, @Param('id') id: string) {
     // Verify ownership first

@@ -107,6 +107,37 @@ describe('ProjectService', () => {
 
       await expect(service.update('nonexistent', 'user-1', { name: 'test' })).rejects.toThrow(NotFoundException);
     });
+
+    it('should only update provided fields, not overwrite with undefined', async () => {
+      const updated = { ...projectRecord, name: '新名称', updatedAt: new Date() };
+      mockSingle(db, updated);
+
+      // Pass only name — description should NOT be overwritten
+      const result = await service.update('proj-1', 'user-1', { name: '新名称' });
+
+      expect(result.name).toBe('新名称');
+      // The mock returns the same record, so we can't directly assert what was sent to DB,
+      // but the service code filters out undefined before calling .set()
+    });
+
+    it('should update multiple fields at once', async () => {
+      const updated = {
+        ...projectRecord,
+        name: '新名称',
+        description: '新描述',
+        tags: ['新标签'],
+        updatedAt: new Date(),
+      };
+      mockSingle(db, updated);
+
+      const result = await service.update('proj-1', 'user-1', {
+        name: '新名称',
+        description: '新描述',
+        tags: ['新标签'],
+      });
+
+      expect(result.name).toBe('新名称');
+    });
   });
 
   describe('delete', () => {

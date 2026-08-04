@@ -182,8 +182,8 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 1: Drizzle Mock | `drizzle-mock.test.ts` | 3 | — | — | ✅ |
 | Phase 2: Storage | `storage.service.test.ts` | 15 | 97.18% | ≥90% | ✅ |
 | Phase 3: Gateway | `gateway.service.test.ts` | 26 | 85.71% | ≥85% | ✅ |
-| Phase 4: Task Engine | `task.service.test.ts` | 23 | 100% | ≥85% | ✅ |
-| Phase 4: Project | `project.service.test.ts` | 12 | 100% | ≥90% | ✅ |
+| Phase 4: Task Engine | `task.service.test.ts` | 36 | 100% | ≥85% | ✅ |
+| Phase 4: Project | `project.service.test.ts` | 14 | 100% | ≥90% | ✅ |
 | Phase 4: WebSocket | `ws.service.test.ts` | 14 | 98.82% | ≥80% | ✅ |
 | Phase 5: Billing | `billing.service.test.ts` | 26 | 90.2% | ≥90% | ✅ |
 | Phase 6: Gallery Service | `gallery.service.test.ts` | 14 | 85.0% | ≥85% | ✅ |
@@ -201,17 +201,29 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 6: Gallery Page | `GalleryPage.test.tsx` | 4 | 55.17% | ≥30% | ✅ |
 | Phase 6: Projects Page | `ProjectsPage.test.tsx` | 3 | 30% | ≥30% | ✅ |
 | Phase 6: Storage Page | `StoragePage.test.tsx` | 2 | 30% | ≥30% | ✅ |
-| **合计（后端）** | | **180** | — | — | **✅ 全部通过** |
-| **合计（前端）** | | **71** | — | — | **✅ 全部通过** |
+| Phase 3: Gateway Service | `gateway.service.test.ts` | 32 | 86.5% | ≥85% | ✅ |
+| Phase 3: Gateway Spec | `gateway.spec.test.ts` | 51 | — | — | ✅ |
+| Phase 3: Gateway Controller | `gateway.controller.test.ts` | 17 | 100% | ≥80% | ✅ |
+| Phase 3: Gateway Regression | `gateway.regression.test.ts` | 38 | — | — | ✅ |
+| Phase 3: Engine Spec | `engine.spec.test.ts` | 19 | — | — | ✅ |
+| Phase 3: Seeds | `seeds.test.ts` | 31 | — | — | ✅ |
+| Phase 3: Adapter Registry | `adapter-registry.test.ts` | 10 | 100% | ≥80% | ✅ |
+| Phase 3: Image Adapter | `image.adapter.test.ts` | 11 | 96% | ≥85% | ✅ |
+| Phase 3: Video Adapter | `video.adapter.test.ts` | 16 | 98% | ≥85% | ✅ |
+| Phase 3: LLM Adapter | `llm.adapter.test.ts` | 11 | 96% | ≥85% | ✅ |
+| Phase 3: Task Execution | `task-execution.service.test.ts` | 14 | 98.5% | ≥85% | ✅ |
+| **合计（后端）** | | **398** | — | — | **✅ 全部通过** |
+| **合计（前端）** | | **71** | — | — | **⚠️ 68/71 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **284** | — | — | **✅ 全部通过** |
+| **总计** | | **502** | — | — | **✅ 499/502 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ⏹️ 需手动构建后运行 |
 
 ### 已知问题
 - **tsx ESM loader 与 NestJS 装饰器不兼容**：集成测试无法通过 vitest 运行（`NestFactory.create` 在 tsx 环境下导致 `authService` 为 undefined）。解决方案：先 `pnpm build` 编译为 JavaScript，再通过 `node scripts/test-integration.js` 运行。
 - **JWT 重复 token 问题**：`generateTokens` 方法在相同秒内调用会生成相同的 JWT（`iat` 相同），导致 `sessions.refreshToken` 唯一约束冲突。已通过添加 `jti` 随机值修复。
 - **DrizzleMock 多查询限制**：`mockSingle` 在服务方法需要多次查询（如注册时先查询再插入）时只能返回第一个结果。解决方案：使用 `mockResolvedValueOnce([])` + `mockReturning` 组合模式。
+- **前端 3 个预存测试失败**：`DashboardPage.test.tsx`（找不到"处理中"文本）、`WorkspacePage.test.tsx`（同上）、`RegisterPage.test.tsx`（密码可见切换按钮 accessible name 为空）。均为 UI 文本/属性不匹配，非后端问题。
 
 ## 关键架构决策
 

@@ -75,12 +75,18 @@ export class ProjectService {
   }
 
   async update(id: string, userId: string, input: UpdateProjectInput): Promise<ProjectResponse> {
+    // Filter out undefined values to avoid overwriting existing fields
+    const updateData: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== undefined) {
+        updateData[key] = value;
+      }
+    }
+    updateData.updatedAt = new Date();
+
     const [p] = await this.drizzle.db
       .update(projects)
-      .set({
-        ...input,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(and(eq(projects.id, id), eq(projects.userId, userId)))
       .returning();
 

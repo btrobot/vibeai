@@ -27,6 +27,11 @@ export class TaskService {
       output: t.output as Record<string, unknown> | null,
       result: t.result as Record<string, unknown> | null,
       modelSlug: t.modelSlug,
+      capabilitySlug: t.capabilitySlug,
+      creditsCost: t.creditsCost,
+      providerTaskId: t.providerTaskId,
+      sourceTaskId: t.sourceTaskId,
+      expiresAt: t.expiresAt?.toISOString() ?? null,
       errorMessage: t.errorMessage,
       startedAt: t.startedAt?.toISOString() ?? null,
       completedAt: t.completedAt?.toISOString() ?? null,
@@ -139,9 +144,16 @@ export class TaskService {
       estimatedCompletionAt: Date;
     }>,
   ): Promise<TaskResponse> {
+    const updateData: Record<string, unknown> = { ...update, updatedAt: new Date() };
+
+    // ENG-004: progress must be clamped to 0-100
+    if (updateData.progress !== undefined) {
+      updateData.progress = Math.max(0, Math.min(100, Number(updateData.progress)));
+    }
+
     const [task] = await this.drizzle.db
       .update(tasks)
-      .set({ ...update, updatedAt: new Date() })
+      .set(updateData)
       .where(eq(tasks.id, taskId))
       .returning();
 
@@ -150,15 +162,52 @@ export class TaskService {
   }
 
   async cancelTask(taskId: string, userId: string): Promise<TaskResponse> {
-    const [task] = await this.drizzle.db
+    // ENG-002: task_owner_only — check ownership first
+    const task = await this.getTask(taskId, userId);
+
+    // ENG-003: task_status_guard — only queued/submitting tasks can be cancelled
+    const cancellableStates = ['queued', 'submitting'];
+    if (!cancellableStates.includes(task.status)) {
+      throw new BadRequestException('任务已完成或已取消，无法取消');
+    }
+
+    const [updated] = await this.drizzle.db
       .update(tasks)
-      .set({ status: 'cancelled', updatedAt: new Date() })
+      .set({ status: 'cancelled', updatedAt: new Date(), completedAt: new Date() })
       .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
       .returning();
 
-    if (!task) throw new NotFoundException('任务不存在');
     this.logger.log(`Task cancelled: ${taskId}`);
-    return this.toTaskResponse(task);
+    return this.toTaskResponse(updated);
+  }
+
+  /**
+   * Retry a failed task (ENG: failed → queued)
+   */
+  async retryTask(taskId: string, userId: string): Promise<TaskResponse> {
+    // ENG-002: task_owner_only
+    const task = await this.getTask(taskId, userId);
+
+    // State machine: only failed tasks can be retried
+    if (task.status !== 'failed') {
+      throw new BadRequestException('只有失败的任务可以重试');
+    }
+
+    const [updated] = await this.drizzle.db
+      .update(tasks)
+      .set({
+        status: 'queued',
+        progress: 0,
+        errorMessage: null,
+        startedAt: null,
+        completedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
+      .returning();
+
+    this.logger.log(`Task retried: ${taskId}`);
+    return this.toTaskResponse(updated);
   }
 
   /**
