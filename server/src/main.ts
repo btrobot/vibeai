@@ -15,7 +15,7 @@ async function bootstrap() {
     const databaseUrl = process.env.DATABASE_URL;
     if (databaseUrl) {
       const pool = new Pool({ connectionString: databaseUrl });
-      await migrate(drizzle(pool), { migrationsFolder: './drizzle' });
+      await migrate(drizzle(pool), { migrationsFolder: join(__dirname, '..', 'drizzle') });
       await pool.end();
       console.log('Database migrations completed successfully');
     } else {

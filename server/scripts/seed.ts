@@ -6,7 +6,7 @@
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import * as schema from '../src/db/schema';
 
 async function main() {
