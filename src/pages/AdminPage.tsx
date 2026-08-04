@@ -85,12 +85,12 @@ export default function AdminPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         {[
-          { label: '总用户', value: stats?.totalUsers ?? '-', icon: Users, color: 'text-blue-500' },
-          { label: '活跃用户', value: stats?.activeUsers ?? '-', icon: UserCheck, color: 'text-green-500' },
-          { label: '总项目', value: stats?.totalProjects ?? '-', icon: FileText, color: 'text-primary' },
-          { label: '总任务', value: stats?.totalTasks ?? '-', icon: Activity, color: 'text-purple-500' },
-          { label: '失败任务', value: stats?.failedTasks ?? '-', icon: AlertTriangle, color: 'text-red-500' },
-          { label: '存储用量', value: stats?.totalStorage ? `${(stats.totalStorage / 1024 / 1024).toFixed(1)}MB` : '-', icon: BarChart3, color: 'text-amber-500' },
+          { label: '总用户', value: stats?.totalUsers ?? '-', icon: Users, color: 'text-primary' },
+          { label: '活跃用户', value: stats?.activeUsers ?? '-', icon: UserCheck, color: 'text-brand' },
+          { label: '总项目', value: stats?.totalProjects ?? '-', icon: FileText, color: 'text-foreground' },
+          { label: '总任务', value: stats?.totalTasks ?? '-', icon: Activity, color: 'text-primary' },
+          { label: '失败任务', value: stats?.failedTasks ?? '-', icon: AlertTriangle, color: 'text-destructive' },
+          { label: '存储用量', value: stats?.totalStorage ? `${(stats.totalStorage / 1024 / 1024).toFixed(1)}MB` : '-', icon: BarChart3, color: 'text-muted-foreground' },
         ].map((card) => (
           <div
             key={card.label}

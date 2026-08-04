@@ -38,13 +38,13 @@ interface Task {
 }
 
 const capabilities = [
-  { slug: 'text-generation', label: '文本生成', icon: MessageSquare, color: 'text-blue-500' },
-  { slug: 'image-generation', label: '图像生成', icon: ImageIcon, color: 'text-primary' },
-  { slug: 'video-generation', label: '视频生成', icon: Video, color: 'text-purple-500' },
-  { slug: 'background-removal', label: '白底图', icon: ImageIcon, color: 'text-amber-500' },
-  { slug: 'scene-composition', label: '场景合成', icon: ImageIcon, color: 'text-green-500' },
-  { slug: 'model-dressing', label: '模特换装', icon: ImageIcon, color: 'text-pink-500' },
-  { slug: 'detail-page-generation', label: '详情页', icon: FileText, color: 'text-cyan-500' },
+  { slug: 'text-generation', label: '文本生成', icon: MessageSquare, color: 'text-primary' },
+  { slug: 'image-generation', label: '图像生成', icon: ImageIcon, color: 'text-brand' },
+  { slug: 'video-generation', label: '视频生成', icon: Video, color: 'text-foreground' },
+  { slug: 'background-removal', label: '白底图', icon: ImageIcon, color: 'text-muted-foreground' },
+  { slug: 'scene-composition', label: '场景合成', icon: ImageIcon, color: 'text-brand' },
+  { slug: 'model-dressing', label: '模特换装', icon: ImageIcon, color: 'text-primary' },
+  { slug: 'detail-page-generation', label: '详情页', icon: FileText, color: 'text-foreground' },
 ];
 
 export default function WorkspacePage() {
@@ -124,10 +124,10 @@ export default function WorkspacePage() {
   };
 
   const statusConfig: Record<string, { icon: any; label: string; color: string }> = {
-    pending: { icon: Clock, label: '排队中', color: 'text-yellow-500' },
-    processing: { icon: Loader2, label: '处理中', color: 'text-blue-500' },
-    completed: { icon: CheckCircle2, label: '已完成', color: 'text-green-500' },
-    failed: { icon: XCircle, label: '失败', color: 'text-red-500' },
+    pending: { icon: Clock, label: '排队中', color: 'text-muted-foreground' },
+    processing: { icon: Loader2, label: '处理中', color: 'text-primary' },
+    completed: { icon: CheckCircle2, label: '已完成', color: 'text-brand' },
+    failed: { icon: XCircle, label: '失败', color: 'text-destructive' },
     cancelled: { icon: XCircle, label: '已取消', color: 'text-muted-foreground' },
   };
 

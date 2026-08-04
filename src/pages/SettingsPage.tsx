@@ -105,7 +105,7 @@ export default function SettingsPage() {
           className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
             message.type === 'success'
               ? 'bg-primary/10 text-primary'
-              : 'bg-red-500/10 text-danger'
+              : 'bg-destructive/10 text-destructive'
           }`}
         >
           {message.type === 'success' ? (

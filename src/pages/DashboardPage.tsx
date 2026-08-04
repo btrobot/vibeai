@@ -70,17 +70,17 @@ export default function DashboardPage() {
   }, []);
 
   const statCards = [
-    { label: '项目总数', value: stats?.totalProjects ?? 0, icon: FolderKanban, color: 'text-blue-500' },
-    { label: '任务总数', value: stats?.totalTasks ?? 0, icon: Image, color: 'text-primary' },
-    { label: '已完成', value: stats?.completedTasks ?? 0, icon: TrendingUp, color: 'text-green-500' },
-    { label: '可用额度', value: user?.credits ?? 0, icon: Sparkles, color: 'text-amber-500' },
+    { label: '项目总数', value: stats?.totalProjects ?? 0, icon: FolderKanban, color: 'text-primary' },
+    { label: '任务总数', value: stats?.totalTasks ?? 0, icon: Image, color: 'text-foreground' },
+    { label: '已完成', value: stats?.completedTasks ?? 0, icon: TrendingUp, color: 'text-brand' },
+    { label: '可用额度', value: user?.credits ?? 0, icon: Sparkles, color: 'text-foreground' },
   ];
 
   const statusLabels: Record<string, { label: string; color: string }> = {
-    pending: { label: '排队中', color: 'text-yellow-500' },
-    processing: { label: '处理中', color: 'text-blue-500' },
-    completed: { label: '已完成', color: 'text-green-500' },
-    failed: { label: '失败', color: 'text-red-500' },
+    pending: { label: '排队中', color: 'text-muted-foreground' },
+    processing: { label: '处理中', color: 'text-primary' },
+    completed: { label: '已完成', color: 'text-brand' },
+    failed: { label: '失败', color: 'text-destructive' },
     cancelled: { label: '已取消', color: 'text-muted-foreground' },
   };
 
@@ -104,7 +104,7 @@ export default function DashboardPage() {
         </div>
         <button
           onClick={() => navigate('/projects')}
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary"
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" />
           新建项目

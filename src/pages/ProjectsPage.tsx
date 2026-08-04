@@ -113,7 +113,7 @@ export default function ProjectsPage() {
 
   const statusColors: Record<string, string> = {
     active: 'text-primary border-primary/30',
-    completed: 'text-blue-500 border-blue-600/30',
+    completed: 'text-brand border-brand/30',
     archived: 'text-muted-foreground border-border',
   };
 
