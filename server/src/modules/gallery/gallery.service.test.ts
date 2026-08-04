@@ -4,13 +4,21 @@ import { createDrizzleMock } from '../../test/drizzle-mock';
 import type { DrizzleMock } from '../../test/drizzle-mock';
 import { buildGalleryWork, buildGalleryLike } from '../../test/factories';
 
+function createStorageServiceMock() {
+  return {
+    resolveUrls: vi.fn().mockResolvedValue(new Map<string, string>()),
+  };
+}
+
 describe('GalleryService', () => {
   let service: GalleryService;
   let db: DrizzleMock;
+  let storageService: ReturnType<typeof createStorageServiceMock>;
 
   beforeEach(() => {
     db = createDrizzleMock();
-    service = new GalleryService(db as any);
+    storageService = createStorageServiceMock();
+    service = new GalleryService(db as any, storageService as any);
   });
 
   describe('作品发布', () => {
@@ -176,12 +184,12 @@ describe('GalleryService', () => {
         prompt: '一只橘色的猫',
         capabilitySlug: 'text-to-image',
         modelSlug: 'doubao-seedream-5-0',
-        output: { images: ['https://cdn.vibeai.com/cat.png'] },
+        output: { images: [{ fileId: 'file-1', url: 'https://cdn.vibeai.com/cat.png' }] },
         status: 'completed',
       };
-      const work = buildGalleryWork({ title: '一只橘色的猫', userId: 'user-1' });
-      // First query: select create → mockCreate; Second query: insert work → work
-      db._result = [mockCreate, work];
+      // Both select and insert.returning() get the same _result
+      db._result = [mockCreate];
+      storageService.resolveUrls.mockResolvedValue(new Map([['file-1', 'https://cdn.vibeai.com/cat.png']]));
 
       const result = await service.publishWork('user-1', {
         createId: 'create-1',
@@ -217,6 +225,91 @@ describe('GalleryService', () => {
       });
 
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('fileId URL 解析', () => {
+    it('imageFileId 应通过 storageService 解析为 URL', async () => {
+      const works = [
+        buildGalleryWork({ imageFileId: 'file-abc', imageUrl: null, isPublished: true }),
+      ];
+      // _result is returned for BOTH queries in Promise.all; works array is first element
+      db._result = works;
+      storageService.resolveUrls.mockResolvedValue(
+        new Map([['file-abc', 'https://cdn.vibeai.com/resolved.png']])
+      );
+
+      const result = await service.listWorks({ sort: 'latest' });
+      expect(result.success).toBe(true);
+      expect(storageService.resolveUrls).toHaveBeenCalledWith(['file-abc']);
+      expect(result.data[0].imageUrl).toBe('https://cdn.vibeai.com/resolved.png');
+    });
+
+    it('imageFileId 为 null 时回退到 legacy imageUrl', async () => {
+      const works = [
+        buildGalleryWork({ imageFileId: null, imageUrl: 'https://legacy.example.com/old.png', isPublished: true }),
+      ];
+      db._result = works;
+
+      const result = await service.listWorks({ sort: 'latest' });
+      expect(result.success).toBe(true);
+      // resolveUrls not called when all fileIds are null (early return)
+      expect(storageService.resolveUrls).not.toHaveBeenCalled();
+      expect(result.data[0].imageUrl).toBe('https://legacy.example.com/old.png');
+    });
+
+    it('getWork 时也应解析 fileId', async () => {
+      const work = buildGalleryWork({ imageFileId: 'file-xyz', imageUrl: null, views: 5 });
+      db._result = [work];
+      storageService.resolveUrls.mockResolvedValue(
+        new Map([['file-xyz', 'https://cdn.vibeai.com/detail.png']])
+      );
+
+      const result = await service.getWork('work-1');
+      expect(result.success).toBe(true);
+      expect(result.data.imageUrl).toBe('https://cdn.vibeai.com/detail.png');
+    });
+
+    it('通过 createId 发布时提取 imageFileId', async () => {
+      const mockCreate = {
+        id: 'create-1',
+        userId: 'user-1',
+        prompt: '一只橘色的猫',
+        capabilitySlug: 'text-to-image',
+        modelSlug: 'doubao-seedream-5-0',
+        output: { images: [{ fileId: 'file-img-1', url: 'https://cdn.vibeai.com/cat.png' }] },
+        status: 'completed',
+      };
+      // Both select and insert.returning() get the same _result
+      db._result = [mockCreate];
+      storageService.resolveUrls.mockResolvedValue(
+        new Map([['file-img-1', 'https://cdn.vibeai.com/cat.png']])
+      );
+
+      const result = await service.publishWork('user-1', {
+        createId: 'create-1',
+        type: 'image',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+    });
+
+    it('直接传入 imageFileId 也能发布', async () => {
+      const work = buildGalleryWork({ imageFileId: 'file-direct', imageUrl: null, userId: 'user-1' });
+      db._result = [work];
+      storageService.resolveUrls.mockResolvedValue(
+        new Map([['file-direct', 'https://cdn.vibeai.com/direct.png']])
+      );
+
+      const result = await service.publishWork('user-1', {
+        title: '直接发布',
+        type: 'image',
+        imageFileId: 'file-direct',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.imageUrl).toBe('https://cdn.vibeai.com/direct.png');
     });
   });
 });

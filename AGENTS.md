@@ -186,15 +186,14 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 4: Project | `project.service.test.ts` | 14 | 100% | ≥90% | ✅ |
 | Phase 4: WebSocket | `ws.service.test.ts` | 14 | 98.82% | ≥80% | ✅ |
 | Phase 5: Billing | `billing.service.test.ts` | 26 | 90.2% | ≥90% | ✅ |
-| Phase 6: Gallery Service | `gallery.service.test.ts` | 14 | 85.0% | ≥85% | ✅ |
+| Phase 6: Gallery Service | `gallery.service.test.ts` | 22 | 85.0% | ≥85% | ✅ |
 | Phase 6: Create Service | `create.service.test.ts` | 23 | — | ≥85% | ✅ |
-| Phase 6: Gallery Publish | `gallery.service.test.ts` | 17 | — | ≥85% | ✅ |
 | Phase 6: User Service | `user.service.test.ts` | 4 | 100% | ≥80% | ✅ |
 | Phase 6: Admin Service | `admin.service.test.ts` | 2 | 100% | ≥60% | ✅ |
 | Phase 6: Spec Compliance | `spec-compliance.test.ts` | 22 | — | — | ✅ |
 | Phase 6: Dashboard Page | `DashboardPage.test.tsx` | 4 | 100% | ≥30% | ✅ |
 | Phase 6: Billing Page | `BillingPage.test.tsx` | 4 | 85.26% | ≥30% | ✅ |
-| Phase 6: Workspace Page | `WorkspacePage.test.tsx` | 4 | 79.29% | ≥30% | ✅ |
+| Phase 6: Workspace Page | `WorkspacePage.test.tsx` | 5 | 79.29% | ≥30% | ✅ |
 | Phase 6: Login Page | `LoginPage.test.tsx` | 3 | 97.91% | ≥30% | ✅ |
 | Phase 6: Register Page | `RegisterPage.test.tsx` | 6 | 93.49% | ≥30% | ✅ |
 | Phase 6: Tool Page | `ToolPage.test.tsx` | 7 | 46.18% | ≥30% | ✅ |
@@ -214,11 +213,11 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 3: Video Adapter | `video.adapter.test.ts` | 16 | 98% | ≥85% | ✅ |
 | Phase 3: LLM Adapter | `llm.adapter.test.ts` | 11 | 96% | ≥85% | ✅ |
 | Phase 3: Task Execution | `task-execution.service.test.ts` | 19 | 98.5% | ≥85% | ✅ |
-| **合计（后端）** | | **453** | — | — | **✅ 全部通过** |
-| **合计（前端）** | | **72** | — | — | **⚠️ 71/72 通过** |
+| **合计（后端）** | | **458** | — | — | **✅ 全部通过** |
+| **合计（前端）** | | **73** | — | — | **⚠️ 72/73 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **559** | — | — | **✅ 558/559 通过** |
+| **总计** | | **564** | — | — | **✅ 563/564 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ⏹️ 需手动构建后运行 |
 | Phase 7: Gateway Integration | `test-integration.js` | 13 | ⏹️ 需手动构建后运行 |
 | Phase 7: Gateway E2E (测试机) | 手动 curl 验证 | — | — | — | ✅ 已验证 |
@@ -262,6 +261,13 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
   - `creates.input`（JSONB）保存用户完整输入快照（prompt + fileId 引用）
   - **进出口转换**：generate API 收到 `{ fileId }` → `resolveInputForAdapter()` 解析为 URL → 传给 AI 适配器；适配器返回外部 URL → `transferResult()` 下载转存 → fileId
   - 前端提交时传 `{ fileId: "uuid" }` 而非裸 URL
+- **Gallery fileId 迁移**（Migration 0004）
+  - `gallery_works` 表新增 `image_file_id` / `video_file_id` 外键（→ files.id, ON DELETE SET NULL）
+  - 遗留 `image_url` / `video_url` 列保留作为向后兼容回退
+  - `GalleryService.resolveWorksUrls()` 批量解析 fileId → URL（通过 `storageService.resolveUrls()`），fileId 为 null 时回退到 legacy URL
+  - `publishWork()` 从 `create.output` 提取 `{ fileId, url }` 对象，优先存储 fileId
+  - `GalleryModule` 导入 `StorageModule` 以注入 `StorageService`
+  - 前端 `WorkspacePage` 新增图片上传功能：图像类能力（image-generation/background-removal/scene-composition/model-dressing/image-editing）显示上传按钮，上传后提交 `{ referenceImage: { fileId } }`
 
 ## 数据库迁移与种子数据
 
@@ -275,6 +281,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | `0001_hot_dragon_man.sql` | Gallery 表（gallery_works/gallery_likes） |
 | `0002_create_entity_schema.sql` | Create 实体层 + ai_models 新 schema + provider_attempts |
 | `0003_file_source_and_creates_input.sql` | files 表加 source/external_url；creates 表加 input JSONB |
+| `0004_gallery_works_file_ids.sql` | gallery_works 表加 image_file_id/video_file_id 外键 |
 
 ### 独立脚本
 

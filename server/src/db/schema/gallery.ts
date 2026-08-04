@@ -1,11 +1,16 @@
 import { pgTable, text, timestamp, uuid, integer, varchar, boolean, index, foreignKey } from 'drizzle-orm/pg-core';
 import { users } from './auth';
+import { files } from './files';
 
 // ===== Gallery Works Table =====
 export const galleryWorks = pgTable('gallery_works', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   title: varchar('title', { length: 255 }).notNull().default(''),
+  // Unified fileId references (preferred)
+  imageFileId: uuid('image_file_id').references(() => files.id, { onDelete: 'set null' }),
+  videoFileId: uuid('video_file_id').references(() => files.id, { onDelete: 'set null' }),
+  // Legacy URL columns (kept for backward compat, will be deprecated)
   imageUrl: text('image_url'),
   videoUrl: text('video_url'),
   type: varchar('type', { length: 20 }).notNull().default('image'), // image, video, text

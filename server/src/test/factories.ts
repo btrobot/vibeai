@@ -32,6 +32,8 @@ export interface TestGalleryWork {
   id: string;
   userId: string;
   title: string;
+  imageFileId: string | null;
+  videoFileId: string | null;
   imageUrl: string | null;
   videoUrl: string | null;
   type: string;
@@ -54,6 +56,8 @@ export function buildGalleryWork(partial?: Partial<TestGalleryWork>): TestGaller
     id: `work-${counter}`,
     userId: 'user-1',
     title: `Test Work ${counter}`,
+    imageFileId: null,
+    videoFileId: null,
     imageUrl: `https://example.com/work-${counter}.png`,
     videoUrl: null,
     type: 'image',

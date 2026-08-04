@@ -28,9 +28,21 @@ entities:
       - name: imageUrl
         type: text
         nullable: true
+        description: "Legacy URL (backward compat, deprecated in favor of imageFileId)"
       - name: videoUrl
         type: text
         nullable: true
+        description: "Legacy URL (backward compat, deprecated in favor of videoFileId)"
+      - name: imageFileId
+        type: uuid
+        nullable: true
+        fk: { table: "files", field: "id", onDelete: "set null" }
+        description: "Unified file reference for image output"
+      - name: videoFileId
+        type: uuid
+        nullable: true
+        fk: { table: "files", field: "id", onDelete: "set null" }
+        description: "Unified file reference for video output"
       - name: type
         type: varchar(20)
         notNull: true
@@ -238,3 +250,11 @@ rules:
     description: "GalleryWork.likes 必须与 GalleryLike 记录数一致"
     enforcement: "点赞/取消点赞时同步更新 likes 计数"
     test: "已登录用户可以查看自己的作品"
+
+  - name: file_id_preferred
+    id: GAL-006
+    severity: warning
+    level: warn
+    description: "作品应优先使用 fileId 引用媒体文件，legacy URL 作为回退"
+    enforcement: "publishWork 时从 create.output 提取 fileId 存入 imageFileId/videoFileId；listWorks/getWork 时通过 storageService.resolveUrls 解析为 URL"
+    test: "imageFileId 应通过 storageService 解析为 URL"

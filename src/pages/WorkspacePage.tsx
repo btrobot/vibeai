@@ -20,6 +20,8 @@ import {
   Layers,
   Shirt,
   Clapperboard,
+  Paperclip,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -118,6 +120,9 @@ export default function WorkspacePage() {
   const [sourceCreateId, setSourceCreateId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<{ fileId: string; previewUrl: string; name: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -221,11 +226,23 @@ export default function WorkspacePage() {
     if (projectId) fetchProject();
   }, [projectId]);
 
+  // Clear uploaded file when switching to a non-image-upload capability
+  useEffect(() => {
+    if (!imageUploadCapabilities.includes(activeCapability) && uploadedFile) {
+      clearUploadedFile();
+    }
+  }, [activeCapability]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSubmit = async () => {
     if (!prompt.trim() || submitting) return;
     setSubmitting(true);
 
     try {
+      const input: Record<string, unknown> = { prompt: prompt.trim() };
+      if (uploadedFile) {
+        input.referenceImage = { fileId: uploadedFile.fileId };
+      }
+
       const res = await fetch('/api/gateway/generate', {
         method: 'POST',
         headers: {
@@ -235,7 +252,7 @@ export default function WorkspacePage() {
         body: JSON.stringify({
           projectId,
           capabilitySlug: activeCapability,
-          input: { prompt: prompt.trim() },
+          input,
           sourceCreateId: sourceCreateId ?? undefined,
         }),
       });
@@ -245,6 +262,7 @@ export default function WorkspacePage() {
         showToast('success', '创作已提交，正在生成...');
         setPrompt('');
         setSourceCreateId(null);
+        clearUploadedFile();
         // Add optimistic create to the list
         const capInfo = capabilities.find((c) => c.slug === activeCapability);
         if (data?.data?.createId) {
@@ -252,7 +270,9 @@ export default function WorkspacePage() {
             id: data.data.createId,
             capabilitySlug: activeCapability,
             prompt: prompt.trim(),
-            input: { prompt: prompt.trim() },
+            input: uploadedFile
+              ? { prompt: prompt.trim(), referenceImage: { fileId: uploadedFile.fileId } }
+              : { prompt: prompt.trim() },
             sourceCreateId: null,
             status: 'processing' as const,
             output: null,
@@ -299,6 +319,78 @@ export default function WorkspacePage() {
     setSourceCreateId(create.id);
     setPrompt(create.prompt);
     setActiveCapability(create.capabilitySlug);
+  };
+
+  // Capabilities that accept a reference image
+  const imageUploadCapabilities = [
+    'image-generation',
+    'background-removal',
+    'scene-composition',
+    'model-dressing',
+    'image-editing',
+  ];
+  const supportsImageUpload = imageUploadCapabilities.includes(activeCapability);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type and size
+    if (!file.type.startsWith('image/')) {
+      showToast('error', '请选择图片文件');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('error', '图片大小不能超过 10MB');
+      return;
+    }
+
+    setUploading(true);
+    const previewUrl = URL.createObjectURL(file);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('category', 'temp');
+
+      const uploadRes = await fetch('/api/storage/upload', {
+        method: 'POST',
+        headers: { ...getAuthHeaders() },
+        body: formData,
+      });
+
+      const uploadData = await uploadRes.json();
+      if (uploadRes.ok) {
+        const upload = uploadData.data ?? uploadData;
+        const fileId = upload.id;
+        if (fileId) {
+          setUploadedFile({ fileId, previewUrl, name: file.name });
+          showToast('success', '图片已上传');
+        } else {
+          showToast('error', '上传失败：未获取文件ID');
+          URL.revokeObjectURL(previewUrl);
+        }
+      } else {
+        showToast('error', uploadData.message || '上传失败');
+        URL.revokeObjectURL(previewUrl);
+      }
+    } catch {
+      showToast('error', '上传失败，请检查网络');
+      URL.revokeObjectURL(previewUrl);
+    } finally {
+      setUploading(false);
+      // Reset file input so the same file can be selected again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const clearUploadedFile = () => {
+    if (uploadedFile) {
+      URL.revokeObjectURL(uploadedFile.previewUrl);
+    }
+    setUploadedFile(null);
   };
 
   const handlePublish = async (create: Create) => {
@@ -515,12 +607,57 @@ export default function WorkspacePage() {
               </button>
             </div>
           )}
-          <div className="flex gap-3">
+          {uploadedFile && (
+            <div className="mb-2 flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2">
+              <img
+                src={uploadedFile.previewUrl}
+                alt={uploadedFile.name}
+                className="h-12 w-12 rounded-md object-cover border border-border"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-foreground truncate">{uploadedFile.name}</p>
+                <p className="text-xs text-muted-foreground">已上传，将作为参考图</p>
+              </div>
+              <button
+                onClick={clearUploadedFile}
+                className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                aria-label="移除图片"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          <div className="flex gap-3 items-end">
+            {supportsImageUpload && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 shrink-0"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || submitting}
+                  aria-label="上传参考图"
+                >
+                  {uploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Paperclip className="h-4 w-4" />
+                  )}
+                </Button>
+              </>
+            )}
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="输入提示词，按 Enter 发送..."
+              placeholder={supportsImageUpload ? '输入提示词，可上传参考图，按 Enter 发送...' : '输入提示词，按 Enter 发送...'}
               rows={2}
               className="flex-1 rounded-lg border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none transition-all duration-150"
             />
@@ -563,6 +700,7 @@ export default function WorkspacePage() {
           <div className="rounded-lg bg-muted/50 p-3">
             <p className="text-xs leading-relaxed">
               提示词越具体，生成效果越好。支持中英文输入。
+              {supportsImageUpload && ' 当前能力支持上传参考图，点击回形针按钮选择图片。'}
               {sourceCreateId && ' 当前为修改模式，将基于之前的创作结果进行迭代。'}
             </p>
           </div>

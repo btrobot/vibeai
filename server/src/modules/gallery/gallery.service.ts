@@ -6,11 +6,13 @@ import * as schema from '../../db/schema';
 import { galleryWorks, galleryLikes } from '../../db/schema/gallery';
 import { creates } from '../../db/schema/task-engine';
 import { eq, and, desc, asc, sql, count } from 'drizzle-orm';
+import type { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class GalleryService {
   constructor(
     @Inject(DRIZZLE) private db: PostgresJsDatabase<typeof schema>,
+    @Inject('STORAGE_SERVICE') private storageService: StorageService,
   ) {}
 
   async listWorks(params: {
@@ -43,9 +45,11 @@ export class GalleryService {
 
     const total = totalResult[0]?.total ?? 0;
 
+    const resolvedWorks = await this.resolveWorksUrls(works);
+
     return {
       success: true,
-      data: works,
+      data: resolvedWorks,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -64,13 +68,40 @@ export class GalleryService {
       .set({ views: work.views + 1 })
       .where(eq(galleryWorks.id, workId));
 
-    return { success: true, data: { ...work, views: work.views + 1 } };
+    const [resolved] = await this.resolveWorksUrls([work]);
+    return { success: true, data: { ...resolved, views: work.views + 1 } };
+  }
+
+  /**
+   * Resolve imageFileId/videoFileId to URLs for a list of works.
+   * Falls back to legacy imageUrl/videoUrl if fileId is null.
+   */
+  private async resolveWorksUrls(works: Array<typeof galleryWorks.$inferSelect>): Promise<Array<typeof galleryWorks.$inferSelect & { imageUrl: string | null; videoUrl: string | null }>> {
+    const fileIds: string[] = [];
+    for (const w of works) {
+      if (w.imageFileId) fileIds.push(w.imageFileId);
+      if (w.videoFileId) fileIds.push(w.videoFileId);
+    }
+
+    if (fileIds.length === 0) {
+      return works as Array<typeof galleryWorks.$inferSelect & { imageUrl: string | null; videoUrl: string | null }>;
+    }
+
+    const urlMap = await this.storageService.resolveUrls(fileIds);
+
+    return works.map((w) => ({
+      ...w,
+      imageUrl: (w.imageFileId && urlMap.get(w.imageFileId)) || w.imageUrl,
+      videoUrl: (w.videoFileId && urlMap.get(w.videoFileId)) || w.videoUrl,
+    })) as Array<typeof galleryWorks.$inferSelect & { imageUrl: string | null; videoUrl: string | null }>;
   }
 
   async publishWork(userId: string, input: {
     createId?: string;
     taskId?: string;
     title?: string;
+    imageFileId?: string;
+    videoFileId?: string;
     imageUrl?: string;
     videoUrl?: string;
     type: string;
@@ -84,8 +115,10 @@ export class GalleryService {
     let autoPrompt = input.prompt;
     let autoModelSlug = input.modelSlug;
     let autoCapabilitySlug = input.capabilitySlug;
-    let autoImageUrl = input.imageUrl;
-    let autoVideoUrl = input.videoUrl;
+    let autoImageFileId = input.imageFileId ?? null;
+    let autoVideoFileId = input.videoFileId ?? null;
+    let autoImageUrl = input.imageUrl ?? null;
+    let autoVideoUrl = input.videoUrl ?? null;
 
     if (input.createId) {
       const [create] = await this.db.select().from(creates)
@@ -97,13 +130,23 @@ export class GalleryService {
         autoModelSlug = autoModelSlug || create.modelSlug || undefined;
         autoCapabilitySlug = autoCapabilitySlug || create.capabilitySlug;
 
-        // Extract URLs from create output
+        // Extract fileIds from create output (transferResult stores { url, fileId })
         const output = (create.output ?? {}) as Record<string, unknown>;
-        if (!autoImageUrl && Array.isArray(output.images) && output.images.length > 0) {
-          autoImageUrl = String((output.images as string[])[0]);
+        if (!autoImageFileId && Array.isArray(output.images) && output.images.length > 0) {
+          const firstImage = (output.images as Array<{ fileId?: string; url?: string }>)[0];
+          if (firstImage?.fileId) {
+            autoImageFileId = firstImage.fileId;
+          } else if (firstImage?.url) {
+            autoImageUrl = firstImage.url;
+          }
         }
-        if (!autoVideoUrl && Array.isArray(output.videos) && output.videos.length > 0) {
-          autoVideoUrl = String((output.videos as string[])[0]);
+        if (!autoVideoFileId && output.video && typeof output.video === 'object') {
+          const video = output.video as { fileId?: string; url?: string };
+          if (video.fileId) {
+            autoVideoFileId = video.fileId;
+          } else if (video.url) {
+            autoVideoUrl = video.url;
+          }
         }
         if (!autoTitle) {
           autoTitle = create.prompt.slice(0, 50);
@@ -114,8 +157,10 @@ export class GalleryService {
     const [work] = await this.db.insert(galleryWorks).values({
       userId,
       title: autoTitle || '',
-      imageUrl: autoImageUrl || null,
-      videoUrl: autoVideoUrl || null,
+      imageFileId: autoImageFileId,
+      videoFileId: autoVideoFileId,
+      imageUrl: autoImageUrl,
+      videoUrl: autoVideoUrl,
       type: input.type,
       prompt: autoPrompt || null,
       modelSlug: autoModelSlug || null,
@@ -124,7 +169,8 @@ export class GalleryService {
       isPublished: true,
     }).returning();
 
-    return { success: true, data: work };
+    const [resolved] = await this.resolveWorksUrls([work]);
+    return { success: true, data: resolved };
   }
 
   async toggleLike(workId: string, userId: string) {
