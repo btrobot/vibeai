@@ -2,16 +2,14 @@ name: Deploy
 
 on:
   workflow_dispatch:
-
-concurrency:
-  group: deploy
-  cancel-in-progress: false
+  push:
+    branches: [main]
 
 env:
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: btrobot/vibeai
+  CONTAINER_NAME: vibeai
   APP_PORT: 6000
-  CONTAINER_NAME: vibeai-container
-  REGISTRY: ghcr.io
+  MIRROR_REGISTRY: ghcr.nju.edu.cn
 
 jobs:
   build-and-push:
@@ -53,6 +51,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            PROJECT_NAME=vibeai
+            PROJECT_VERSION=1.0.0
 
   deploy:
     name: Deploy to Server
@@ -73,13 +74,13 @@ jobs:
             IMAGE_NAME="${{ env.IMAGE_NAME }}"
             CONTAINER_NAME="${{ env.CONTAINER_NAME }}"
             APP_PORT=${{ env.APP_PORT }}
-            REGISTRY="${{ env.REGISTRY }}"
+            MIRROR_REGISTRY="${{ env.MIRROR_REGISTRY }}"
             ENV_FILE="/data/vibeai/.env.local"
 
             echo "=== VibeAI Deploy ==="
-            echo "Image: ${REGISTRY}/${IMAGE_NAME}"
+            echo "Image: ${MIRROR_REGISTRY}/${IMAGE_NAME}"
 
-            # 登录 ghcr.io
+            # 登录 ghcr.io（推送用）
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # 记录旧容器状态（用于回滚）
@@ -89,9 +90,9 @@ jobs:
               echo "旧容器镜像 SHA: ${OLD_IMAGE}"
             fi
 
-            # 拉取新镜像
+            # 拉取新镜像（南京大学镜像站）
             echo "拉取新镜像..."
-            docker pull "${REGISTRY}/${IMAGE_NAME}:latest"
+            docker pull "${MIRROR_REGISTRY}/${IMAGE_NAME}:latest"
 
             # 停止旧容器
             if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
@@ -105,73 +106,36 @@ jobs:
             docker run -d \
               --name "${CONTAINER_NAME}" \
               --restart unless-stopped \
-              -p "${APP_PORT}:5000" \
-              -e "PORT=5000" \
+              -p ${APP_PORT}:5000 \
               --env-file "${ENV_FILE}" \
-              "${REGISTRY}/${IMAGE_NAME}:latest"
+              "${MIRROR_REGISTRY}/${IMAGE_NAME}:latest"
 
-            # 数据库迁移
-            echo "=== 数据库迁移 ==="
-            MIGRATION_OK=false
-            for i in $(seq 1 10); do
-              if docker exec "${CONTAINER_NAME}" node -e "
-                const { Pool } = require('pg');
-                const { drizzle } = require('drizzle-orm/node-postgres');
-                const { migrate } = require('drizzle-orm/node-postgres/migrator');
-                const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-                const db = drizzle(pool);
-                migrate(db, { migrationsFolder: './server/drizzle' }).then(() => {
-                  console.log('Migration completed');
-                  process.exit(0);
-                }).catch(e => { console.error(e.message); process.exit(1); });
-              " 2>&1; then
-                MIGRATION_OK=true
-                echo "✓ 数据库迁移成功"
-                break
-              fi
-              echo "等待服务启动... (${i}/10)"
-              sleep 3
-            done
-
-            if [ "${MIGRATION_OK}" != "true" ]; then
-              echo "数据库迁移失败，回滚..."
-              if [ -n "${OLD_IMAGE}" ]; then
-                docker stop "${CONTAINER_NAME}" 2>/dev/null
-                docker rm "${CONTAINER_NAME}" 2>/dev/null
-                docker run -d --name "${CONTAINER_NAME}" --restart unless-stopped -p "${APP_PORT}:5000" -e "PORT=5000" --env-file "${ENV_FILE}" "${OLD_IMAGE}"
-                echo "已回滚到旧版本"
-              fi
-              exit 1
-            fi
+            echo "等待服务启动..."
+            sleep 5
 
             # 健康检查
-            echo "=== 健康检查 ==="
-            HEALTH_OK=false
-            for i in $(seq 1 30); do
-              if curl -sf "http://localhost:${APP_PORT}/api/health" > /dev/null 2>&1; then
-                HEALTH_OK=true
-                echo "✓ 服务就绪 (${i}s)"
-                break
+            echo "健康检查..."
+            for i in {1..10}; do
+              if curl -sf http://localhost:5000/api/health > /dev/null 2>&1; then
+                echo "✅ 部署成功！访问：http://$(hostname -I | awk '{print $1}'):${APP_PORT}"
+                exit 0
               fi
+              echo "  等待中... ($i/10)"
               sleep 2
             done
 
-            if [ "${HEALTH_OK}" != "true" ]; then
-              echo "健康检查失败，回滚..."
-              if [ -n "${OLD_IMAGE}" ]; then
-                docker stop "${CONTAINER_NAME}" 2>/dev/null
-                docker rm "${CONTAINER_NAME}" 2>/dev/null
-                docker run -d \
-                  --name "${CONTAINER_NAME}" \
-                  --restart unless-stopped \
-                  -p "${APP_PORT}:5000" \
-                  --env-file "${ENV_FILE}" \
-                  "${OLD_IMAGE}"
-              fi
-              exit 1
+            echo " 健康检查失败，回滚..."
+            docker stop "${CONTAINER_NAME}"
+            docker rm "${CONTAINER_NAME}"
+
+            if [ -n "${OLD_IMAGE}" ]; then
+              docker run -d \
+                --name "${CONTAINER_NAME}" \
+                --restart unless-stopped \
+                -p ${APP_PORT}:5000 \
+                --env-file "${ENV_FILE}" \
+                "${OLD_IMAGE}"
+              echo "已回滚到旧版本"
             fi
 
-            # 清理旧镜像
-            docker image prune -f
-
-            echo "=== 部署成功 ==="
+            exit 1
