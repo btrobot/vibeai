@@ -84,8 +84,8 @@ export default function AppLayout() {
       >
         {/* Logo */}
         <div className="flex h-14 items-center gap-3 border-b border-border px-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20">
-            <Sparkles className="h-4 w-4 text-primary" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15">
+            <Sparkles className="h-4 w-4 text-accent" />
           </div>
           {!sidebarCollapsed && (
             <span className="text-sm font-semibold text-foreground">VibeAI</span>
@@ -100,7 +100,7 @@ export default function AppLayout() {
                 <div key={item.label}>
                   <button
                     onClick={() => setToolsOpen(!toolsOpen)}
-                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-card-hover hover:text-foreground ${
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground ${
                       sidebarCollapsed ? 'justify-center' : ''
                     }`}
                     title={sidebarCollapsed ? item.label : undefined}
@@ -128,7 +128,7 @@ export default function AppLayout() {
                             `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                               isActive
                                 ? 'bg-primary/10 text-primary'
-                                : 'text-muted hover:bg-card-hover hover:text-foreground'
+                                : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                             }`
                           }
                         >
@@ -150,7 +150,7 @@ export default function AppLayout() {
                   `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                     isActive
                       ? 'bg-primary/10 text-primary'
-                      : 'text-muted hover:bg-card-hover hover:text-foreground'
+                      : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                   } ${sidebarCollapsed ? 'justify-center' : ''}`
                 }
                 title={sidebarCollapsed ? item.label : undefined}
@@ -165,19 +165,19 @@ export default function AppLayout() {
         {/* User Section */}
         <div className="border-t border-border p-2">
           <div className={`flex items-center gap-3 rounded-lg px-3 py-2 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 text-xs font-medium text-primary">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/15 text-xs font-medium text-accent">
               {user?.name?.charAt(0)?.toUpperCase() || 'U'}
             </div>
             {!sidebarCollapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{user?.name || '用户'}</p>
-                <p className="text-xs text-muted truncate">{user?.email || ''}</p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email || ''}</p>
               </div>
             )}
           </div>
           <button
             onClick={handleLogout}
-            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-card-hover hover:text-danger ${
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-surface-hover hover:text-danger ${
               sidebarCollapsed ? 'justify-center' : ''
             }`}
             title="退出登录"
@@ -200,7 +200,7 @@ export default function AppLayout() {
                 setSidebarCollapsed(!sidebarCollapsed);
               }
             }}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-card-hover hover:text-foreground"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
           >
             {window.innerWidth < 768 ? (
               mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />
@@ -215,9 +215,9 @@ export default function AppLayout() {
 
           {/* Credits Badge */}
           <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <Sparkles className="h-3.5 w-3.5 text-accent" />
             <span className="text-xs font-medium text-foreground">{user?.credits ?? 0}</span>
-            <span className="text-xs text-muted">额度</span>
+            <span className="text-xs text-muted-foreground">额度</span>
           </div>
         </header>
 

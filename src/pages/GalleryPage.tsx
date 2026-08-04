@@ -65,7 +65,7 @@ export default function GalleryPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">社区画廊</h1>
-          <p className="text-sm text-muted mt-1">发现其他创作者的精彩作品</p>
+          <p className="text-sm text-muted-foreground mt-1">发现其他创作者的精彩作品</p>
         </div>
       </div>
 
@@ -80,7 +80,7 @@ export default function GalleryPage() {
               className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab.key
                   ? 'border-primary text-primary'
-                  : 'border-transparent text-muted hover:text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               <Icon className="h-4 w-4" />
@@ -93,19 +93,19 @@ export default function GalleryPage() {
       {/* Loading */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 text-muted animate-spin" />
+          <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
         </div>
       ) : items.length === 0 ? (
         /* Empty State */
         <div className="flex flex-col items-center gap-4 py-20">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-card-hover">
-            <ImageIcon className="h-8 w-8 text-muted" />
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-hover">
+            <ImageIcon className="h-8 w-8 text-muted-foreground" />
           </div>
           <h3 className="text-base font-medium text-foreground">暂无作品</h3>
-          <p className="text-sm text-muted text-center max-w-sm">
+          <p className="text-sm text-muted-foreground text-center max-w-sm">
             社区画廊即将上线，敬请期待！你可以先在创作工具中生成作品。
           </p>
-          <div className="flex items-center gap-2 text-xs text-muted">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <TrendingUp className="h-3 w-3" />
             <span>社区功能开发中</span>
           </div>
@@ -126,14 +126,14 @@ export default function GalleryPage() {
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
-                    <ImageIcon className="h-12 w-12 text-muted" />
+                    <ImageIcon className="h-12 w-12 text-muted-foreground" />
                   </div>
                 )}
               </div>
               <div className="p-3">
                 <h3 className="text-sm font-medium text-foreground truncate">{item.title}</h3>
-                <p className="text-xs text-muted mt-1">{item.authorName}</p>
-                <div className="flex items-center gap-3 mt-2 text-xs text-muted">
+                <p className="text-xs text-muted-foreground mt-1">{item.authorName}</p>
+                <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Heart className="h-3 w-3" />
                     {item.likes}

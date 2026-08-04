@@ -81,7 +81,7 @@ export default function DashboardPage() {
     processing: { label: '处理中', color: 'text-blue-500' },
     completed: { label: '已完成', color: 'text-green-500' },
     failed: { label: '失败', color: 'text-red-500' },
-    cancelled: { label: '已取消', color: 'text-muted' },
+    cancelled: { label: '已取消', color: 'text-muted-foreground' },
   };
 
   const typeLabels: Record<string, string> = {
@@ -100,7 +100,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">欢迎回来，{user?.name || '用户'}</h1>
-          <p className="text-sm text-muted mt-1">这是你的创作概览</p>
+          <p className="text-sm text-muted-foreground mt-1">这是你的创作概览</p>
         </div>
         <button
           onClick={() => navigate('/projects')}
@@ -119,12 +119,12 @@ export default function DashboardPage() {
             className="rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30"
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-card-hover">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-hover">
                 <card.icon className={`h-5 w-5 ${card.color}`} />
               </div>
               <div>
                 <p className="text-2xl font-bold text-foreground">{card.value}</p>
-                <p className="text-xs text-muted">{card.label}</p>
+                <p className="text-xs text-muted-foreground">{card.label}</p>
               </div>
             </div>
           </div>
@@ -144,11 +144,11 @@ export default function DashboardPage() {
             <button
               key={tool.label}
               onClick={() => navigate(tool.path)}
-              className="flex items-center gap-3 rounded-lg border border-border bg-background p-3 text-sm text-foreground transition-colors hover:border-primary/30 hover:bg-card-hover"
+              className="flex items-center gap-3 rounded-lg border border-border bg-background p-3 text-sm text-foreground transition-colors hover:border-primary/30 hover:bg-surface-hover"
             >
               <tool.icon className="h-4 w-4 text-primary" />
               <span>{tool.label}</span>
-              <ArrowRight className="h-3 w-3 ml-auto text-muted" />
+              <ArrowRight className="h-3 w-3 ml-auto text-muted-foreground" />
             </button>
           ))}
         </div>
@@ -167,11 +167,11 @@ export default function DashboardPage() {
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-sm text-muted">加载中...</div>
+          <div className="p-8 text-center text-sm text-muted-foreground">加载中...</div>
         ) : !stats?.recentTasks?.length ? (
           <div className="flex flex-col items-center gap-2 p-8">
-            <AlertCircle className="h-8 w-8 text-muted" />
-            <p className="text-sm text-muted">暂无任务</p>
+            <AlertCircle className="h-8 w-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">暂无任务</p>
             <button
               onClick={() => navigate('/tools/background-removal')}
               className="text-xs text-primary hover:text-primary/80"
@@ -182,17 +182,17 @@ export default function DashboardPage() {
         ) : (
           <div className="divide-y divide-border">
             {stats.recentTasks.map((task) => {
-              const status = statusLabels[task.status] || { label: task.status, color: 'text-muted' };
+              const status = statusLabels[task.status] || { label: task.status, color: 'text-muted-foreground' };
               const type = typeLabels[task.type] || task.type;
               return (
                 <div
                   key={task.id}
-                  className="flex items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-card-hover"
+                  className="flex items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-surface-hover"
                 >
-                  <Clock className="h-4 w-4 text-muted shrink-0" />
+                  <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-foreground truncate">{type}</p>
-                    <p className="text-xs text-muted">
+                    <p className="text-xs text-muted-foreground">
                       {new Date(task.createdAt).toLocaleString('zh-CN')}
                     </p>
                   </div>

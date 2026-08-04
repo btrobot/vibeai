@@ -58,9 +58,9 @@ export default function AdminPage() {
   if (user?.role !== 'admin') {
     return (
       <div className="flex flex-col items-center gap-4 py-20">
-        <AlertTriangle className="h-12 w-12 text-muted" />
+        <AlertTriangle className="h-12 w-12 text-muted-foreground" />
         <h2 className="text-lg font-semibold text-foreground">无权限访问</h2>
-        <p className="text-sm text-muted">仅管理员可访问此页面</p>
+        <p className="text-sm text-muted-foreground">仅管理员可访问此页面</p>
       </div>
     );
   }
@@ -71,11 +71,11 @@ export default function AdminPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">管理后台</h1>
-          <p className="text-sm text-muted mt-1">系统监控与配置管理</p>
+          <p className="text-sm text-muted-foreground mt-1">系统监控与配置管理</p>
         </div>
         <button
           onClick={fetchStats}
-          className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-card-hover"
+          className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-hover"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           刷新
@@ -97,12 +97,12 @@ export default function AdminPage() {
             className="rounded-lg border border-border bg-card p-4"
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-card-hover">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-hover">
                 <card.icon className={`h-5 w-5 ${card.color}`} />
               </div>
               <div>
                 <p className="text-2xl font-bold text-foreground">{card.value}</p>
-                <p className="text-xs text-muted">{card.label}</p>
+                <p className="text-xs text-muted-foreground">{card.label}</p>
               </div>
             </div>
           </div>
@@ -113,7 +113,7 @@ export default function AdminPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="rounded-lg border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground mb-4">用户管理</h2>
-          <p className="text-sm text-muted">用户列表、权限管理、账户操作</p>
+          <p className="text-sm text-muted-foreground">用户列表、权限管理、账户操作</p>
           <button className="mt-3 text-xs text-primary hover:text-primary/80">
             查看用户列表 →
           </button>
@@ -121,7 +121,7 @@ export default function AdminPage() {
 
         <div className="rounded-lg border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground mb-4">系统配置</h2>
-          <p className="text-sm text-muted">AI 模型配置、存储设置、计费参数</p>
+          <p className="text-sm text-muted-foreground">AI 模型配置、存储设置、计费参数</p>
           <button className="mt-3 text-xs text-primary hover:text-primary/80">
             系统配置 →
           </button>
@@ -129,7 +129,7 @@ export default function AdminPage() {
 
         <div className="rounded-lg border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground mb-4">任务监控</h2>
-          <p className="text-sm text-muted">实时任务队列、失败任务排查、性能监控</p>
+          <p className="text-sm text-muted-foreground">实时任务队列、失败任务排查、性能监控</p>
           <button className="mt-3 text-xs text-primary hover:text-primary/80">
             查看任务 →
           </button>
@@ -137,7 +137,7 @@ export default function AdminPage() {
 
         <div className="rounded-lg border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground mb-4">审计日志</h2>
-          <p className="text-sm text-muted">操作日志、登录记录、安全事件</p>
+          <p className="text-sm text-muted-foreground">操作日志、登录记录、安全事件</p>
           <button className="mt-3 text-xs text-primary hover:text-primary/80">
             查看日志 →
           </button>

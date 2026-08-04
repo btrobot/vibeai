@@ -114,7 +114,7 @@ export default function ProjectsPage() {
   const statusColors: Record<string, string> = {
     active: 'text-primary border-primary/30',
     completed: 'text-blue-500 border-blue-600/30',
-    archived: 'text-muted border-border',
+    archived: 'text-muted-foreground border-border',
   };
 
   const statusLabels: Record<string, string> = {
@@ -129,7 +129,7 @@ export default function ProjectsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">我的项目</h1>
-          <p className="text-sm text-muted mt-1">共 {total} 个项目</p>
+          <p className="text-sm text-muted-foreground mt-1">共 {total} 个项目</p>
         </div>
         <button
           onClick={() => setShowNewModal(true)}
@@ -143,17 +143,17 @@ export default function ProjectsPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <form onSubmit={handleSearch} className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="搜索项目..."
-            className="w-full rounded-lg border border-border bg-card py-2 pl-10 pr-4 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+            className="w-full rounded-lg border border-border bg-card py-2 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
           />
         </form>
         <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted" />
+          <Filter className="h-4 w-4 text-muted-foreground" />
           {['all', 'active', 'completed', 'archived'].map((s) => (
             <button
               key={s}
@@ -161,7 +161,7 @@ export default function ProjectsPage() {
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 statusFilter === s
                   ? 'bg-primary/10 text-primary'
-                  : 'text-muted hover:text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {s === 'all' ? '全部' : statusLabels[s] || s}
@@ -177,8 +177,8 @@ export default function ProjectsPage() {
         </div>
       ) : projects.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-20">
-          <FolderKanban className="h-12 w-12 text-muted" />
-          <p className="text-sm text-muted">暂无项目</p>
+          <FolderKanban className="h-12 w-12 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">暂无项目</p>
           <button
             onClick={() => setShowNewModal(true)}
             className="text-sm text-primary hover:text-primary/80"
@@ -210,10 +210,10 @@ export default function ProjectsPage() {
 
                 <h3 className="font-medium text-foreground mb-1 truncate">{project.name}</h3>
                 {project.description && (
-                  <p className="text-xs text-muted mb-3 line-clamp-2">{project.description}</p>
+                  <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{project.description}</p>
                 )}
 
-                <div className="flex items-center gap-4 text-xs text-muted">
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <CheckCircle2 className="h-3 w-3" />
                     {project.completedTaskCount}/{project.taskCount}
@@ -228,14 +228,14 @@ export default function ProjectsPage() {
               <div className="flex items-center justify-end gap-1 border-t border-border px-4 py-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => navigate(`/workspace/${project.id}`)}
-                  className="rounded-lg p-1.5 text-muted hover:bg-card-hover hover:text-foreground"
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-surface-hover hover:text-foreground"
                   title="打开"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => handleDelete(project.id)}
-                  className="rounded-lg p-1.5 text-muted hover:bg-card-hover hover:text-danger"
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-surface-hover hover:text-danger"
                   title="删除"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -256,7 +256,7 @@ export default function ProjectsPage() {
               className={`h-8 w-8 rounded-lg text-xs font-medium transition-colors ${
                 page === i + 1
                   ? 'bg-primary/10 text-primary'
-                  : 'text-muted hover:bg-card-hover hover:text-foreground'
+                  : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
               }`}
             >
               {i + 1}
@@ -279,7 +279,7 @@ export default function ProjectsPage() {
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="输入项目名称"
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
                   autoFocus
                 />
               </div>
@@ -290,7 +290,7 @@ export default function ProjectsPage() {
                   onChange={(e) => setNewDesc(e.target.value)}
                   placeholder="项目描述"
                   rows={3}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none resize-none"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none resize-none"
                 />
               </div>
             </div>
@@ -298,7 +298,7 @@ export default function ProjectsPage() {
             <div className="flex items-center justify-end gap-3 mt-6">
               <button
                 onClick={() => setShowNewModal(false)}
-                className="rounded-lg px-4 py-2 text-sm text-muted hover:text-foreground"
+                className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
               >
                 取消
               </button>

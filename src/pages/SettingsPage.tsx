@@ -97,7 +97,7 @@ export default function SettingsPage() {
     <div className="p-6 max-w-2xl mx-auto space-y-8">
       <div>
         <h1 className="text-xl font-bold text-foreground">设置</h1>
-        <p className="text-sm text-muted mt-1">管理你的账户和偏好</p>
+        <p className="text-sm text-muted-foreground mt-1">管理你的账户和偏好</p>
       </div>
 
       {message && (
@@ -125,7 +125,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-foreground">个人资料</h2>
-            <p className="text-xs text-muted">更新你的个人信息</p>
+            <p className="text-xs text-muted-foreground">更新你的个人信息</p>
           </div>
         </div>
 
@@ -133,8 +133,8 @@ export default function SettingsPage() {
           <div>
             <label className="block text-sm text-foreground mb-1">邮箱</label>
             <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2">
-              <Mail className="h-4 w-4 text-muted" />
-              <span className="text-sm text-muted">{user?.email || ''}</span>
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">{user?.email || ''}</span>
             </div>
           </div>
 
@@ -167,7 +167,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-foreground">修改密码</h2>
-            <p className="text-xs text-muted">建议定期更换密码</p>
+            <p className="text-xs text-muted-foreground">建议定期更换密码</p>
           </div>
         </div>
 
@@ -183,7 +183,7 @@ export default function SettingsPage() {
               />
               <button
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -233,17 +233,17 @@ export default function SettingsPage() {
         </div>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-muted">角色</span>
+            <span className="text-muted-foreground">角色</span>
             <span className="text-foreground">{user?.role === 'admin' ? '管理员' : '用户'}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted">注册时间</span>
+            <span className="text-muted-foreground">注册时间</span>
             <span className="text-foreground">
               {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('zh-CN') : '-'}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted">可用额度</span>
+            <span className="text-muted-foreground">可用额度</span>
             <span className="text-foreground font-medium text-primary">{user?.credits ?? 0}</span>
           </div>
         </div>
