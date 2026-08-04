@@ -10,8 +10,10 @@ __pycache__/
 *.a
 /vendor
 *.egg-info/
-/.env
 .env
+.env.local
+.env.*.local
+server/.env
 .cozeproj/reduction
 
 # JS/TS bundlers & build outputs
