@@ -74,7 +74,7 @@ describe('WorkspacePage', () => {
     renderWorkspace();
 
     await waitFor(() => {
-      expect(screen.getByText('测试项目')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: '测试项目' })).toBeInTheDocument();
     });
 
     expect(screen.getByText('这是一个测试项目')).toBeInTheDocument();

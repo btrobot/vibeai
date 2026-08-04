@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -15,6 +15,12 @@ import {
   GitBranch,
   RotateCw,
   Share2,
+  Wand2,
+  Crop,
+  Layers,
+  Shirt,
+  Clapperboard,
+  type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,14 +29,53 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useCreateWebSocket, type CreateWsEvent } from '@/hooks/useCreateWebSocket';
 
+// Map backend icon strings to Lucide components
+const iconMap: Record<string, LucideIcon> = {
+  'message-square': MessageSquare,
+  'image': ImageIcon,
+  'video': Video,
+  'wand-2': Wand2,
+  'crop': Crop,
+  'layers': Layers,
+  'shirt': Shirt,
+  'file-text': FileText,
+  'clapperboard': Clapperboard,
+};
+
+// Category → color mapping
+const categoryColor: Record<string, string> = {
+  text: 'text-primary',
+  image: 'text-brand',
+  video: 'text-foreground',
+  analysis: 'text-muted-foreground',
+};
+
+interface CapabilityInfo {
+  slug: string;
+  name: string;
+  icon: string;
+  category: string;
+}
+
+// Fallback capabilities (used while loading or if API fails)
+const fallbackCapabilities: CapabilityInfo[] = [
+  { slug: 'text-generation', name: '文本生成', icon: 'message-square', category: 'text' },
+  { slug: 'image-generation', name: '图像生成', icon: 'image', category: 'image' },
+  { slug: 'video-generation', name: '视频生成', icon: 'video', category: 'video' },
+  { slug: 'background-removal', name: '白底图', icon: 'crop', category: 'image' },
+  { slug: 'scene-composition', name: '场景合成', icon: 'layers', category: 'image' },
+  { slug: 'model-dressing', name: '模特换装', icon: 'shirt', category: 'image' },
+  { slug: 'detail-page-generation', name: '详情页', icon: 'file-text', category: 'text' },
+];
+
 interface ProjectDetail {
   id: string;
   name: string;
   description: string;
   status: string;
   tags: string[];
-  taskCount: number;
-  completedTaskCount: number;
+  totalCreates: number;
+  completedCreates: number;
 }
 
 interface Create {
@@ -65,10 +110,19 @@ export default function WorkspacePage() {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [creates, setCreates] = useState<Create[]>([]);
   const [loading, setLoading] = useState(true);
+  const [capabilities, setCapabilities] = useState<CapabilityInfo[]>(fallbackCapabilities);
   const [activeCapability, setActiveCapability] = useState('text-generation');
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [sourceCreateId, setSourceCreateId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ type, message });
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  }, []);
 
   // Extract userId from JWT token for WS auth
   const getUserId = (): string | undefined => {
@@ -129,10 +183,22 @@ export default function WorkspacePage() {
 
   const fetchProject = async () => {
     try {
+      // Fetch project + creates in parallel (capabilities is non-blocking)
       const [projectRes, createsRes] = await Promise.all([
         fetch(`/api/projects/${projectId}`, { headers: { ...getAuthHeaders() } }),
         fetch(`/api/projects/${projectId}/creates?pageSize=50`, { headers: { ...getAuthHeaders() } }),
       ]);
+
+      // Fetch capabilities separately (non-blocking, uses fallback on failure)
+      fetch('/api/gateway/capabilities', { headers: { ...getAuthHeaders() } })
+        .then((res) => res.ok ? res.json() : null)
+        .then((capData) => {
+          const caps = capData?.data ?? capData;
+          if (Array.isArray(caps) && caps.length > 0) {
+            setCapabilities(caps.map((c: CapabilityInfo) => ({ slug: c.slug, name: c.name, icon: c.icon, category: c.category })));
+          }
+        })
+        .catch(() => { /* use fallback */ });
 
       if (projectRes.ok) setProject(await projectRes.json());
       if (createsRes.ok) {
@@ -170,12 +236,37 @@ export default function WorkspacePage() {
       });
 
       if (res.ok) {
+        const data = await res.json();
+        showToast('success', '创作已提交，正在生成...');
         setPrompt('');
         setSourceCreateId(null);
+        // Add optimistic create to the list
+        const capInfo = capabilities.find((c) => c.slug === activeCapability);
+        if (data?.data?.createId) {
+          setCreates((prev) => [{
+            id: data.data.createId,
+            capabilitySlug: activeCapability,
+            prompt: prompt.trim(),
+            sourceCreateId: null,
+            status: 'processing' as const,
+            output: null,
+            modelSlug: data.data.modelSlug ?? null,
+            taskCount: 0,
+            errorMessage: null,
+            taskStatus: 'queued',
+            taskProgress: 0,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }, ...prev]);
+        }
+        // Still fetch to get the full record
         fetchProject();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast('error', err.message || '提交失败，请重试');
       }
     } catch {
-      // Silently fail
+      showToast('error', '网络错误，请检查连接');
     } finally {
       setSubmitting(false);
     }
@@ -187,9 +278,14 @@ export default function WorkspacePage() {
         method: 'POST',
         headers: { ...getAuthHeaders() },
       });
-      if (res.ok) fetchProject();
+      if (res.ok) {
+        showToast('info', '正在重试...');
+        fetchProject();
+      } else {
+        showToast('error', '重试失败');
+      }
     } catch {
-      // Silently fail
+      showToast('error', '网络错误');
     }
   };
 
@@ -219,10 +315,12 @@ export default function WorkspacePage() {
         }),
       });
       if (res.ok) {
-        alert('已发布到画廊');
+        showToast('success', '已发布到画廊');
+      } else {
+        showToast('error', '发布失败');
       }
     } catch {
-      // Silently fail
+      showToast('error', '网络错误');
     }
   };
 
@@ -257,8 +355,8 @@ export default function WorkspacePage() {
 
   return (
     <div className="flex h-full">
-      {/* Left: Capability Selector + Chat */}
-      <div className="flex flex-1 flex-col">
+      {/* Left+Center: Capability Selector + Chat */}
+      <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <button
@@ -279,7 +377,8 @@ export default function WorkspacePage() {
         {/* Capability Tabs */}
         <div className="flex gap-1 border-b border-border px-4 py-2 overflow-x-auto">
           {capabilities.map((cap) => {
-            const Icon = cap.icon;
+            const Icon = iconMap[cap.icon] ?? ImageIcon;
+            const color = categoryColor[cap.category] ?? 'text-muted-foreground';
             return (
               <button
                 key={cap.slug}
@@ -290,8 +389,8 @@ export default function WorkspacePage() {
                     : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                 }`}
               >
-                <Icon className={`h-3.5 w-3.5 ${activeCapability === cap.slug ? 'text-primary' : cap.color}`} />
-                {cap.label}
+                <Icon className={`h-3.5 w-3.5 ${activeCapability === cap.slug ? 'text-primary' : color}`} />
+                {cap.name}
               </button>
             );
           })}
@@ -310,7 +409,7 @@ export default function WorkspacePage() {
             creates.map((create) => {
               const cfg = statusConfig[create.status] || statusConfig.draft;
               const Icon = cfg.icon;
-              const capLabel = capabilities.find((c) => c.slug === create.capabilitySlug)?.label || create.capabilitySlug;
+              const capLabel = capabilities.find((c) => c.slug === create.capabilitySlug)?.name || create.capabilitySlug;
               return (
                 <div
                   key={create.id}
@@ -350,14 +449,15 @@ export default function WorkspacePage() {
 
                   {create.status === 'completed' && create.output && (
                     <div className="mt-2 rounded-lg bg-background p-3">
-                      {create.capabilitySlug === 'image-generation' || create.capabilitySlug === 'background-removal' || create.capabilitySlug === 'scene-composition' || create.capabilitySlug === 'model-dressing' ? (
-                        (create.output as { images?: string[] }).images?.map((url: string, i: number) => (
-                          <img key={i} src={url} alt="" className="max-h-48 rounded object-contain" />
-                        ))
-                      ) : create.capabilitySlug === 'video-generation' ? (
-                        (create.output as { videos?: string[] }).videos?.map((url: string, i: number) => (
-                          <video key={i} src={url} controls className="max-h-48 rounded" />
-                        ))
+                      {create.capabilitySlug === 'image-generation' || create.capabilitySlug === 'background-removal' || create.capabilitySlug === 'scene-composition' || create.capabilitySlug === 'model-dressing' || create.capabilitySlug === 'image-editing' ? (
+                        (create.output as { images?: Array<{ url: string }> | string[] }).images?.map((img, i: number) => {
+                          const url = typeof img === 'string' ? img : img.url;
+                          return <img key={i} src={url} alt="" className="max-h-48 rounded object-contain" />;
+                        })
+                      ) : create.capabilitySlug === 'video-generation' || create.capabilitySlug === 'style-cloning' ? (
+                        (create.output as { video?: { url: string } | string }).video ? (
+                          <video src={typeof create.output.video === 'string' ? create.output.video : (create.output as { video: { url: string } }).video.url} controls className="max-h-48 rounded" />
+                        ) : null
                       ) : (
                         <p className="text-xs text-foreground whitespace-pre-wrap">
                           {(create.output as { text?: string }).text || JSON.stringify(create.output, null, 2)}
@@ -435,6 +535,43 @@ export default function WorkspacePage() {
           </div>
         </div>
       </div>
+
+      {/* Right: Info Panel */}
+      <div className="hidden w-72 shrink-0 border-l border-border p-4 lg:block">
+        <h3 className="text-sm font-semibold text-foreground mb-3">创作信息</h3>
+        <div className="space-y-3 text-xs text-muted-foreground">
+          <div>
+            <span className="font-medium text-foreground">当前能力</span>
+            <p className="mt-1">{capabilities.find((c) => c.slug === activeCapability)?.name || activeCapability}</p>
+          </div>
+          {project && (
+            <div>
+              <span className="font-medium text-foreground">项目</span>
+              <p className="mt-1">{project.name}</p>
+            </div>
+          )}
+          <div>
+            <span className="font-medium text-foreground">创作数</span>
+            <p className="mt-1">{creates.length}</p>
+          </div>
+          <div className="rounded-lg bg-muted/50 p-3">
+            <p className="text-xs leading-relaxed">
+              提示词越具体，生成效果越好。支持中英文输入。
+              {sourceCreateId && ' 当前为修改模式，将基于之前的创作结果进行迭代。'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200">
+          {toast.type === 'success' && <CheckCircle2 className="h-4 w-4 text-brand" />}
+          {toast.type === 'error' && <XCircle className="h-4 w-4 text-destructive" />}
+          {toast.type === 'info' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+          <span className="text-sm text-foreground">{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 }
