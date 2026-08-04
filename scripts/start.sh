@@ -6,10 +6,29 @@ DEPLOY_RUN_PORT="${DEPLOY_RUN_PORT:-5000}"
 
 cd "${COZE_WORKSPACE_PATH}"
 
-# Database URL: prefer explicit DATABASE_URL, fall back to PGDATABASE_URL (sandbox Supabase)
-if [ -z "${DATABASE_URL:-}" ] && [ -n "${PGDATABASE_URL:-}" ]; then
-  export DATABASE_URL="${PGDATABASE_URL}"
-  echo "Using PGDATABASE_URL as DATABASE_URL"
+# ── Database URL resolution (priority order) ──
+# 1. DATABASE_URL (explicit)
+# 2. PGDATABASE_URL (sandbox Supabase)
+# 3. Construct from individual PG* env vars (Docker / custom deploy)
+if [ -z "${DATABASE_URL:-}" ]; then
+  if [ -n "${PGDATABASE_URL:-}" ]; then
+    export DATABASE_URL="${PGDATABASE_URL}"
+    echo "[db] Using PGDATABASE_URL"
+  elif [ -n "${PGHOST:-}" ] && [ -n "${PGDATABASE:-}" ]; then
+    PGUSER="${PGUSER:-postgres}"
+    PGPASSWORD="${PGPASSWORD:-}"
+    PGPORT="${PGPORT:-5432}"
+    PGSSLMODE="${PGSSLMODE:-require}"
+    if [ -n "${PGPASSWORD}" ]; then
+      export DATABASE_URL="postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}?sslmode=${PGSSLMODE}"
+    else
+      export DATABASE_URL="postgresql://${PGUSER}@${PGHOST}:${PGPORT}/${PGDATABASE}?sslmode=${PGSSLMODE}"
+    fi
+    echo "[db] Constructed DATABASE_URL from PG* vars (host=${PGHOST})"
+  else
+    echo "[db] WARNING: No database configuration found. API will fail on DB queries."
+    echo "[db] Set DATABASE_URL, PGDATABASE_URL, or PGHOST+PGDATABASE env vars."
+  fi
 fi
 
 # JWT secret: use a fixed default if not set (in production, set via env var)
