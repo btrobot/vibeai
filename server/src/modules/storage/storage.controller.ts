@@ -11,20 +11,43 @@ import {
   Body,
   ParseUUIDPipe,
   Req,
+  Res,
   Inject,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StorageService } from './storage.service';
 import { uploadFileSchema, listFilesQuerySchema } from './dto';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
 @Controller('storage')
-@UseGuards(JwtAuthGuard)
 export class StorageController {
   constructor(@Inject('STORAGE_SERVICE') private readonly storageService: StorageService) {}
 
+  /**
+   * Serve a stored file by its storage key (path).
+   * Public endpoint — no auth required (for displaying generated images/videos).
+   * URL format: /api/storage/serve/users/{userId}/generated/{filename}
+   */
+  @Get('serve/*splat')
+  async serveFile(@Param('splat') splat: string, @Res() res: Response) {
+    const key = splat;
+    try {
+      const result = await this.storageService.readFile(key);
+      if (!result) {
+        res.status(404).json({ error: 'File not found' });
+        return;
+      }
+      res.setHeader('Content-Type', result.contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.send(result.data);
+    } catch {
+      res.status(404).json({ error: 'File not found' });
+    }
+  }
+
   @Post('upload')
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
@@ -41,6 +64,7 @@ export class StorageController {
   }
 
   @Get('files')
+  @UseGuards(JwtAuthGuard)
   async listFiles(
     @Query() query: Record<string, string>,
     @Req() req: Request,
@@ -51,6 +75,7 @@ export class StorageController {
   }
 
   @Get('files/:id')
+  @UseGuards(JwtAuthGuard)
   async getFileDetail(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request,
@@ -64,6 +89,7 @@ export class StorageController {
   }
 
   @Delete('files/:id')
+  @UseGuards(JwtAuthGuard)
   async deleteFile(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request,
@@ -77,6 +103,7 @@ export class StorageController {
   }
 
   @Get('files/:id/signed-url')
+  @UseGuards(JwtAuthGuard)
   async getSignedUrl(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request,
@@ -90,6 +117,7 @@ export class StorageController {
   }
 
   @Get('stats')
+  @UseGuards(JwtAuthGuard)
   async getStats(@Req() req: Request) {
     const userId = (req as any).user.userId;
     return this.storageService.getStorageStats(userId);

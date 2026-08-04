@@ -63,8 +63,9 @@ export default function ProjectsPage() {
       });
       const result = await res.json();
       if (res.ok) {
-        setProjects(result.items ?? []);
-        setTotal(result.total ?? 0);
+        const data = result.data ?? result;
+        setProjects(data.items ?? []);
+        setTotal(data.total ?? 0);
       }
     } catch {
       // Silently fail

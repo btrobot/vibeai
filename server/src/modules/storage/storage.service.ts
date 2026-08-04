@@ -132,6 +132,39 @@ export class StorageService {
   }
 
   /**
+   * Read a file by its storage key (for serving via API)
+   * Infers Content-Type from file extension for proper browser rendering.
+   */
+  async readFile(storageKey: string): Promise<{ data: Buffer; contentType: string } | null> {
+    try {
+      const result = await this.provider.read(storageKey);
+      // Infer content type from extension since local provider returns generic type
+      const ext = storageKey.split('.').pop()?.toLowerCase() ?? '';
+      const mimeMap: Record<string, string> = {
+        png: 'image/png',
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+        gif: 'image/gif',
+        webp: 'image/webp',
+        svg: 'image/svg+xml',
+        mp4: 'video/mp4',
+        webm: 'video/webm',
+        mov: 'video/quicktime',
+        mp3: 'audio/mpeg',
+        wav: 'audio/wav',
+        pdf: 'application/pdf',
+        json: 'application/json',
+        txt: 'text/plain',
+        csv: 'text/csv',
+      };
+      const contentType = mimeMap[ext] ?? result.contentType;
+      return { data: result.data, contentType };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * 从 URL 下载文件并转存到我们的存储
    * 用于 AI 生成结果的持久化（确定性转存）
    */

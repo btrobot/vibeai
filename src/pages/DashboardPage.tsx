@@ -64,7 +64,7 @@ export default function DashboardPage() {
           totalProjects: projects?.total ?? projects?.data?.total ?? 0,
           totalCreates: createsData?.total ?? createsData?.data?.total ?? 0,
           completedCreates: createItems.filter((c: { status: string }) => c.status === 'completed').length,
-          usedCredits: 0,
+          usedCredits: (user?.credits !== undefined) ? Math.max(0, 100 - user.credits) : 0,
           recentCreates: createItems.slice(0, 5),
         });
       } catch {

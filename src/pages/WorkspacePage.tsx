@@ -200,10 +200,14 @@ export default function WorkspacePage() {
         })
         .catch(() => { /* use fallback */ });
 
-      if (projectRes.ok) setProject(await projectRes.json());
+      if (projectRes.ok) {
+        const projectData = await projectRes.json();
+        setProject(projectData.data ?? projectData);
+      }
       if (createsRes.ok) {
         const createsData = await createsRes.json();
-        setCreates(createsData.items ?? []);
+        const createsResult = createsData.data ?? createsData;
+        setCreates(createsResult.items ?? []);
       }
     } catch {
       // Silently fail
@@ -460,7 +464,7 @@ export default function WorkspacePage() {
                         ) : null
                       ) : (
                         <p className="text-xs text-foreground whitespace-pre-wrap">
-                          {(create.output as { text?: string }).text || JSON.stringify(create.output, null, 2)}
+                          {(create.output as { content?: string; text?: string }).content || (create.output as { text?: string }).text || JSON.stringify(create.output, null, 2)}
                         </p>
                       )}
                     </div>

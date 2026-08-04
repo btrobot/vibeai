@@ -85,6 +85,30 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
     }
   };
 
+  const ensureProject = async (): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/projects?pageSize=1', { headers: { ...getAuthHeaders() } });
+      const result = await res.json();
+      const data = result.data ?? result;
+      if (data.items?.length > 0) return data.items[0].id;
+
+      // No projects — create a default one
+      const createRes = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ name: '工具创作', description: '快速工具生成' }),
+      });
+      if (createRes.ok) {
+        const createResult = await createRes.json();
+        const createData = createResult.data ?? createResult;
+        return createData.id;
+      }
+    } catch {
+      // Silently fail
+    }
+    return null;
+  };
+
   const handleSubmit = async () => {
     if (!file && !prompt.trim()) return;
     setLoading(true);
@@ -92,6 +116,13 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
     setResult(null);
 
     try {
+      const projectId = await ensureProject();
+      if (!projectId) {
+        setError('无法获取项目，请先创建项目');
+        setLoading(false);
+        return;
+      }
+
       let imageUrl = '';
       if (file) {
         const formData = new FormData();
@@ -105,7 +136,8 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
         });
         const uploadData = await uploadRes.json();
         if (uploadRes.ok) {
-          imageUrl = uploadData.url || uploadData.key || '';
+          const upload = uploadData.data ?? uploadData;
+          imageUrl = upload.url || upload.key || '';
         }
       }
 
@@ -116,6 +148,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
           ...getAuthHeaders(),
         },
         body: JSON.stringify({
+          projectId,
           capabilitySlug: config.capability,
           input: {
             prompt: prompt.trim() || `使用 ${config.name} 工具处理`,
@@ -126,25 +159,30 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
 
       const generateData = await generateRes.json();
       if (generateRes.ok) {
-        const taskId = generateData.taskId || generateData.id;
+        const genResult = generateData.data ?? generateData;
+        const taskId = genResult.taskId || genResult.id;
         if (taskId) {
           const poll = async () => {
             const taskRes = await fetch(`/api/tasks/${taskId}`, {
               headers: { ...getAuthHeaders() },
             });
             const taskData = await taskRes.json();
-            if (taskData.status === 'completed') {
-              const output = taskData.output;
+            const task = taskData.data ?? taskData;
+            if (task.status === 'completed') {
+              const output = task.output;
               if (output?.images?.length) {
-                setResult(output.images[0]);
+                const img = output.images[0];
+                setResult(typeof img === 'string' ? img : img.url);
+              } else if (output?.content) {
+                setResult(output.content);
               } else if (output?.text) {
                 setResult(output.text);
               } else {
                 setResult(JSON.stringify(output, null, 2));
               }
               setLoading(false);
-            } else if (taskData.status === 'failed') {
-              setError(taskData.errorMessage || '生成失败');
+            } else if (task.status === 'failed') {
+              setError(task.errorMessage || '生成失败');
               setLoading(false);
             } else {
               setTimeout(poll, 1000);
@@ -298,7 +336,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
 
           {result && !loading && (
             <div className="space-y-3">
-              {result.startsWith('http') ? (
+              {result.startsWith('http') || result.startsWith('/api/') || result.startsWith('/storage/') ? (
                 <div className="relative">
                   <img
                     src={result}
@@ -318,7 +356,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
                   <p className="text-sm text-foreground whitespace-pre-wrap">{result}</p>
                 </div>
               )}
-              {result.startsWith('http') && (
+              {(result.startsWith('http') || result.startsWith('/api/') || result.startsWith('/storage/')) && (
                 <Button
                   variant="outline"
                   className="w-full"

@@ -56,7 +56,7 @@ export class LocalStorageProvider implements IStorageProvider {
 
     return {
       key: relativePath,
-      url: `/api/storage/files/${relativePath.replace(/\\/g, '/')}`,
+      url: `/api/storage/serve/${relativePath.replace(/\\/g, '/')}`,
       size: stats.size,
     };
   }

@@ -47,7 +47,8 @@ export default function AdminPage() {
         headers: { ...getAuthHeaders() },
       });
       if (res.ok) {
-        setStats(await res.json());
+        const result = await res.json();
+        setStats(result.data ?? result);
       }
     } catch {
       // Silently fail
