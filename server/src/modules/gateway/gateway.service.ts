@@ -1,7 +1,7 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { DrizzleService } from '../../common/drizzle.service';
-import { generationTasks } from '../../db/schema/gateway';
+import { tasks } from '../../db/schema/task-engine';
 import { builtInCapabilityMap } from './capabilities/index';
 import { builtInModelMap } from './models/index';
 import { routeCapability, getModelsForCapability } from './router/index';
@@ -15,7 +15,7 @@ export interface GenerationTaskResponse {
   taskId: string;
   capabilitySlug: string;
   modelSlug: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
+  status: 'queued' | 'submitting' | 'completing' | 'completed' | 'failed';
   createdAt: string;
   estimatedCompletionAt?: string;
 }
@@ -76,14 +76,15 @@ export class GatewayService {
       throw new BadRequestException(`能力 "${capabilitySlug}" 没有可用的模型`);
     }
 
-    // Create task record
+    // Create task record in unified tasks table
     const taskId = uuidv4();
     const now = new Date();
 
     try {
-      await this.drizzle.db.insert(generationTasks).values({
+      await this.drizzle.db.insert(tasks).values({
         id: taskId,
         userId,
+        type: capabilitySlug,
         capabilitySlug,
         modelSlug: route.modelSlug,
         input,
@@ -117,8 +118,8 @@ export class GatewayService {
     try {
       const [task] = await this.drizzle.db
         .select()
-        .from(generationTasks)
-        .where(eq(generationTasks.id, taskId))
+        .from(tasks)
+        .where(eq(tasks.id, taskId))
         .limit(1);
 
       if (!task) return null;
@@ -126,7 +127,7 @@ export class GatewayService {
       return {
         id: task.id,
         status: task.status,
-        capabilitySlug: task.capabilitySlug,
+        capabilitySlug: task.capabilitySlug ?? task.type,
         modelSlug: task.modelSlug,
         input: task.input,
         output: task.output,
@@ -143,22 +144,16 @@ export class GatewayService {
   // ===== SDK Integration Placeholders =====
 
   async executeWithLLM(input: Record<string, unknown>): Promise<string> {
-    // This will be implemented in Phase 4 with the task execution engine
-    // Uses LLMClient from coze-coding-dev-sdk
     this.logger.log('LLM execution requested', JSON.stringify(input));
     return 'execution_placeholder';
   }
 
   async executeImageGeneration(input: Record<string, unknown>): Promise<string[]> {
-    // This will be implemented in Phase 4 with the task execution engine
-    // Uses ImageGenerationClient from coze-coding-dev-sdk
     this.logger.log('Image generation requested', JSON.stringify(input));
     return [];
   }
 
   async executeVideoGeneration(input: Record<string, unknown>): Promise<string | null> {
-    // This will be implemented in Phase 4 with the task execution engine
-    // Uses VideoGenerationClient from coze-coding-dev-sdk
     this.logger.log('Video generation requested', JSON.stringify(input));
     return null;
   }

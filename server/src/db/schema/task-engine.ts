@@ -27,14 +27,19 @@ export const tasks = pgTable('tasks', {
   id: uuid('id').defaultRandom().primaryKey(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  type: varchar('type', { length: 50 }).notNull(), // text-generation, image-generation, etc.
-  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending | queued | running | completed | failed | cancelled
+  type: varchar('type', { length: 50 }).notNull(), // capability slug: text_generation, image_generation, video_generation
+  status: varchar('status', { length: 20 }).notNull().default('queued'), // queued | submitting | completing | completed | failed | cancelled
   priority: integer('priority').notNull().default(0),
   progress: integer('progress').notNull().default(0), // 0-100
   input: jsonb('input').notNull(),
   output: jsonb('output'),
   result: jsonb('result'),
   modelSlug: varchar('model_slug', { length: 100 }),
+  capabilitySlug: varchar('capability_slug', { length: 100 }),
+  creditsCost: integer('credits_cost').notNull().default(0),
+  providerTaskId: varchar('provider_task_id', { length: 255 }),
+  sourceTaskId: uuid('source_task_id'),
+  expiresAt: timestamp('expires_at'),
   errorMessage: text('error_message'),
   startedAt: timestamp('started_at'),
   completedAt: timestamp('completed_at'),
@@ -47,6 +52,7 @@ export const tasks = pgTable('tasks', {
   index('tasks_status_idx').on(table.status),
   index('tasks_type_idx').on(table.type),
   index('tasks_created_at_idx').on(table.createdAt),
+  index('tasks_source_task_id_idx').on(table.sourceTaskId),
 ]);
 
 // ===== Execution States Table =====

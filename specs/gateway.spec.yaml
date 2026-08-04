@@ -1,6 +1,6 @@
 domain: gateway
-version: '1.0'
-last_updated: '2025-04-06'
+version: '2.0'
+last_updated: '2025-01-15'
 entities:
   - name: AICapability
     table: ai_capabilities
@@ -55,10 +55,13 @@ entities:
       - name: ai_capabilities_slug_idx
         fields:
           - slug
+      - name: ai_capabilities_category_idx
+        fields:
+          - category
     timestamps: true
   - name: AIModel
     table: ai_models
-    description: AI 模型定义
+    description: AI 模型注册表
     fields:
       - name: id
         type: uuid
@@ -71,29 +74,77 @@ entities:
       - name: name
         type: varchar(255)
         notNull: true
-      - name: provider
+      - name: providerName
         type: varchar(100)
         notNull: true
+        default: coze
+        desc: 供应商标识，当前固定为 coze
+      - name: modality
+        type: varchar(50)
+        notNull: true
+        desc: text_generation | image_generation | video_generation
+      - name: sdkModelId
+        type: varchar(200)
+        notNull: true
+        desc: 传给 Coze SDK 的模型 ID
+      - name: sdkClient
+        type: varchar(50)
+        notNull: true
+        default: llm
+        desc: llm | image_generation | video_generation
+      - name: capabilitySlug
+        type: varchar(100)
+        notNull: true
+        desc: 关联的 AICapability slug
       - name: description
         type: text
         nullable: true
-      - name: capabilities
+      - name: avatar
+        type: text
+        nullable: true
+      - name: contextWindow
+        type: integer
+        nullable: true
+        desc: LLM 上下文窗口大小
+      - name: maxOutputTokens
+        type: integer
+        nullable: true
+      - name: inputModes
         type: text[]
+        default: '[]'
+        desc: 支持的输入类型 text|image_url|video_url
+      - name: outputType
+        type: varchar(50)
         notNull: true
-        default: []
-      - name: config
+        desc: 输出类型 text|image|video
+      - name: constraints
         type: jsonb
         default: '{}'
-      - name: inputTypes
+        desc: 模型约束（图片尺寸、视频时长等）
+      - name: inputSchema
         type: jsonb
-        default: []
-      - name: outputTypes
+        default: '{}'
+        desc: 输入参数 JSON Schema（参考 Replicate model.input_schema）
+      - name: defaultParams
         type: jsonb
-        default: []
+        default: '{}'
+        desc: 默认参数（temperature, size, duration 等）
+      - name: costCredits
+        type: integer
+        notNull: true
+        default: 1
+        desc: 每次调用消耗的信用额度
+      - name: tags
+        type: text[]
+        default: '[]'
       - name: isActive
         type: boolean
         notNull: true
         default: true
+      - name: isFeatured
+        type: boolean
+        notNull: true
+        default: false
       - name: sortOrder
         type: integer
         notNull: true
@@ -110,47 +161,69 @@ entities:
       - name: ai_models_slug_idx
         fields:
           - slug
+      - name: ai_models_capability_slug_idx
+        fields:
+          - capabilitySlug
+      - name: ai_models_modality_idx
+        fields:
+          - modality
+      - name: ai_models_active_idx
+        fields:
+          - isActive
     timestamps: true
-  - name: GenerationTask
-    table: generation_tasks
-    description: AI 生成任务记录
+  - name: ProviderAttempt
+    table: provider_attempts
+    description: SDK 调用审计日志
     fields:
       - name: id
         type: uuid
         pk: true
         default: gen_random_uuid()
-      - name: userId
+      - name: taskId
         type: uuid
         notNull: true
         fk:
-          table: users
+          table: tasks
           field: id
           onDelete: cascade
-      - name: capabilitySlug
-        type: varchar(100)
-        notNull: true
       - name: modelSlug
         type: varchar(100)
         notNull: true
-      - name: input
-        type: jsonb
+      - name: providerName
+        type: varchar(100)
         notNull: true
-      - name: output
-        type: jsonb
-        nullable: true
-      - name: status
+        default: coze
+      - name: sdkClient
         type: varchar(50)
         notNull: true
+      - name: requestPayload
+        type: jsonb
+        notNull: true
+        desc: 发送给 SDK 的请求参数
+      - name: responsePayload
+        type: jsonb
+        nullable: true
+        desc: SDK 返回的响应
+      - name: status
+        type: varchar(20)
+        notNull: true
         default: pending
+        desc: pending | success | failed | timeout
       - name: errorMessage
         type: text
         nullable: true
-      - name: creditsCost
+      - name: durationMs
         type: integer
-        default: 0
+        nullable: true
+        desc: 调用耗时（毫秒）
+      - name: attemptNumber
+        type: integer
+        notNull: true
+        default: 1
       - name: startedAt
         type: timestamp
-        nullable: true
+        notNull: true
+        default: now()
       - name: completedAt
         type: timestamp
         nullable: true
@@ -158,182 +231,364 @@ entities:
         type: timestamp
         notNull: true
         default: now()
-      - name: updatedAt
-        type: timestamp
-        notNull: true
-        default: now()
     indexes:
-      - name: generation_tasks_user_idx
+      - name: provider_attempts_task_id_idx
         fields:
-          - userId
-      - name: generation_tasks_status_idx
+          - taskId
+      - name: provider_attempts_model_slug_idx
+        fields:
+          - modelSlug
+      - name: provider_attempts_status_idx
         fields:
           - status
-    timestamps: true
+    timestamps: false
 operations:
   - name: listCapabilities
     method: GET
     path: /gateway/capabilities
+    description: 获取 AI 能力列表
     auth: jwt
-    description: 获取所有 AI 能力列表
-    pre: []
+    pre:
+      - 用户已登录
     post:
-      - 返回能力列表
-    effect: []
-    errors:
-      - status: 401
-        condition: 未认证
-        message: 未登录
+      - 返回激活的 AICapability 列表（按 sortOrder 排序）
+    test: true
   - name: getCapabilityDetail
     method: GET
     path: /gateway/capabilities/:slug
+    description: 获取能力详情
     auth: jwt
-    description: 获取单个 AI 能力详情
     pre:
-      - 能力存在
+      - 用户已登录
     post:
-      - 返回能力详情
-    effect: []
+      - 返回 AICapability + 关联的 AIModel 列表
     errors:
       - status: 404
         condition: 能力不存在
-        message: 能力不存在
-  - name: getCapabilityModels
-    method: GET
-    path: /gateway/capabilities/:slug/models
-    auth: jwt
-    description: 获取能力支持的模型列表
-    pre:
-      - 能力存在
-    post:
-      - 返回模型列表
-    effect: []
-    errors:
-      - status: 404
-        condition: 能力不存在
-        message: 能力不存在
+        message: AI 能力不存在
+    test: true
   - name: listModels
     method: GET
     path: /gateway/models
+    description: 获取模型列表
     auth: jwt
-    description: 获取所有模型列表
-    pre: []
+    pre:
+      - 用户已登录
     post:
-      - 返回模型列表
-    effect: []
-    errors:
-      - status: 401
-        condition: 未认证
-        message: 未登录
+      - 返回激活的 AIModel 列表，支持 ?capability=xxx 过滤
+    test: true
   - name: getModelDetail
     method: GET
     path: /gateway/models/:slug
+    description: 获取模型详情（含 inputSchema）
     auth: jwt
-    description: 获取单个模型详情
     pre:
-      - 模型存在
+      - 用户已登录
     post:
-      - 返回模型详情
-    effect: []
+      - 返回 AIModel 详情
     errors:
       - status: 404
         condition: 模型不存在
-        message: 模型不存在
+        message: AI 模型不存在
+    test: true
   - name: submitGeneration
     method: POST
     path: /gateway/generate
+    description: 提交生成任务（图片/视频）
     auth: jwt
-    description: 提交 AI 生成任务
     pre:
-      - 能力存在
-      - 模型存在
-      - 信用充足
-    post:
-      - 创建生成任务记录
+      - 用户已登录
+      - 信用额度充足（预扣）
+      - modelSlug 对应模型存在且 active
     effect:
-      - 扣减信用额度
+      - 创建 Task 记录（type=capabilitySlug, status=queued）
+      - 调用 BillingService.reserveCredits 预扣信用
+      - 异步执行 ProtocolAdapter
+      - 结果转存到 StorageObject
+      - 调用 BillingService.settleCredits 结算
     errors:
-      - status: 400
-        condition: 输入参数无效
-        message: 请求参数格式错误
-      - status: 404
-        condition: 能力或模型不存在
-        message: 能力或模型不存在
-      - status: 409
-        condition: 信用不足
+      - status: 402
+        condition: 信用额度不足
         message: 信用额度不足
-  - name: getGenerationTask
-    method: GET
-    path: /gateway/tasks/:taskId
+      - status: 404
+        condition: 模型不存在
+        message: AI 模型不存在
+      - status: 422
+        condition: 输入参数不符合 inputSchema
+        message: 输入参数校验失败
+    test: true
+  - name: chat
+    method: POST
+    path: /gateway/chat
+    description: LLM 文本生成（SSE 流式）
     auth: jwt
-    description: 查询生成任务状态和结果
     pre:
-      - 任务存在
-      - 属于当前用户
-    post:
-      - 返回任务状态和结果
-    effect: []
+      - 用户已登录
+      - 信用额度充足
+    effect:
+      - 直接调用 LLMClient.stream()
+      - 通过 SSE 流式返回
+      - 不创建 Task 记录
+      - 按实际 Token 消耗结算信用
+    errors:
+      - status: 402
+        condition: 信用额度不足
+        message: 信用额度不足
+      - status: 404
+        condition: 模型不存在
+        message: AI 模型不存在
+    test: true
+  - name: quickCreate
+    method: POST
+    path: /gateway/quick-create
+    description: 快捷创作（预设 Recipe + 参数合并）
+    auth: jwt
+    pre:
+      - 用户已登录
+      - 信用额度充足
+    effect:
+      - 根据 recipeId 查找预设配置
+      - 合并用户输入参数
+      - 调用 submitGeneration
     errors:
       - status: 404
-        condition: 任务不存在
-        message: 任务不存在
+        condition: Recipe 不存在
+        message: 快捷创作方案不存在
+      - status: 402
+        condition: 信用额度不足
+        message: 信用额度不足
+    test: true
 rules:
-  - name: 能力 slug 唯一
+  - name: capability_slug_unique
     id: GTW-001
     severity: error
-    description: AI 能力的 slug 字段必须全局唯一
-    enforcement: DB unique constraint
-    test: getCapability 对不存在的 slug 返回 null
-  - name: 模型 slug 唯一
+    level: error
+    description: AI 能力 slug 全局唯一
+    enforcement: DB unique 约束
+    test: getCapability 按 slug 返回正确的能力
+  - name: model_slug_unique
     id: GTW-002
     severity: error
-    description: AI 模型的 slug 字段必须全局唯一
-    enforcement: DB unique constraint
-    test: getModel 对不存在的 slug 返回 null
-  - name: 生成任务必有所属用户
-    id: GTW-003
-    severity: error
-    description: 每个生成任务必须关联一个有效用户
-    enforcement: FK 约束 + 外键验证
-    test: 提交有效能力时创建任务并返回 queued 状态
-  - name: 生成任务必须关联有效能力和模型
+    level: error
+    description: AI 模型 slug 全局唯一
+    enforcement: DB unique 约束
+    test: getModel 按 slug 返回正确的模型
+  - name: model_capability_valid
     id: GTW-004
     severity: error
-    description: 生成任务必须指定 gateway 中已注册的能力和模型 slug
-    enforcement: 路由层校验
+    level: error
+    description: 提交生成任务时 modelSlug 必须对应一个 active 的 AIModel
+    enforcement: submitGeneration 中校验 model 存在且 isActive=true
     test: 不存在的能力抛出 NotFoundException
-  - name: 生成前检查信用余额
+  - name: credit_reserve_before_submit
     id: GTW-005
     severity: error
-    description: 提交生成任务前必须检查用户信用余额是否充足
-    enforcement: 服务层预检
-    test: "信用不足时返回 409 并拒绝创建"
-state_machines:
-  - entity: GenerationTask
-    field: status
-    states:
-      - pending
-      - queued
-      - running
-      - completed
-      - failed
-      - cancelled
-    transitions:
-      - from: pending
-        to:
-          - queued
-          - cancelled
-      - from: queued
-        to:
-          - running
-          - failed
-      - from: running
-        to:
-          - completed
-          - failed
-          - cancelled
-    initial: pending
-    terminal:
-      - completed
-      - failed
-      - cancelled
+    level: error
+    description: 提交生成任务前必须预扣信用额度（reserve 而非仅检查）
+    enforcement: submitGeneration 先调 BillingService.reserveCredits 再创建 Task
+    test: 信用不足时返回 409 并拒绝创建
+  - name: result_persist
+    id: GTW-006
+    severity: error
+    level: error
+    description: 生成结果必须转存到 StorageObject，不直接暴露外部 URL
+    enforcement: ProtocolAdapter 执行成功后调用 StorageService.persistFromUrl
+    test: should persist result to storage
+  - name: protocol_adapter_dispatch
+    id: GTW-007
+    severity: error
+    level: error
+    description: 根据 model.modality 选择对应 ProtocolAdapter（llm | image_generation | video_generation）
+    enforcement: TaskExecutionService 根据 model.sdkClient 字段选择适配器
+    test: routeCapability 为 image-generation 返回正确的图片模型
+  - name: llm_streaming
+    id: GTW-008
+    severity: error
+    level: error
+    description: LLM 文本生成必须通过 SSE 流式返回，不创建 Task
+    enforcement: chat 操作使用 LLMClient.stream() + SSE response
+    test: should stream LLM response via SSE
+seed_data:
+  models:
+    - slug: doubao-seed-2-0-pro
+      name: 豆包 Seed 2.0 Pro
+      providerName: coze
+      modality: text_generation
+      sdkModelId: doubao-seed-2-0-pro-250515
+      sdkClient: llm
+      capabilitySlug: text_generation
+      contextWindow: 64000
+      maxOutputTokens: 8000
+      inputModes:
+        - text
+        - image_url
+      outputType: text
+      costCredits: 5
+      isFeatured: true
+      sortOrder: 1
+    - slug: doubao-seed-2-0-lite
+      name: 豆包 Seed 2.0 Lite
+      providerName: coze
+      modality: text_generation
+      sdkModelId: doubao-seed-2-0-lite-250415
+      sdkClient: llm
+      capabilitySlug: text_generation
+      contextWindow: 32000
+      maxOutputTokens: 4000
+      inputModes:
+        - text
+        - image_url
+      outputType: text
+      costCredits: 2
+      sortOrder: 2
+    - slug: doubao-seed-2-0-mini
+      name: 豆包 Seed 2.0 Mini
+      providerName: coze
+      modality: text_generation
+      sdkModelId: doubao-seed-2-0-mini-250415
+      sdkClient: llm
+      capabilitySlug: text_generation
+      contextWindow: 32000
+      maxOutputTokens: 4000
+      inputModes:
+        - text
+        - image_url
+      outputType: text
+      costCredits: 1
+      sortOrder: 3
+    - slug: doubao-seed-1-8
+      name: 豆包 Seed 1.8
+      providerName: coze
+      modality: text_generation
+      sdkModelId: doubao-seed-1-8-250415
+      sdkClient: llm
+      capabilitySlug: text_generation
+      contextWindow: 32000
+      maxOutputTokens: 4000
+      inputModes:
+        - text
+        - image_url
+      outputType: text
+      costCredits: 2
+      sortOrder: 4
+    - slug: kimi-k2-5
+      name: Kimi K2.5
+      providerName: coze
+      modality: text_generation
+      sdkModelId: kimi-k2-5-250425
+      sdkClient: llm
+      capabilitySlug: text_generation
+      contextWindow: 131072
+      maxOutputTokens: 8000
+      inputModes:
+        - text
+        - image_url
+      outputType: text
+      costCredits: 4
+      isFeatured: true
+      sortOrder: 5
+    - slug: glm-5-0
+      name: 智谱 GLM 5.0
+      providerName: coze
+      modality: text_generation
+      sdkModelId: glm-5-0-250518
+      sdkClient: llm
+      capabilitySlug: text_generation
+      contextWindow: 128000
+      maxOutputTokens: 8000
+      inputModes:
+        - text
+        - image_url
+      outputType: text
+      costCredits: 4
+      sortOrder: 6
+    - slug: seedream-4-0
+      name: Seedream 4.0 图片生成
+      providerName: coze
+      modality: image_generation
+      sdkModelId: seedream-4-0-250528
+      sdkClient: image_generation
+      capabilitySlug: image_generation
+      inputModes:
+        - text
+      outputType: image
+      constraints:
+        sizes:
+          - 1024x1024
+          - 1280x720
+          - 720x1280
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 图片描述
+          size:
+            type: string
+            enum:
+              - 1024x1024
+              - 1280x720
+              - 720x1280
+            default: 1024x1024
+          referenceImage:
+            type: string
+            description: 参考图片 URL
+        required:
+          - prompt
+      defaultParams:
+        size: 1024x1024
+      costCredits: 10
+      isFeatured: true
+      sortOrder: 10
+    - slug: seedance-2-0
+      name: Seedance 2.0 视频生成
+      providerName: coze
+      modality: video_generation
+      sdkModelId: seedance-2-0-250528
+      sdkClient: video_generation
+      capabilitySlug: video_generation
+      inputModes:
+        - text
+        - image_url
+      outputType: video
+      constraints:
+        durations:
+          - 5
+          - 10
+        aspectRatios:
+          - 16:9
+          - 9:16
+          - 1:1
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 视频描述
+          duration:
+            type: integer
+            enum:
+              - 5
+              - 10
+            default: 5
+          aspectRatio:
+            type: string
+            enum:
+              - 16:9
+              - 9:16
+              - 1:1
+            default: 16:9
+          firstFrame:
+            type: string
+            description: 首帧图片 URL
+          lastFrame:
+            type: string
+            description: 末帧图片 URL
+        required:
+          - prompt
+      defaultParams:
+        duration: 5
+        aspectRatio: 16:9
+      costCredits: 30
+      isFeatured: true
+      sortOrder: 20

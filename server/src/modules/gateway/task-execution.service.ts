@@ -3,7 +3,7 @@ import { Inject } from '@nestjs/common';
 import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
-import { generationTasks, tasks } from '../../db/schema';
+import { tasks } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { LLMClient, ImageGenerationClient, VideoGenerationClient, Config } from 'coze-coding-dev-sdk';
 import { WsService } from '../ws/ws.service';
@@ -53,14 +53,14 @@ export class TaskExecutionService {
   ): Promise<void> {
     if (!this.initialized) {
       this.logger.warn(`AI not initialized, skipping execution for task ${taskId}`);
-      await this.db.update(generationTasks)
+      await this.db.update(tasks)
         .set({
           status: 'failed',
           errorMessage: 'AI 服务未初始化，请检查 COZE_LOOP_API_TOKEN 配置',
           completedAt: new Date(),
           updatedAt: new Date(),
         })
-        .where(eq(generationTasks.id, taskId));
+        .where(eq(tasks.id, taskId));
 
       this.wsService.sendToUser(userId, {
         type: 'task:status',
@@ -69,14 +69,14 @@ export class TaskExecutionService {
       return;
     }
 
-    // Notify frontend that task is running
-    await this.db.update(generationTasks)
-      .set({ status: 'running', startedAt: new Date(), updatedAt: new Date() })
-      .where(eq(generationTasks.id, taskId));
+    // Transition: queued → submitting
+    await this.db.update(tasks)
+      .set({ status: 'submitting', startedAt: new Date(), updatedAt: new Date() })
+      .where(eq(tasks.id, taskId));
 
     this.wsService.sendToUser(userId, {
       type: 'task:status',
-      payload: { taskId, status: 'running' },
+      payload: { taskId, status: 'submitting' },
     });
 
     try {
@@ -102,15 +102,21 @@ export class TaskExecutionService {
           output = await this.executeLLM(taskId, input);
       }
 
-      // Save results
-      await this.db.update(generationTasks)
+      // Transition: submitting → completing
+      await this.db.update(tasks)
+        .set({ status: 'completing', output, updatedAt: new Date() })
+        .where(eq(tasks.id, taskId));
+
+      // Transition: completing → completed
+      await this.db.update(tasks)
         .set({
           status: 'completed',
           output,
+          progress: 100,
           completedAt: new Date(),
           updatedAt: new Date(),
         })
-        .where(eq(generationTasks.id, taskId));
+        .where(eq(tasks.id, taskId));
 
       this.wsService.sendToUser(userId, {
         type: 'task:completed',
@@ -119,14 +125,14 @@ export class TaskExecutionService {
     } catch (e: any) {
       this.logger.error(`Task ${taskId} execution failed: ${e.message}`);
 
-      await this.db.update(generationTasks)
+      await this.db.update(tasks)
         .set({
           status: 'failed',
           errorMessage: e.message,
           completedAt: new Date(),
           updatedAt: new Date(),
         })
-        .where(eq(generationTasks.id, taskId));
+        .where(eq(tasks.id, taskId));
 
       this.wsService.sendToUser(userId, {
         type: 'task:failed',

@@ -22,12 +22,14 @@ export class GatewayController {
   // ===== Capabilities =====
 
   @Get('capabilities')
+  @UseGuards(JwtAuthGuard)
   listCapabilities() {
     const capabilities = this.gatewayService.listCapabilities();
     return { success: true, data: capabilities };
   }
 
   @Get('capabilities/:slug')
+  @UseGuards(JwtAuthGuard)
   getCapability(@Param('slug') slug: string) {
     const capability = this.gatewayService.getCapability(slug);
     if (!capability) {
@@ -36,21 +38,17 @@ export class GatewayController {
     return { success: true, data: capability };
   }
 
-  @Get('capabilities/:slug/models')
-  getModelsForCapability(@Param('slug') slug: string) {
-    const models = this.gatewayService.getModelsForCapability(slug);
-    return { success: true, data: models };
-  }
-
   // ===== Models =====
 
   @Get('models')
+  @UseGuards(JwtAuthGuard)
   listModels() {
     const models = this.gatewayService.listModels();
     return { success: true, data: models };
   }
 
   @Get('models/:slug')
+  @UseGuards(JwtAuthGuard)
   getModel(@Param('slug') slug: string) {
     const model = this.gatewayService.getModel(slug);
     if (!model) {
@@ -72,13 +70,29 @@ export class GatewayController {
     return { success: true, data: result };
   }
 
-  @Get('tasks/:taskId')
+  // ===== Chat (LLM SSE Streaming) =====
+
+  @Post('chat')
   @UseGuards(JwtAuthGuard)
-  async getTask(@Req() req: any, @Param('taskId') taskId: string) {
-    const task = await this.gatewayService.getTask(taskId);
-    if (!task) {
-      throw new NotFoundException(`任务 "${taskId}" 不存在`);
-    }
-    return { success: true, data: task };
+  async chat(@Req() req: any, @Body() body: { modelSlug: string; messages: unknown[] }) {
+    // TODO: Implement SSE streaming via LLMClient.stream()
+    // For now, return a placeholder response
+    return {
+      success: true,
+      data: { message: 'Chat endpoint - SSE streaming will be implemented' },
+    };
+  }
+
+  // ===== Quick Create =====
+
+  @Post('quick-create')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  async quickCreate(
+    @Req() req: any,
+    @Body() body: { recipeId: string; input?: Record<string, unknown> },
+  ) {
+    // TODO: Implement recipe lookup + parameter merge + submitGeneration
+    throw new NotFoundException(`快捷创作方案 "${body.recipeId}" 不存在`);
   }
 }

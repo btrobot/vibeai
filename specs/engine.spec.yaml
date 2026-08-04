@@ -1,6 +1,6 @@
 domain: engine
-version: '1.0'
-last_updated: '2025-04-06'
+version: '2.0'
+last_updated: '2025-01-15'
 entities:
   - name: Project
     table: projects
@@ -68,7 +68,7 @@ entities:
     timestamps: true
   - name: Task
     table: tasks
-    description: 生成任务
+    description: AI 生成任务
     fields:
       - name: id
         type: uuid
@@ -91,10 +91,12 @@ entities:
       - name: type
         type: varchar(50)
         notNull: true
+        desc: 能力标识，等同 capabilitySlug
       - name: status
         type: varchar(20)
         notNull: true
-        default: pending
+        default: queued
+        desc: queued | submitting | completing | completed | failed | cancelled
       - name: priority
         type: integer
         notNull: true
@@ -115,6 +117,27 @@ entities:
       - name: modelSlug
         type: varchar(100)
         nullable: true
+      - name: capabilitySlug
+        type: varchar(100)
+        nullable: true
+        desc: AI 能力标识，与 type 冗余但语义更清晰
+      - name: creditsCost
+        type: integer
+        notNull: true
+        default: 0
+        desc: 本次任务消耗的信用额度
+      - name: providerTaskId
+        type: varchar(255)
+        nullable: true
+        desc: SDK 返回的外部任务 ID
+      - name: sourceTaskId
+        type: uuid
+        nullable: true
+        desc: 溯源任务 ID，用于一键同款
+      - name: expiresAt
+        type: timestamp
+        nullable: true
+        desc: 任务超时时间
       - name: errorMessage
         type: text
         nullable: true
@@ -151,6 +174,9 @@ entities:
       - name: tasks_created_at_idx
         fields:
           - createdAt
+      - name: tasks_source_task_id_idx
+        fields:
+          - sourceTaskId
     timestamps: true
   - name: ExecutionState
     table: execution_states
@@ -308,9 +334,10 @@ operations:
     pre:
       - 用户已登录
       - 任务存在且属于当前用户
-      - 任务状态为 pending/queued/running
+      - 任务状态为 queued/submitting
     effect:
       - 更新任务状态为 cancelled
+      - 退还预扣的信用额度
     errors:
       - status: 422
         condition: 任务状态不可取消
@@ -337,7 +364,7 @@ operations:
       - 任务存在且属于当前用户
       - 任务状态为 failed
     effect:
-      - 重置任务状态为 pending
+      - 重置任务状态为 queued
     test: true
   - name: getTaskWebSocket
     method: N/A
@@ -365,7 +392,7 @@ rules:
     severity: error
     level: error
     description: 已完成/已取消的任务不可再取消
-    enforcement: 取消前检查 status 是否在 pending/queued/running 中
+    enforcement: 取消前检查 status 是否在 queued/submitting 中
     test: should check credits when creditCost is specified
   - name: progress_bounds
     id: ENG-004
@@ -379,7 +406,7 @@ rules:
     severity: error
     level: error
     description: 用户并发任务数受套餐限制
-    enforcement: 提交任务前检查 running 任务数 < maxConcurrentTasks
+    enforcement: 提交任务前检查 submitting 任务数 < maxConcurrentTasks
     test: should fail task and refund credits
   - name: project_max_projects
     id: ENG-006
@@ -402,40 +429,55 @@ rules:
     description: 每个任务执行步骤必须记录 ExecutionState
     enforcement: 任务执行时写入 execution_states 表
     test: should create execution state
-state_machines:
-  - name: task_execution
-    entity: Task
-    description: 任务执行状态机
-    states:
-      - pending
-      - queued
-      - running
-      - completed
-      - failed
-      - cancelled
-    transitions:
-      - from: pending
-        to: queued
-        trigger: 任务被调度器拾取
-      - from: queued
-        to: running
-        trigger: 开始执行
-      - from: running
-        to: completed
-        trigger: 执行成功
-      - from: running
-        to: failed
-        trigger: 执行失败
-      - from: pending
-        to: cancelled
-        trigger: 用户取消
-      - from: queued
-        to: cancelled
-        trigger: 用户取消
-      - from: running
-        to: cancelled
-        trigger: 用户取消
-      - from: failed
-        to: pending
-        trigger: 用户重试
-    initial: pending
+  - name: credit_reserve_on_submit
+    id: ENG-009
+    severity: error
+    level: error
+    description: 任务提交时必须预扣信用额度，失败或取消时退还
+    enforcement: submitGeneration 调用 billingService.reserveCredits，失败时 refundCredits
+    test: should check credits when creditCost is specified
+  - name: task_timeout
+    id: ENG-010
+    severity: error
+    level: error
+    description: 任务超过 expiresAt 未完成时自动标记 failed 并退还信用
+    enforcement: 定时扫描 expiresAt < now() 且 status 为 submitting 的任务
+    test: should fail task and refund credits
+state_machine:
+  entity: Task
+  field: status
+  description: AI 生成任务执行状态机
+  states:
+    queued: 任务已创建，等待执行
+    submitting: 正在调用 SDK 执行（含 SDK 内部轮询）
+    completing: SDK 返回结果，正在转存到存储
+    completed: 任务完成，终态
+    failed: 任务失败，终态
+    cancelled: 任务取消，终态
+  transitions:
+    - from: queued
+      to:
+        - submitting
+        - cancelled
+        - failed
+      desc: 开始执行或用户取消或创建失败
+    - from: submitting
+      to:
+        - completing
+        - failed
+        - cancelled
+      desc: SDK 返回结果或调用失败或用户取消
+    - from: completing
+      to:
+        - completed
+        - failed
+      desc: 转存完成或转存失败
+    - from: failed
+      to:
+        - queued
+      desc: 用户重试
+  initial: queued
+  terminal:
+    - completed
+    - failed
+    - cancelled
