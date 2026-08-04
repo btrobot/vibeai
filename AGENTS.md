@@ -203,7 +203,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 6: Gallery Page | `GalleryPage.test.tsx` | 4 | 55.17% | ≥30% | ✅ |
 | Phase 6: Projects Page | `ProjectsPage.test.tsx` | 3 | 30% | ≥30% | ✅ |
 | Phase 6: Storage Page | `StoragePage.test.tsx` | 2 | 30% | ≥30% | ✅ |
-| Phase 3: Gateway Service | `gateway.service.test.ts` | 32 | 86.5% | ≥85% | ✅ |
+| Phase 3: Gateway Service | `gateway.service.test.ts` | 34 | 86.5% | ≥85% | ✅ |
 | Phase 3: Gateway Spec | `gateway.spec.test.ts` | 51 | — | — | ✅ |
 | Phase 3: Gateway Controller | `gateway.controller.test.ts` | 17 | 100% | ≥80% | ✅ |
 | Phase 3: Gateway Regression | `gateway.regression.test.ts` | 38 | — | — | ✅ |
@@ -214,18 +214,22 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 3: Video Adapter | `video.adapter.test.ts` | 16 | 98% | ≥85% | ✅ |
 | Phase 3: LLM Adapter | `llm.adapter.test.ts` | 11 | 96% | ≥85% | ✅ |
 | Phase 3: Task Execution | `task-execution.service.test.ts` | 19 | 98.5% | ≥85% | ✅ |
-| **合计（后端）** | | **451** | — | — | **✅ 全部通过** |
+| **合计（后端）** | | **453** | — | — | **✅ 全部通过** |
 | **合计（前端）** | | **72** | — | — | **⚠️ 71/72 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **557** | — | — | **✅ 556/557 通过** |
+| **总计** | | **559** | — | — | **✅ 558/559 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ⏹️ 需手动构建后运行 |
+| Phase 7: Gateway Integration | `test-integration.js` | 13 | ⏹️ 需手动构建后运行 |
+| Phase 7: Gateway E2E (测试机) | 手动 curl 验证 | — | — | — | ✅ 已验证 |
 
 ### 已知问题
 - **tsx ESM loader 与 NestJS 装饰器不兼容**：集成测试无法通过 vitest 运行（`NestFactory.create` 在 tsx 环境下导致 `authService` 为 undefined）。解决方案：先 `pnpm build` 编译为 JavaScript，再通过 `node scripts/test-integration.js` 运行。
 - **JWT 重复 token 问题**：`generateTokens` 方法在相同秒内调用会生成相同的 JWT（`iat` 相同），导致 `sessions.refreshToken` 唯一约束冲突。已通过添加 `jti` 随机值修复。
 - **DrizzleMock 多查询限制**：`mockSingle` 在服务方法需要多次查询（如注册时先查询再插入）时只能返回第一个结果。解决方案：使用 `mockResolvedValueOnce([])` + `mockReturning` 组合模式。
 - **前端 1 个预存测试失败**：`RegisterPage.test.tsx`（密码可见切换按钮 accessible name 为空）。为 UI 属性不匹配，非后端问题。DashboardPage 和 WorkspacePage 测试已修复。
+- **credit_usage.task_id UUID 类型错误**（已修复）：`gateway.service.ts` 在任务创建前调用 `reserveCredits` 时传入字符串 `'pending'` 作为 taskId，但 `credit_usage.task_id` 是 UUID 类型导致 500。已将 `reserveCredits/deductCredits/refundCredits` 的 taskId 改为 `string | null`，调用处传 `null`。新增 2 个回归测试 + 端到端集成测试。
+- **AI 适配器 Mock 模式**：当 `COZE_LOOP_API_TOKEN` 未设置时，三种适配器（Image/LLM/Video）自动进入 Mock 模式，返回伪造结果（picsum.photos 图片、模拟文本、Big Buck Bunny 视频），完整走通 Create → Task → Execution → Storage → Billing 流程。已在测试机验证。
 
 ## 关键架构决策
 
