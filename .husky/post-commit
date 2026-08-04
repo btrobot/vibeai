@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# commit 后自动 push 到远程
+git push
