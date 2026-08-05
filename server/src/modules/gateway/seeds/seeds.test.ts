@@ -13,8 +13,8 @@ describe('Seeds Data Integrity', () => {
   // ===== SEED_MODELS 完整性 =====
 
   describe('SEED_MODELS', () => {
-    it('包含 10 个模型', () => {
-      expect(SEED_MODELS).toHaveLength(10);
+    it('包含 13 个模型', () => {
+      expect(SEED_MODELS).toHaveLength(13);
     });
 
     it('每个模型有唯一 slug', () => {
@@ -32,9 +32,9 @@ describe('Seeds Data Integrity', () => {
       expect(llmModels).toHaveLength(6);
     });
 
-    it('包含 2 个图片模型', () => {
+    it('包含 5 个图片模型', () => {
       const imageModels = SEED_MODELS.filter((m) => m.modality === 'image');
-      expect(imageModels).toHaveLength(2);
+      expect(imageModels).toHaveLength(5);
     });
 
     it('包含 2 个视频模型', () => {
@@ -48,8 +48,13 @@ describe('Seeds Data Integrity', () => {
       }
     });
 
-    it('每个模型的 sdkClient 与 modality 一致', () => {
+    it('每个模型的 sdkClient 与 modality 一致（Replicate 模型除外）', () => {
       for (const m of SEED_MODELS) {
+        if (m.sdkClient === 'replicate') {
+          // Replicate 模型使用独立 sdkClient
+          expect(m.providerName).toBe('replicate');
+          continue;
+        }
         const expectedClient =
           m.modality === 'llm' ? 'llm' :
           m.modality === 'image' ? 'image' :

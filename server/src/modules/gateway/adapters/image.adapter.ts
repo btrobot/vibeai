@@ -14,6 +14,7 @@ import type { ProtocolAdapter, AdapterModel, ExecutionContext, ExecutionResult }
 export class ImageAdapter implements ProtocolAdapter {
   readonly protocolKind = 'SYNC_REQUEST_RESPONSE' as const;
   readonly modality = 'image' as const;
+  readonly sdkClient = 'image';
 
   private readonly logger = new Logger(ImageAdapter.name);
   private client: ImageGenerationClient | null = null;

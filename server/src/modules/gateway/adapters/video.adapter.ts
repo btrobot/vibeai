@@ -15,6 +15,7 @@ import type { ProtocolAdapter, AdapterModel, ExecutionContext, ExecutionResult }
 export class VideoAdapter implements ProtocolAdapter {
   readonly protocolKind = 'ASYNC_TASK' as const;
   readonly modality = 'video' as const;
+  readonly sdkClient = 'video';
 
   private readonly logger = new Logger(VideoAdapter.name);
   private client: VideoGenerationClient | null = null;

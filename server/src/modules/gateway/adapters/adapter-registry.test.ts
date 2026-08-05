@@ -4,9 +4,10 @@ import type { ProtocolAdapter, Modality } from './protocol-adapter.interface';
 
 // ===== Mock Adapters =====
 
-function createMockAdapter(modality: Modality): ProtocolAdapter {
+function createMockAdapter(modality: Modality, sdkClient: string): ProtocolAdapter {
   return {
     modality,
+    sdkClient,
     protocolKind: modality === 'llm' ? 'SYNC_STREAMING' : modality === 'image' ? 'SYNC_REQUEST_RESPONSE' : 'ASYNC_TASK',
     execute: vi.fn(),
   };
@@ -17,42 +18,55 @@ describe('AdapterRegistry', () => {
   let llmAdapter: ProtocolAdapter;
   let imageAdapter: ProtocolAdapter;
   let videoAdapter: ProtocolAdapter;
+  let replicateAdapter: ProtocolAdapter;
 
   beforeEach(() => {
-    llmAdapter = createMockAdapter('llm');
-    imageAdapter = createMockAdapter('image');
-    videoAdapter = createMockAdapter('video');
-    registry = new AdapterRegistry(llmAdapter, imageAdapter, videoAdapter);
+    llmAdapter = createMockAdapter('llm', 'llm');
+    imageAdapter = createMockAdapter('image', 'image');
+    videoAdapter = createMockAdapter('video', 'video');
+    replicateAdapter = {
+      modality: 'image',
+      sdkClient: 'replicate',
+      protocolKind: 'ASYNC_TASK' as const,
+      execute: vi.fn(),
+    };
+    registry = new AdapterRegistry(llmAdapter, imageAdapter, videoAdapter, replicateAdapter);
   });
 
   describe('getAdapter', () => {
-    it('modality=llm 时应返回 LlmAdapter', () => {
+    it('sdkClient=llm 时应返回 LlmAdapter', () => {
       const adapter = registry.getAdapter('llm');
       expect(adapter).toBe(llmAdapter);
-      expect(adapter.modality).toBe('llm');
+      expect(adapter.sdkClient).toBe('llm');
     });
 
-    it('modality=image 时应返回 ImageAdapter', () => {
+    it('sdkClient=image 时应返回 ImageAdapter', () => {
       const adapter = registry.getAdapter('image');
       expect(adapter).toBe(imageAdapter);
-      expect(adapter.modality).toBe('image');
+      expect(adapter.sdkClient).toBe('image');
     });
 
-    it('modality=video 时应返回 VideoAdapter', () => {
+    it('sdkClient=video 时应返回 VideoAdapter', () => {
       const adapter = registry.getAdapter('video');
       expect(adapter).toBe(videoAdapter);
-      expect(adapter.modality).toBe('video');
+      expect(adapter.sdkClient).toBe('video');
     });
 
-    it('modality 不存在时应抛出 Error', () => {
-      expect(() => registry.getAdapter('audio' as Modality)).toThrow(
-        'No adapter registered for modality: audio',
+    it('sdkClient=replicate 时应返回 ReplicateAdapter', () => {
+      const adapter = registry.getAdapter('replicate');
+      expect(adapter).toBe(replicateAdapter);
+      expect(adapter.sdkClient).toBe('replicate');
+    });
+
+    it('sdkClient 不存在时应抛出 Error', () => {
+      expect(() => registry.getAdapter('audio')).toThrow(
+        'No adapter registered for sdkClient: audio',
       );
     });
 
-    it('null/undefined modality 应抛出 Error', () => {
-      expect(() => registry.getAdapter(null as unknown as Modality)).toThrow();
-      expect(() => registry.getAdapter(undefined as unknown as Modality)).toThrow();
+    it('null/undefined sdkClient 应抛出 Error', () => {
+      expect(() => registry.getAdapter(null as unknown as string)).toThrow();
+      expect(() => registry.getAdapter(undefined as unknown as string)).toThrow();
     });
   });
 
@@ -71,6 +85,11 @@ describe('AdapterRegistry', () => {
       const adapter = registry.getAdapter('video');
       expect(adapter.protocolKind).toBe('ASYNC_TASK');
     });
+
+    it('Replicate 适配器应为 ASYNC_TASK 协议', () => {
+      const adapter = registry.getAdapter('replicate');
+      expect(adapter.protocolKind).toBe('ASYNC_TASK');
+    });
   });
 
   describe('适配器隔离性', () => {
@@ -80,13 +99,26 @@ describe('AdapterRegistry', () => {
       expect(a1).toBe(a2);
     });
 
-    it('不同 modality 返回不同适配器实例', () => {
+    it('不同 sdkClient 返回不同适配器实例', () => {
       const llm = registry.getAdapter('llm');
       const image = registry.getAdapter('image');
       const video = registry.getAdapter('video');
+      const replicate = registry.getAdapter('replicate');
       expect(llm).not.toBe(image);
       expect(llm).not.toBe(video);
+      expect(llm).not.toBe(replicate);
       expect(image).not.toBe(video);
+      expect(image).not.toBe(replicate);
+      expect(video).not.toBe(replicate);
+    });
+  });
+
+  describe('向后兼容', () => {
+    it('modality 值作为 sdkClient 仍可正常路由（llm/image/video）', () => {
+      // 现有模型的 sdkClient === modality，确保向后兼容
+      expect(registry.getAdapter('llm')).toBe(llmAdapter);
+      expect(registry.getAdapter('image')).toBe(imageAdapter);
+      expect(registry.getAdapter('video')).toBe(videoAdapter);
     });
   });
 });

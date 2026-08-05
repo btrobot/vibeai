@@ -36,6 +36,13 @@
       "when": 1785843600000,
       "tag": "0004_gallery_works_file_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785930000000,
+      "tag": "0005_model_providers",
+      "breakpoints": true
     }
   ]
 }

@@ -31,6 +31,8 @@ describe('VideoAdapter', () => {
     name: 'Doubao Seedance 1.5 Pro',
     sdkModelId: 'doubao-seedance-1-5-pro-251215',
     modality: 'video',
+    outputType: 'video',
+    sdkClient: 'coze',
     constraints: { maxDuration: 12, minDuration: 4, ratios: ['16:9', '9:16', '1:1'] },
     defaultParams: { duration: 5, ratio: '16:9', resolution: '720p', watermark: true, generateAudio: true, returnLastFrame: true, maxWaitTime: 900 },
     costCredits: 30,

@@ -38,6 +38,8 @@ describe('LlmAdapter', () => {
     name: 'Doubao Seed 2.0 Pro',
     sdkModelId: 'doubao-seed-2-0-pro-260215',
     modality: 'llm',
+    outputType: 'text',
+    sdkClient: 'coze',
     constraints: { supportsThinking: true, maxTokens: 65536 },
     defaultParams: { temperature: 0.7, thinking: 'disabled' },
     costCredits: 5,

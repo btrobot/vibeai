@@ -9,6 +9,7 @@
  */
 
 import { aiModels } from '../../../db/schema/gateway';
+import { modelProviders } from '../../../db/schema/gateway';
 
 type ModelSeed = typeof aiModels.$inferInsert;
 
@@ -327,6 +328,133 @@ export const SEED_MODELS: ModelSeed[] = [
     isActive: true,
     isFeatured: false,
     sortOrder: 21,
+  },
+
+  // ===== Replicate 模型（3 个）=====
+  {
+    slug: 'gpt-image-2',
+    name: 'GPT Image 2',
+    providerName: 'replicate',
+    description: 'OpenAI GPT Image 2 via Replicate, 高质量图片生成与编辑',
+    capabilities: ['image-generation', 'image-editing'],
+    inputModes: ['text', 'image'],
+    outputType: 'image',
+    modality: 'image',
+    sdkModelId: 'openai/gpt-image-2:placeholder',
+    sdkClient: 'replicate',
+    constraints: { supportsImageToImage: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: '图片描述' },
+        image: { type: 'string', format: 'uri', description: '参考图片 URL（图生图）' },
+        width: { type: 'integer', default: 1024 },
+        height: { type: 'integer', default: 1024 },
+      },
+      required: ['prompt'],
+    },
+    defaultParams: { maxWaitTime: 300 },
+    costCredits: 10,
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 30,
+  },
+  {
+    slug: 'sdxl',
+    name: 'Stable Diffusion XL',
+    providerName: 'replicate',
+    description: 'Stability AI SDXL via Replicate, 开源高质量图片生成',
+    capabilities: ['image-generation'],
+    inputModes: ['text'],
+    outputType: 'image',
+    modality: 'image',
+    sdkModelId: 'stability-ai/sdxl:placeholder',
+    sdkClient: 'replicate',
+    constraints: {},
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: '图片描述' },
+        negative_prompt: { type: 'string', description: '负面提示词' },
+        width: { type: 'integer', default: 1024 },
+        height: { type: 'integer', default: 1024 },
+        num_inference_steps: { type: 'integer', default: 30 },
+        guidance_scale: { type: 'number', default: 7.5 },
+      },
+      required: ['prompt'],
+    },
+    defaultParams: { maxWaitTime: 300 },
+    costCredits: 5,
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 31,
+  },
+  {
+    slug: 'flux-schnell',
+    name: 'FLUX Schnell',
+    providerName: 'replicate',
+    description: 'Black Forest Labs FLUX Schnell via Replicate, 极速高质量图片生成',
+    capabilities: ['image-generation'],
+    inputModes: ['text'],
+    outputType: 'image',
+    modality: 'image',
+    sdkModelId: 'blackforestlabs/flux-schnell:placeholder',
+    sdkClient: 'replicate',
+    constraints: {},
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: '图片描述' },
+        width: { type: 'integer', default: 1024 },
+        height: { type: 'integer', default: 1024 },
+        num_outputs: { type: 'integer', default: 1 },
+      },
+      required: ['prompt'],
+    },
+    defaultParams: { maxWaitTime: 300 },
+    costCredits: 3,
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 32,
+  },
+];
+
+/**
+ * Model Provider 渠道实例种子数据
+ * 每个逻辑模型对应的渠道配置（起步阶段每模型一个渠道）
+ */
+type ProviderSeed = typeof modelProviders.$inferInsert;
+
+export const SEED_MODEL_PROVIDERS: ProviderSeed[] = [
+  {
+    modelSlug: 'gpt-image-2',
+    providerName: 'replicate',
+    sdkModelId: 'openai/gpt-image-2:placeholder',
+    sdkClient: 'replicate',
+    priority: 1,
+    costPerCall: '0.05',
+    config: {},
+    isActive: true,
+  },
+  {
+    modelSlug: 'sdxl',
+    providerName: 'replicate',
+    sdkModelId: 'stability-ai/sdxl:placeholder',
+    sdkClient: 'replicate',
+    priority: 1,
+    costPerCall: '0.002',
+    config: {},
+    isActive: true,
+  },
+  {
+    modelSlug: 'flux-schnell',
+    providerName: 'replicate',
+    sdkModelId: 'blackforestlabs/flux-schnell:placeholder',
+    sdkClient: 'replicate',
+    priority: 1,
+    costPerCall: '0.003',
+    config: {},
+    isActive: true,
   },
 ];
 

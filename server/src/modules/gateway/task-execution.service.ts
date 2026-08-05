@@ -3,13 +3,15 @@ import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { tasks } from '../../db/schema';
+import { providerAttempts } from '../../db/schema/gateway';
 import { eq } from 'drizzle-orm';
 import { WsService } from '../ws/ws.service';
 import { StorageService } from '../storage/storage.service';
 import { BillingService } from '../billing/billing.service';
 import { CreateService } from '../create/create.service';
 import { AdapterRegistry } from './adapters/adapter-registry';
-import type { AdapterModel, ExecutionContext } from './adapters/protocol-adapter.interface';
+import { ProviderService } from './provider.service';
+import type { AdapterModel, ExecutionContext, ExecutionResult } from './adapters/protocol-adapter.interface';
 
 @Injectable()
 export class TaskExecutionService {
@@ -22,6 +24,7 @@ export class TaskExecutionService {
     @Inject('BILLING_SERVICE') private billingService: BillingService,
     @Inject('CREATE_SERVICE') private createService: CreateService,
     @Inject('ADAPTER_REGISTRY') private adapterRegistry: AdapterRegistry,
+    @Inject('PROVIDER_SERVICE') private providerService: ProviderService,
   ) {}
 
   async executeTask(
@@ -31,8 +34,6 @@ export class TaskExecutionService {
     input: Record<string, unknown>,
     model: AdapterModel,
   ): Promise<void> {
-    const adapter = this.adapterRegistry.getAdapter(model.modality);
-
     // Fetch createId for create-level WS events
     const [taskRow] = await this.db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
     const createId = taskRow?.createId ?? null;
@@ -72,8 +73,89 @@ export class TaskExecutionService {
     };
 
     try {
-      // Execute via adapter
-      const result = await adapter.execute(input, model, context);
+      // ===== Multi-Provider Routing + Fallback =====
+      const providers = await this.providerService.getAvailableProviders(model.slug, {
+        providerName: model.providerName || 'coze',
+        sdkModelId: model.sdkModelId,
+        sdkClient: model.sdkClient,
+      });
+
+      if (providers.length === 0) {
+        throw new Error(`模型 "${model.slug}" 没有可用的渠道`);
+      }
+
+      let result: ExecutionResult | null = null;
+      let lastError: Error | null = null;
+
+      for (let i = 0; i < providers.length; i++) {
+        const provider = providers[i];
+        const attemptNumber = i + 1;
+        const attemptStart = Date.now();
+
+        try {
+          const adapter = this.adapterRegistry.getAdapter(provider.sdkClient);
+
+          const providerModel: AdapterModel = {
+            ...model,
+            sdkModelId: provider.sdkModelId,
+            providerName: provider.providerName,
+            defaultParams: { ...model.defaultParams, ...provider.config },
+          };
+
+          this.logger.log(
+            `Task ${taskId}: trying provider "${provider.providerName}" (sdkClient=${provider.sdkClient}, priority=${provider.priority}, attempt=${attemptNumber}/${providers.length})`,
+          );
+
+          result = await adapter.execute(input, providerModel, context);
+
+          // Record successful attempt
+          await this.recordProviderAttempt({
+            taskId,
+            modelSlug: model.slug,
+            providerName: provider.providerName,
+            sdkClient: provider.sdkClient,
+            requestPayload: input,
+            responsePayload: result.output,
+            status: 'success',
+            durationMs: Date.now() - attemptStart,
+            attemptNumber,
+            costPerCall: provider.costPerCall,
+          });
+
+          this.logger.log(
+            `Task ${taskId}: provider "${provider.providerName}" succeeded (${Date.now() - attemptStart}ms)`,
+          );
+
+          break; // Success, stop trying
+        } catch (e: any) {
+          lastError = e;
+
+          // Record failed attempt
+          await this.recordProviderAttempt({
+            taskId,
+            modelSlug: model.slug,
+            providerName: provider.providerName,
+            sdkClient: provider.sdkClient,
+            requestPayload: input,
+            status: 'failed',
+            errorMessage: e.message,
+            durationMs: Date.now() - attemptStart,
+            attemptNumber,
+            costPerCall: provider.costPerCall,
+          });
+
+          this.logger.warn(
+            `Task ${taskId}: provider "${provider.providerName}" failed: ${e.message}`,
+          );
+          // Continue to next provider
+        }
+      }
+
+      if (!result) {
+        throw new Error(
+          `所有渠道均失败: ${lastError?.message || '未知错误'}`,
+        );
+      }
 
       // Transition: submitting → completing
       await this.db.update(tasks)
@@ -156,6 +238,43 @@ export class TaskExecutionService {
         type: 'task:failed',
         payload: { taskId, error: e.message },
       });
+    }
+  }
+
+  /**
+   * 记录 Provider 调用审计日志
+   */
+  private async recordProviderAttempt(params: {
+    taskId: string;
+    modelSlug: string;
+    providerName: string;
+    sdkClient: string;
+    requestPayload: Record<string, unknown>;
+    responsePayload?: Record<string, unknown>;
+    status: 'success' | 'failed' | 'timeout';
+    errorMessage?: string;
+    durationMs: number;
+    attemptNumber: number;
+    costPerCall: number | null;
+  }): Promise<void> {
+    try {
+      await this.db.insert(providerAttempts).values({
+        taskId: params.taskId,
+        modelSlug: params.modelSlug,
+        providerName: params.providerName,
+        sdkClient: params.sdkClient,
+        requestPayload: params.requestPayload,
+        responsePayload: params.responsePayload ?? null,
+        status: params.status,
+        errorMessage: params.errorMessage ?? null,
+        durationMs: params.durationMs,
+        attemptNumber: params.attemptNumber,
+        costPerCall: params.costPerCall?.toString() ?? null,
+        startedAt: new Date(Date.now() - params.durationMs),
+        completedAt: new Date(),
+      } as any);
+    } catch (e) {
+      this.logger.warn(`Failed to record provider attempt: ${(e as Error).message}`);
     }
   }
 

@@ -18,9 +18,9 @@ import path from 'path';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
-import { aiModels } from '../db/schema/gateway';
+import { aiModels, modelProviders } from '../db/schema/gateway';
 import { subscriptionPlans } from '../db/schema/billing';
-import { SEED_MODELS } from '../modules/gateway/seeds/model-seeds';
+import { SEED_MODELS, SEED_MODEL_PROVIDERS } from '../modules/gateway/seeds/model-seeds';
 
 // Load .env.local > .env
 config({ path: path.resolve(__dirname, '..', '.env.local'), override: false });
@@ -131,6 +131,20 @@ async function main(): Promise<void> {
         await db.insert(aiModels).values(model);
       }
       console.log(`[seed] Inserted ${SEED_MODELS.length} AI models`);
+    }
+
+    // ===== Seed Model Providers =====
+    console.log('[seed] Checking model providers...');
+    const existingProviders = await db.select().from(modelProviders).limit(1);
+
+    if (existingProviders.length > 0) {
+      console.log(`[seed] Model providers already exist (${existingProviders.length}+ rows), skipping provider seed`);
+    } else {
+      console.log(`[seed] Seeding ${SEED_MODEL_PROVIDERS.length} model providers...`);
+      for (const provider of SEED_MODEL_PROVIDERS) {
+        await db.insert(modelProviders).values(provider);
+      }
+      console.log(`[seed] Inserted ${SEED_MODEL_PROVIDERS.length} model providers`);
     }
 
     // ===== Seed Subscription Plans =====

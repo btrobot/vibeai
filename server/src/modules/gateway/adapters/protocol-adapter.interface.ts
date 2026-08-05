@@ -27,6 +27,7 @@ export interface ExecutionResult {
 export interface ProtocolAdapter {
   readonly protocolKind: ProtocolKind;
   readonly modality: Modality;
+  readonly sdkClient: string;
 
   execute(
     input: Record<string, unknown>,
@@ -43,6 +44,9 @@ export interface AdapterModel {
   name: string;
   sdkModelId: string;
   modality: Modality;
+  outputType: string;
+  providerName?: string;
+  sdkClient: string;
   constraints: Record<string, unknown>;
   defaultParams: Record<string, unknown>;
   costCredits: number;

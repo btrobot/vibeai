@@ -2,9 +2,11 @@ import { Module, OnModuleInit } from '@nestjs/common';
 import { GatewayController } from './gateway.controller';
 import { GatewayService } from './gateway.service';
 import { TaskExecutionService } from './task-execution.service';
+import { ProviderService } from './provider.service';
 import { LlmAdapter } from './adapters/llm.adapter';
 import { ImageAdapter } from './adapters/image.adapter';
 import { VideoAdapter } from './adapters/video.adapter';
+import { ReplicateAdapter } from './adapters/replicate.adapter';
 import { AdapterRegistry } from './adapters/adapter-registry';
 import { DrizzleModule } from '../../common/drizzle.module';
 import { StorageModule } from '../storage/storage.module';
@@ -17,12 +19,14 @@ import { CreateModule } from '../create/create.module';
   providers: [
     { provide: 'GATEWAY_SERVICE', useClass: GatewayService },
     { provide: 'TASK_EXECUTION_SERVICE', useClass: TaskExecutionService },
+    { provide: 'PROVIDER_SERVICE', useClass: ProviderService },
     { provide: 'LLM_ADAPTER', useClass: LlmAdapter },
     { provide: 'IMAGE_ADAPTER', useClass: ImageAdapter },
     { provide: 'VIDEO_ADAPTER', useClass: VideoAdapter },
+    { provide: 'REPLICATE_ADAPTER', useClass: ReplicateAdapter },
     { provide: 'ADAPTER_REGISTRY', useClass: AdapterRegistry },
   ],
-  exports: ['GATEWAY_SERVICE', 'TASK_EXECUTION_SERVICE', 'ADAPTER_REGISTRY'],
+  exports: ['GATEWAY_SERVICE', 'TASK_EXECUTION_SERVICE', 'ADAPTER_REGISTRY', 'PROVIDER_SERVICE'],
 })
 export class GatewayModule implements OnModuleInit {
   constructor() {}

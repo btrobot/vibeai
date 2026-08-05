@@ -90,7 +90,8 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **Phase 3 ✅**: AI Gateway（能力注册表/模型注册表/路由/生成任务提交）
 - **Phase 4 ✅**: 任务执行引擎（Project/Task/ExecutionState + WebSocket 实时推送）
 - **Phase 5 ✅**: 计费系统（套餐管理/订阅/信用额度/用量统计/自动扣减）
-- **Phase 6**: 业务前端
+- **Phase 6 ✅**: 业务前端
+- **Phase 7 ✅**: 多 Provider 支持（Replicate 适配器/ProviderService/渠道优先级/Fallback）
 
 ## 开发规范
 
@@ -213,11 +214,14 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 3: Video Adapter | `video.adapter.test.ts` | 16 | 98% | ≥85% | ✅ |
 | Phase 3: LLM Adapter | `llm.adapter.test.ts` | 11 | 96% | ≥85% | ✅ |
 | Phase 3: Task Execution | `task-execution.service.test.ts` | 19 | 98.5% | ≥85% | ✅ |
-| **合计（后端）** | | **458** | — | — | **✅ 全部通过** |
+| Phase 7: ProviderService | `provider.service.test.ts` | 8 | — | ≥85% | ✅ |
+| Phase 7: ReplicateAdapter | `replicate.adapter.test.ts` | 14 | — | ≥85% | ✅ |
+| Phase 7: Multi-Provider Fallback | `task-execution.service.test.ts` | 9 | — | ≥85% | ✅ |
+| **合计（后端）** | | **495** | — | — | **✅ 全部通过** |
 | **合计（前端）** | | **73** | — | — | **⚠️ 72/73 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **564** | — | — | **✅ 563/564 通过** |
+| **总计** | | **601** | — | — | **✅ 600/601 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ⏹️ 需手动构建后运行 |
 | Phase 7: Gateway Integration | `test-integration.js` | 13 | ⏹️ 需手动构建后运行 |
 | Phase 7: Gateway E2E (测试机) | 手动 curl 验证 | — | — | — | ✅ 已验证 |
@@ -269,6 +273,14 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
   - `publishWork()` 从 `create.output` 提取 `{ fileId, url }` 对象，优先存储 fileId
   - `GalleryModule` 导入 `StorageModule` 以注入 `StorageService`
   - 前端 `WorkspacePage` 新增图片上传功能：图像类能力（image-generation/background-removal/scene-composition/model-dressing/image-editing）显示上传按钮，上传后提交 `{ referenceImage: { fileId } }`
+- **多 Provider 架构**（Migration 0005）
+  - `model_providers` 表：每个逻辑模型可注册多个渠道（providerName + sdkClient + sdkModelId + priority + costPerCall + config）
+  - `AdapterRegistry` 按 `sdkClient` 字段路由到对应适配器（`'llm'/'image'/'video'` → Coze SDK 适配器，`'replicate'` → ReplicateAdapter）
+  - `ProviderService.getAvailableProviders(modelSlug)` 查询 DB 中活跃渠道并按 priority 升序返回
+  - `TaskExecutionService` 遍历 providers 列表，成功后 break，失败后自动 fallback 到下一个渠道
+  - `ReplicateAdapter`：纯 REST 调用 Replicate API（POST /v1/predictions + GET 轮询），不依赖 SDK
+  - 每次 provider 调用记录到 `provider_attempts` 表（含 costPerCall 用于利润分析）
+  - 种子数据：3 个 Replicate 图片模型（gpt-image-2 / sdxl / flux-schnell）+ 对应 3 条 provider 记录
 
 ## 数据库迁移与种子数据
 
@@ -283,6 +295,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | `0002_create_entity_schema.sql` | Create 实体层 + ai_models 新 schema + provider_attempts |
 | `0003_file_source_and_creates_input.sql` | files 表加 source/external_url；creates 表加 input JSONB |
 | `0004_gallery_works_file_ids.sql` | gallery_works 表加 image_file_id/video_file_id 外键 |
+| `0005_model_providers.sql` | model_providers 表（多 Provider 渠道管理） |
 
 ### 独立脚本
 

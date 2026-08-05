@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, varchar, jsonb, index, boolean, integer } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, varchar, jsonb, index, boolean, integer, numeric } from 'drizzle-orm/pg-core';
 import { tasks } from './task-engine';
 
 // ===== AI Capabilities Table =====
@@ -66,6 +66,7 @@ export const providerAttempts = pgTable('provider_attempts', {
   errorMessage: text('error_message'),
   durationMs: integer('duration_ms'),
   attemptNumber: integer('attempt_number').notNull().default(1),
+  costPerCall: numeric('cost_per_call', { precision: 10, scale: 4 }),
   startedAt: timestamp('started_at').notNull().defaultNow(),
   completedAt: timestamp('completed_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -73,4 +74,24 @@ export const providerAttempts = pgTable('provider_attempts', {
   index('provider_attempts_task_id_idx').on(table.taskId),
   index('provider_attempts_model_slug_idx').on(table.modelSlug),
   index('provider_attempts_status_idx').on(table.status),
+]);
+
+// ===== Model Providers Table (多 Provider 渠道实例) =====
+export const modelProviders = pgTable('model_providers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  modelSlug: varchar('model_slug', { length: 100 }).notNull().references(() => aiModels.slug, { onDelete: 'cascade' }),
+  providerName: varchar('provider_name', { length: 100 }).notNull(),
+  sdkModelId: varchar('sdk_model_id', { length: 200 }).notNull(),
+  sdkClient: varchar('sdk_client', { length: 50 }).notNull(),
+  priority: integer('priority').notNull().default(1),
+  costPerCall: numeric('cost_per_call', { precision: 10, scale: 4 }),
+  costPerSecond: numeric('cost_per_second', { precision: 10, scale: 4 }),
+  config: jsonb('config').default({}),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => [
+  index('model_providers_model_slug_idx').on(table.modelSlug),
+  index('model_providers_active_idx').on(table.isActive),
+  index('model_providers_model_priority_idx').on(table.modelSlug, table.priority),
 ]);

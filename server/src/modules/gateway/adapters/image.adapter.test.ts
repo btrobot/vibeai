@@ -32,6 +32,8 @@ describe('ImageAdapter', () => {
     name: 'Doubao SeeDream 5.0',
     sdkModelId: 'doubao-seedream-5-0-260128',
     modality: 'image',
+    outputType: 'image',
+    sdkClient: 'coze',
     constraints: { sizes: ['2K', '4K'], supportsImageToImage: true },
     defaultParams: { size: '2K', watermark: true },
     costCredits: 10,

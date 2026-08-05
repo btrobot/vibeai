@@ -4,7 +4,7 @@ import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { tasks } from '../../db/schema/task-engine';
-import { aiModels, aiCapabilities } from '../../db/schema/gateway';
+import { aiModels, aiCapabilities, modelProviders } from '../../db/schema/gateway';
 import { builtInCapabilityMap } from './capabilities/index';
 import { builtInModelMap } from './models/index';
 import { routeCapability, getModelsForCapability } from './router/index';
@@ -15,7 +15,7 @@ import { TaskExecutionService } from './task-execution.service';
 import { BillingService } from '../billing/billing.service';
 import { CreateService } from '../create/create.service';
 import { StorageService } from '../storage/storage.service';
-import { SEED_MODELS, SEED_RECIPES } from './seeds/model-seeds';
+import { SEED_MODELS, SEED_RECIPES, SEED_MODEL_PROVIDERS } from './seeds/model-seeds';
 import type { AdapterModel } from './adapters/protocol-adapter.interface';
 
 // ===== Gateway Types =====
@@ -44,16 +44,40 @@ export class GatewayService {
   // ===== Seed =====
 
   async seedModels(): Promise<void> {
-    const existing = await this.db.select().from(aiModels).limit(1);
-    if (existing.length > 0) {
-      this.logger.log('AI 模型种子数据已存在，跳过');
-      return;
+    // Per-slug idempotent seeding (supports incremental model additions)
+    let insertedCount = 0;
+    for (const model of SEED_MODELS) {
+      const [existing] = await this.db.select().from(aiModels).where(eq(aiModels.slug, model.slug as string)).limit(1);
+      if (!existing) {
+        await this.db.insert(aiModels).values(model);
+        insertedCount++;
+      }
+    }
+    if (insertedCount > 0) {
+      this.logger.log(`已初始化 ${insertedCount} 个 AI 模型种子数据`);
     }
 
-    for (const model of SEED_MODELS) {
-      await this.db.insert(aiModels).values(model);
+    // Seed model providers (idempotent per modelSlug + providerName)
+    let providerCount = 0;
+    for (const provider of SEED_MODEL_PROVIDERS) {
+      const [existing] = await this.db
+        .select()
+        .from(modelProviders)
+        .where(
+          and(
+            eq(modelProviders.modelSlug, provider.modelSlug as string),
+            eq(modelProviders.providerName, provider.providerName as string),
+          ),
+        )
+        .limit(1);
+      if (!existing) {
+        await this.db.insert(modelProviders).values(provider);
+        providerCount++;
+      }
     }
-    this.logger.log(`已初始化 ${SEED_MODELS.length} 个 AI 模型种子数据`);
+    if (providerCount > 0) {
+      this.logger.log(`已初始化 ${providerCount} 个 Model Provider 渠道数据`);
+    }
   }
 
   // ===== Capabilities =====
@@ -136,6 +160,9 @@ export class GatewayService {
       name: row.name,
       sdkModelId: row.sdkModelId,
       modality: row.modality as AdapterModel['modality'],
+      outputType: row.outputType,
+      providerName: row.providerName,
+      sdkClient: row.sdkClient,
       constraints: row.constraints as Record<string, unknown>,
       defaultParams: row.defaultParams as Record<string, unknown>,
       costCredits: row.costCredits,
@@ -155,6 +182,9 @@ export class GatewayService {
       name: m.name,
       sdkModelId: m.slug,
       modality,
+      outputType: m.outputTypes[0] || 'text',
+      providerName: 'coze',
+      sdkClient: modality,
       constraints: m.config,
       defaultParams: {},
       costCredits: 1,

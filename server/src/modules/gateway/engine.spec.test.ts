@@ -38,6 +38,19 @@ const mockCreateService = {
   syncCreateStatus: vi.fn().mockResolvedValue(undefined),
 };
 
+const mockProviderService = {
+  getAvailableProviders: vi.fn().mockResolvedValue([
+    {
+      providerName: 'coze',
+      sdkClient: 'coze',
+      sdkModelId: 'doubao-seedream-5-0-260128',
+      priority: 0,
+      config: {},
+      costPerCall: 0,
+    },
+  ]),
+};
+
 describe('Engine Spec Tests', () => {
   let service: TaskExecutionService;
   let db: ReturnType<typeof createDrizzleMockForNestJS>;
@@ -47,6 +60,8 @@ describe('Engine Spec Tests', () => {
     name: 'Doubao SeeDream 5.0',
     sdkModelId: 'doubao-seedream-5-0-260128',
     modality: 'image',
+    outputType: 'image',
+    sdkClient: 'coze',
     constraints: {},
     defaultParams: {},
     costCredits: 10,
@@ -63,6 +78,7 @@ describe('Engine Spec Tests', () => {
       mockBillingService as any,
       mockCreateService as any,
       mockAdapterRegistry as any,
+      mockProviderService as any,
     );
   });
 
@@ -126,7 +142,7 @@ describe('Engine Spec Tests', () => {
         // 推送 task:failed
         expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
           type: 'task:failed',
-          payload: { taskId: 'task-1', error: 'SDK 超时' },
+          payload: { taskId: 'task-1', error: '所有渠道均失败: SDK 超时' },
         });
       });
 
@@ -215,7 +231,7 @@ describe('Engine Spec Tests', () => {
       // 任务仍标记为 failed
       expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
         type: 'task:failed',
-        payload: { taskId: 'task-1', error: '生成失败' },
+        payload: { taskId: 'task-1', error: '所有渠道均失败: 生成失败' },
       });
     });
 
@@ -245,7 +261,7 @@ describe('Engine Spec Tests', () => {
       // 验证 failed 状态
       expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
         type: 'task:failed',
-        payload: { taskId: 'task-1', error: '任务执行超时' },
+        payload: { taskId: 'task-1', error: '所有渠道均失败: 任务执行超时' },
       });
 
       // 验证退款

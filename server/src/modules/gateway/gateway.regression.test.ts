@@ -152,6 +152,7 @@ describe('AI Gateway 回归测试', () => {
         mockBillingService as any,
         { syncCreateStatus: vi.fn().mockResolvedValue(undefined) } as any,
         mockAdapterRegistry as any,
+        { getAvailableProviders: vi.fn().mockResolvedValue([{ providerName: 'coze', sdkClient: 'coze', sdkModelId: 'test', priority: 0, config: {}, costPerCall: 0 }]) } as any,
       );
     });
 
@@ -166,6 +167,8 @@ describe('AI Gateway 回归测试', () => {
         name: 'Test',
         sdkModelId: 'test',
         modality: 'unknown' as any,
+        outputType: 'unknown',
+        sdkClient: 'coze',
         constraints: {},
         defaultParams: {},
         costCredits: 5,
@@ -273,6 +276,7 @@ describe('AI Gateway 回归测试', () => {
         mockBillingService as any,
         { syncCreateStatus: vi.fn().mockResolvedValue(undefined) } as any,
         mockAdapterRegistry as any,
+        { getAvailableProviders: vi.fn().mockResolvedValue([{ providerName: 'coze', sdkClient: 'coze', sdkModelId: 'test', priority: 0, config: {}, costPerCall: 0 }]) } as any,
       );
     });
 
@@ -428,6 +432,7 @@ describe('AI Gateway 回归测试', () => {
         mockBillingService as any,
         { syncCreateStatus: vi.fn().mockResolvedValue(undefined) } as any,
         mockAdapterRegistry as any,
+        { getAvailableProviders: vi.fn().mockResolvedValue([{ providerName: 'coze', sdkClient: 'coze', sdkModelId: 'test', priority: 0, config: {}, costPerCall: 0 }]) } as any,
       );
     });
 
@@ -449,7 +454,7 @@ describe('AI Gateway 回归测试', () => {
       // 任务仍推送 failed 状态
       expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
         type: 'task:failed',
-        payload: { taskId: 'task-1', error: '生成失败' },
+        payload: { taskId: 'task-1', error: '所有渠道均失败: 生成失败' },
       });
 
       // 不会推送 completed
@@ -608,6 +613,7 @@ describe('AI Gateway 回归测试', () => {
         mockBillingService as any,
         { syncCreateStatus: vi.fn().mockResolvedValue(undefined) } as any,
         mockAdapterRegistry as any,
+        { getAvailableProviders: vi.fn().mockResolvedValue([{ providerName: 'coze', sdkClient: 'coze', sdkModelId: 'test', priority: 0, config: {}, costPerCall: 0 }]) } as any,
       );
     });
 
@@ -690,10 +696,10 @@ describe('AI Gateway 回归测试', () => {
       });
     });
 
-    it('图片模型 sdkClient 为 "image"', () => {
+    it('图片模型 sdkClient 为 "image" 或 "replicate"', () => {
       const imageModels = SEED_MODELS.filter(m => m.modality === 'image');
       imageModels.forEach(m => {
-        expect(m.sdkClient).toBe('image');
+        expect(['image', 'replicate']).toContain(m.sdkClient);
       });
     });
 

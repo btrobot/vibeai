@@ -14,6 +14,7 @@ import type { ProtocolAdapter, AdapterModel, ExecutionContext, ExecutionResult }
 export class LlmAdapter implements ProtocolAdapter {
   readonly protocolKind = 'SYNC_STREAMING' as const;
   readonly modality = 'llm' as const;
+  readonly sdkClient = 'llm';
 
   private readonly logger = new Logger(LlmAdapter.name);
   private client: LLMClient | null = null;

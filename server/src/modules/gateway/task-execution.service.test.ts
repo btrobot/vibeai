@@ -7,6 +7,8 @@
  * - 结果转存：图片/视频/尾帧 URL → downloadAndStore
  * - WebSocket 推送：status/progress/completed/failed
  * - 信用生命周期：settleCredits（成功）/ refundCredits（失败）
+ * - 多 Provider 路由 + Fallback
+ * - ProviderAttempt 审计记录
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -32,6 +34,7 @@ const mockAdapter = {
   execute: vi.fn(),
   protocolKind: 'SYNC_REQUEST_RESPONSE' as const,
   modality: 'image' as const,
+  sdkClient: 'image',
 };
 
 const mockAdapterRegistry = {
@@ -40,6 +43,10 @@ const mockAdapterRegistry = {
 
 const mockCreateService = {
   syncCreateStatus: vi.fn().mockResolvedValue(undefined),
+};
+
+const mockProviderService = {
+  getAvailableProviders: vi.fn(),
 };
 
 describe('TaskExecutionService', () => {
@@ -51,15 +58,28 @@ describe('TaskExecutionService', () => {
     name: 'Doubao SeeDream 5.0',
     sdkModelId: 'doubao-seedream-5-0-260128',
     modality: 'image',
+    outputType: 'image',
+    providerName: 'doubao',
+    sdkClient: 'image',
     constraints: {},
     defaultParams: {},
     costCredits: 10,
     sortOrder: 10,
   };
 
+  const defaultProvider = {
+    providerName: 'doubao',
+    sdkModelId: 'doubao-seedream-5-0-260128',
+    sdkClient: 'image',
+    priority: 0,
+    costPerCall: null,
+    config: {},
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     db = createDrizzleMockForNestJS();
+    mockProviderService.getAvailableProviders.mockResolvedValue([defaultProvider]);
 
     service = new TaskExecutionService(
       db as any,
@@ -68,6 +88,7 @@ describe('TaskExecutionService', () => {
       mockBillingService as any,
       mockCreateService as any,
       mockAdapterRegistry as any,
+      mockProviderService as any,
     );
   });
 
@@ -113,6 +134,10 @@ describe('TaskExecutionService', () => {
     });
 
     it('视频生成：应转存视频 URL 和尾帧 URL', async () => {
+      mockProviderService.getAvailableProviders.mockResolvedValue([
+        { ...defaultProvider, sdkClient: 'video', sdkModelId: 'doubao-seedance-1-5-pro-251215' },
+      ]);
+
       mockAdapter.execute.mockResolvedValue({
         output: {
           video: { url: 'https://cdn.example.com/video.mp4' },
@@ -169,6 +194,10 @@ describe('TaskExecutionService', () => {
     });
 
     it('LLM 文本输出不触发转存（无 images/video/lastFrameUrl）', async () => {
+      mockProviderService.getAvailableProviders.mockResolvedValue([
+        { ...defaultProvider, sdkClient: 'llm' },
+      ]);
+
       mockAdapter.execute.mockResolvedValue({
         output: {
           content: '这是 AI 生成的文本',
@@ -195,9 +224,6 @@ describe('TaskExecutionService', () => {
 
       await service.executeTask('task-1', 'user-1', 'video-generation', { prompt: 'test' }, mockModel);
 
-      // The last update (completed) should include providerTaskId
-      // Since db.update is a mock, we can't directly inspect the .set() call args easily
-      // But we can verify the adapter returned providerTaskId and the service didn't throw
       expect(mockAdapter.execute).toHaveBeenCalled();
     });
 
@@ -235,7 +261,7 @@ describe('TaskExecutionService', () => {
       });
       expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
         type: 'task:failed',
-        payload: { taskId: 'task-1', error: '模型服务不可用' },
+        payload: { taskId: 'task-1', error: '所有渠道均失败: 模型服务不可用' },
       });
 
       // Credit refund
@@ -255,7 +281,7 @@ describe('TaskExecutionService', () => {
       // Task should still be marked as failed
       expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
         type: 'task:failed',
-        payload: { taskId: 'task-1', error: '生成失败' },
+        payload: { taskId: 'task-1', error: '所有渠道均失败: 生成失败' },
       });
     });
   });
@@ -327,7 +353,7 @@ describe('TaskExecutionService', () => {
   // ===== 适配器分发 =====
 
   describe('适配器分发', () => {
-    it('应根据 model.modality 获取适配器', async () => {
+    it('应根据 provider.sdkClient 获取适配器', async () => {
       mockAdapter.execute.mockResolvedValue({ output: { content: 'ok' } });
 
       await service.executeTask('task-1', 'user-1', 'text-generation', { prompt: 'hi' }, mockModel);
@@ -335,8 +361,11 @@ describe('TaskExecutionService', () => {
       expect(mockAdapterRegistry.getAdapter).toHaveBeenCalledWith('image');
     });
 
-    it('video modality 应获取 video 适配器', async () => {
-      const videoModel: AdapterModel = { ...mockModel, modality: 'video' };
+    it('video sdkClient 应获取 video 适配器', async () => {
+      mockProviderService.getAvailableProviders.mockResolvedValue([
+        { ...defaultProvider, sdkClient: 'video', sdkModelId: 'doubao-seedance-1-5-pro-251215' },
+      ]);
+      const videoModel: AdapterModel = { ...mockModel, modality: 'video', sdkClient: 'video' };
       mockAdapter.execute.mockResolvedValue({ output: { video: { url: 'https://x.com/v.mp4' } } });
       mockStorageService.downloadAndStore.mockResolvedValue({ fileId: 'f1', url: 'https://s.com/v.mp4' });
 
@@ -345,13 +374,139 @@ describe('TaskExecutionService', () => {
       expect(mockAdapterRegistry.getAdapter).toHaveBeenCalledWith('video');
     });
 
-    it('llm modality 应获取 llm 适配器', async () => {
-      const llmModel: AdapterModel = { ...mockModel, modality: 'llm' };
+    it('llm sdkClient 应获取 llm 适配器', async () => {
+      mockProviderService.getAvailableProviders.mockResolvedValue([
+        { ...defaultProvider, sdkClient: 'llm' },
+      ]);
+      const llmModel: AdapterModel = { ...mockModel, modality: 'llm', sdkClient: 'llm' };
       mockAdapter.execute.mockResolvedValue({ output: { content: 'hello' } });
 
       await service.executeTask('task-1', 'user-1', 'text-generation', { prompt: 'hi' }, llmModel);
 
       expect(mockAdapterRegistry.getAdapter).toHaveBeenCalledWith('llm');
+    });
+  });
+
+  // ===== 多 Provider Fallback =====
+
+  describe('多 Provider 路由 + Fallback', () => {
+    it('第一个 provider 成功时不尝试第二个', async () => {
+      const provider1 = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: {} };
+      const provider2 = { providerName: 'coze', sdkModelId: 'doubao-seedream-5-0-260128', sdkClient: 'image', priority: 2, costPerCall: null, config: {} };
+      mockProviderService.getAvailableProviders.mockResolvedValue([provider1, provider2]);
+
+      mockAdapter.execute.mockResolvedValue({
+        output: { images: [{ url: 'https://cdn.example.com/img.png' }] },
+      });
+      mockStorageService.downloadAndStore.mockResolvedValue({ fileId: 'f1', url: 'https://s.com/img.png' });
+
+      await service.executeTask('task-1', 'user-1', 'image-generation', { prompt: 'test' }, mockModel);
+
+      // Should only call getAdapter once (first provider succeeded)
+      expect(mockAdapterRegistry.getAdapter).toHaveBeenCalledTimes(1);
+      expect(mockAdapterRegistry.getAdapter).toHaveBeenCalledWith('replicate');
+    });
+
+    it('第一个 provider 失败时应 fallback 到第二个', async () => {
+      const provider1 = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: {} };
+      const provider2 = { providerName: 'coze', sdkModelId: 'doubao-seedream-5-0-260128', sdkClient: 'image', priority: 2, costPerCall: null, config: {} };
+      mockProviderService.getAvailableProviders.mockResolvedValue([provider1, provider2]);
+
+      // First call fails, second succeeds
+      mockAdapter.execute
+        .mockRejectedValueOnce(new Error('Replicate 不可用'))
+        .mockResolvedValueOnce({
+          output: { images: [{ url: 'https://cdn.example.com/img.png' }] },
+        });
+      mockStorageService.downloadAndStore.mockResolvedValue({ fileId: 'f1', url: 'https://s.com/img.png' });
+
+      await service.executeTask('task-1', 'user-1', 'image-generation', { prompt: 'test' }, mockModel);
+
+      // Should call getAdapter twice (both providers tried)
+      expect(mockAdapterRegistry.getAdapter).toHaveBeenCalledTimes(2);
+      expect(mockAdapterRegistry.getAdapter).toHaveBeenNthCalledWith(1, 'replicate');
+      expect(mockAdapterRegistry.getAdapter).toHaveBeenNthCalledWith(2, 'image');
+
+      // Task should complete successfully
+      expect(mockBillingService.settleCredits).toHaveBeenCalledWith('task-1');
+    });
+
+    it('所有 provider 都失败时应抛出"所有渠道均失败"', async () => {
+      const provider1 = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: {} };
+      const provider2 = { providerName: 'coze', sdkModelId: 'doubao-seedream-5-0-260128', sdkClient: 'image', priority: 2, costPerCall: null, config: {} };
+      mockProviderService.getAvailableProviders.mockResolvedValue([provider1, provider2]);
+
+      mockAdapter.execute
+        .mockRejectedValueOnce(new Error('Replicate 不可用'))
+        .mockRejectedValueOnce(new Error('Coze 也不可用'));
+
+      await service.executeTask('task-1', 'user-1', 'image-generation', { prompt: 'test' }, mockModel);
+
+      // Should try both providers
+      expect(mockAdapterRegistry.getAdapter).toHaveBeenCalledTimes(2);
+
+      // Task should be failed
+      expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
+        type: 'task:failed',
+        payload: { taskId: 'task-1', error: '所有渠道均失败: Coze 也不可用' },
+      });
+
+      // Credits should be refunded
+      expect(mockBillingService.refundCredits).toHaveBeenCalledWith('user-1', 'task-1', 10, '任务失败退款');
+    });
+
+    it('provider 成功时应传递 provider 的 sdkModelId 给适配器', async () => {
+      const provider = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc123', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: { width: 1024 } };
+      mockProviderService.getAvailableProviders.mockResolvedValue([provider]);
+
+      mockAdapter.execute.mockResolvedValue({
+        output: { images: [{ url: 'https://cdn.example.com/img.png' }] },
+      });
+      mockStorageService.downloadAndStore.mockResolvedValue({ fileId: 'f1', url: 'https://s.com/img.png' });
+
+      await service.executeTask('task-1', 'user-1', 'image-generation', { prompt: 'test' }, mockModel);
+
+      // Adapter should receive the provider's sdkModelId
+      expect(mockAdapter.execute).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ sdkModelId: 'openai/gpt-image-2:abc123' }),
+        expect.any(Object),
+      );
+    });
+
+    it('无可用 provider 时应失败', async () => {
+      mockProviderService.getAvailableProviders.mockResolvedValue([]);
+
+      await service.executeTask('task-1', 'user-1', 'image-generation', { prompt: 'test' }, mockModel);
+
+      expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
+        type: 'task:failed',
+        payload: { taskId: 'task-1', error: '模型 "doubao-seedream-5-0" 没有可用的渠道' },
+      });
+    });
+
+    it('providerAttempt 记录包含 costPerCall', async () => {
+      const provider = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: {} };
+      mockProviderService.getAvailableProviders.mockResolvedValue([provider]);
+
+      mockAdapter.execute.mockResolvedValue({
+        output: { images: [{ url: 'https://cdn.example.com/img.png' }] },
+      });
+      mockStorageService.downloadAndStore.mockResolvedValue({ fileId: 'f1', url: 'https://s.com/img.png' });
+
+      const spy = vi.spyOn(service as any, 'recordProviderAttempt');
+
+      await service.executeTask('task-1', 'user-1', 'image-generation', { prompt: 'test' }, mockModel);
+
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          costPerCall: 0.05,
+          providerName: 'replicate',
+          status: 'success',
+        }),
+      );
+
+      spy.mockRestore();
     });
   });
 
@@ -394,10 +549,10 @@ describe('TaskExecutionService', () => {
 
       expect(mockWsService.sendToUser).toHaveBeenCalledWith('user-1', {
         type: 'create:status',
-        payload: { createId: 'create-1', status: 'failed', errorMessage: '模型超时' },
+        payload: { createId: 'create-1', status: 'failed', errorMessage: '所有渠道均失败: 模型超时' },
       });
 
-      expect(mockCreateService.syncCreateStatus).toHaveBeenCalledWith('create-1', 'failed', undefined, '模型超时');
+      expect(mockCreateService.syncCreateStatus).toHaveBeenCalledWith('create-1', 'failed', undefined, '所有渠道均失败: 模型超时');
     });
 
     it('onProgress 回调应推送 create:progress', async () => {
