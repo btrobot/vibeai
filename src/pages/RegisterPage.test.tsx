@@ -80,7 +80,7 @@ describe('RegisterPage', () => {
     const passwordInput = screen.getByLabelText('密码');
     expect(passwordInput).toHaveAttribute('type', 'password');
 
-    const toggleButton = screen.getByRole('button', { name: '' });
+    const toggleButton = screen.getByRole('button', { name: '显示密码' });
     await user.click(toggleButton);
 
     expect(passwordInput).toHaveAttribute('type', 'text');

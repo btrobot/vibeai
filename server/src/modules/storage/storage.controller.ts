@@ -14,6 +14,7 @@ import {
   Res,
   Inject,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StorageService } from './storage.service';
@@ -49,6 +50,7 @@ export class StorageController {
   @Post('upload')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
+  @Throttle({ upload: { ttl: 60_000, limit: 20 } })
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: Record<string, string>,

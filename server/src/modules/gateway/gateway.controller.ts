@@ -13,6 +13,7 @@ import {
   BadRequestException,
   Inject,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { GatewayService } from './gateway.service';
 import { AdapterRegistry } from './adapters/adapter-registry';
@@ -82,6 +83,7 @@ export class GatewayController {
   @Post('generate')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
+  @Throttle({ generation: { ttl: 60_000, limit: 10 } })
   async generate(@Req() req: any, @Body() body: GenerateInput) {
     const { projectId, capabilitySlug, modelSlug, input, sourceCreateId } = body;
     const userId = req.user.userId;
@@ -95,6 +97,7 @@ export class GatewayController {
   @Post('quick-create')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
+  @Throttle({ generation: { ttl: 60_000, limit: 10 } })
   async quickCreate(@Req() req: any, @Body() body: QuickCreateInput) {
     const userId = req.user.userId;
     const result = await this.gatewayService.quickCreate(userId, body.projectId, body.recipeId, body.input);
@@ -105,6 +108,7 @@ export class GatewayController {
 
   @Post('chat')
   @UseGuards(JwtAuthGuard)
+  @Throttle({ generation: { ttl: 60_000, limit: 10 } })
   async chat(@Req() req: any, @Body() body: ChatInput, @Res() res: Response) {
     const userId = req.user.userId;
 

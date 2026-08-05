@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { S3Storage } from 'coze-coding-dev-sdk';
 import type {
   IStorageProvider,
@@ -12,16 +12,34 @@ import type {
 
 @Injectable()
 export class S3StorageProvider implements IStorageProvider {
+  private readonly logger = new Logger(S3StorageProvider.name);
   private storage: S3Storage;
 
   constructor() {
+    // SDK reads COZE_BUCKET_ENDPOINT_URL / COZE_BUCKET_NAME as defaults.
+    // Explicit env vars (S3_*) take precedence for backward compatibility.
+    const endpointUrl = process.env.S3_ENDPOINT_URL || process.env.COZE_BUCKET_ENDPOINT_URL;
+    const bucketName = process.env.S3_BUCKET_NAME || process.env.COZE_BUCKET_NAME || 'vibeai';
+    const accessKey = process.env.S3_ACCESS_KEY || '';
+    const secretKey = process.env.S3_SECRET_KEY || '';
+    const region = process.env.S3_REGION || 'cn-beijing';
+
+    if (!endpointUrl) {
+      this.logger.warn(
+        'S3 endpoint URL not configured. Set S3_ENDPOINT_URL or COZE_BUCKET_ENDPOINT_URL. ' +
+        'Storage operations will fail until configured.',
+      );
+    }
+
     this.storage = new S3Storage({
-      endpointUrl: process.env.S3_ENDPOINT_URL,
-      accessKey: process.env.S3_ACCESS_KEY || '',
-      secretKey: process.env.S3_SECRET_KEY || '',
-      bucketName: process.env.S3_BUCKET_NAME || 'vibeai',
-      region: process.env.S3_REGION || 'cn-beijing',
+      endpointUrl,
+      accessKey,
+      secretKey,
+      bucketName,
+      region,
     });
+
+    this.logger.log(`S3 storage provider initialized (bucket: ${bucketName}, region: ${region})`);
   }
 
   getKeyPrefix(userId: string, category: string): string {

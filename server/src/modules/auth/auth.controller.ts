@@ -11,6 +11,7 @@ import {
   UnauthorizedException,
   Inject,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -21,12 +22,14 @@ export class AuthController {
   constructor(@Inject('AUTH_SERVICE') private readonly authService: AuthService) {}
 
   @Post('register')
+  @Throttle({ auth: { ttl: 60_000, limit: 5 } })
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ auth: { ttl: 60_000, limit: 5 } })
   async login(@Body() dto: LoginDto, @Req() req: Request) {
     const forwarded = req.headers['x-forwarded-for'];
     const ip = Array.isArray(forwarded) ? forwarded[0] : (forwarded || req.socket?.remoteAddress || '');

@@ -92,6 +92,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **Phase 5 ✅**: 计费系统（套餐管理/订阅/信用额度/用量统计/自动扣减）
 - **Phase 6 ✅**: 业务前端
 - **Phase 7 ✅**: 多 Provider 支持（Replicate 适配器/ProviderService/渠道优先级/Fallback）
+- **Phase 8 ✅**: 安全加固（API 限流 + 存储配置兼容 + 前端测试修复）
 
 ## 开发规范
 
@@ -219,10 +220,10 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 7: Multi-Provider Fallback | `task-execution.service.test.ts` | 9 | — | ≥85% | ✅ |
 | Phase 7: Gateway Regression | `gateway.regression.test.ts` | 53 | — | — | ✅ |
 | **合计（后端）** | | **510** | — | — | **✅ 全部通过** |
-| **合计（前端）** | | **73** | — | — | **⚠️ 72/73 通过** |
+| **合计（前端）** | | **73** | — | — | **✅ 73/73 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **616** | — | — | **✅ 615/616 通过** |
+| **总计** | | **616** | — | — | **✅ 616/616 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ⏹️ 需手动构建后运行 |
 | Phase 7: Gateway Integration | `test-integration.js` | 13 | ⏹️ 需手动构建后运行 |
 | Phase 7: Gateway E2E (测试机) | 手动 curl 验证 | — | — | — | ✅ 已验证 |
@@ -231,7 +232,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **tsx ESM loader 与 NestJS 装饰器不兼容**：集成测试无法通过 vitest 运行（`NestFactory.create` 在 tsx 环境下导致 `authService` 为 undefined）。解决方案：先 `pnpm build` 编译为 JavaScript，再通过 `node scripts/test-integration.js` 运行。
 - **JWT 重复 token 问题**：`generateTokens` 方法在相同秒内调用会生成相同的 JWT（`iat` 相同），导致 `sessions.refreshToken` 唯一约束冲突。已通过添加 `jti` 随机值修复。
 - **DrizzleMock 多查询限制**：`mockSingle` 在服务方法需要多次查询（如注册时先查询再插入）时只能返回第一个结果。解决方案：使用 `mockResolvedValueOnce([])` + `mockReturning` 组合模式。
-- **前端 1 个预存测试失败**：`RegisterPage.test.tsx`（密码可见切换按钮 accessible name 为空）。为 UI 属性不匹配，非后端问题。DashboardPage 和 WorkspacePage 测试已修复。
+- **前端 RegisterPage 测试**（已修复）：`RegisterPage.test.tsx` 密码可见切换按钮的 accessible name 测试查询 `{ name: '' }` 与实际 `aria-label` 不匹配。修复为 `{ name: '显示密码' }`（密码隐藏时的初始状态）。前端测试现 73/73 全部通过。
 - **credit_usage.task_id UUID 类型错误**（已修复）：`gateway.service.ts` 在任务创建前调用 `reserveCredits` 时传入字符串 `'pending'` 作为 taskId，但 `credit_usage.task_id` 是 UUID 类型导致 500。已将 `reserveCredits/deductCredits/refundCredits` 的 taskId 改为 `string | null`，调用处传 `null`。新增 2 个回归测试 + 端到端集成测试。
 - **AI 适配器 Mock 模式**：当 `COZE_LOOP_API_TOKEN` 未设置时，三种适配器（Image/LLM/Video）自动进入 Mock 模式，返回伪造结果（picsum.photos 图片、模拟文本、Big Buck Bunny 视频），完整走通 Create → Task → Execution → Storage → Billing 流程。已在测试机验证。
 - **tsc 构建错误**（已修复）：5 个预先存在的 `tsc --noEmit` 错误已修复：
@@ -283,6 +284,19 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
   - `ReplicateAdapter`：纯 REST 调用 Replicate API（POST /v1/predictions + GET 轮询），不依赖 SDK
   - 每次 provider 调用记录到 `provider_attempts` 表（含 costPerCall 用于利润分析）
   - 种子数据：3 个 Replicate 图片模型（gpt-image-2 / sdxl / flux-schnell）+ 对应 3 条 provider 记录
+- **API 限流**（Phase 8 — @nestjs/throttler v6.5.0）
+  - 全局 `ThrottlerGuard` 通过 `APP_GUARD` 注册，所有路由默认限流 100 次/分钟
+  - 四层命名限流器（named throttlers）：
+    - `default`：100 次/分钟（gallery 等公开端点）
+    - `auth`：5 次/分钟（register/login，防暴力破解）
+    - `generation`：10 次/分钟（generate/quickCreate/chat，防资源滥用）
+    - `upload`：20 次/分钟（文件上传）
+  - 通过 `@Throttle({ name: { ttl, limit } })` 装饰器按路由覆盖
+  - 健康检查端点 `/api/health` 注册在 NestJS 之外的 Express 实例上，不受限流影响
+- **存储环境变量兼容**（Phase 8）
+  - `S3Provider` 同时兼容自定义变量（`S3_ENDPOINT_URL`/`S3_BUCKET_NAME`）和 SDK 默认变量（`COZE_BUCKET_ENDPOINT_URL`/`COZE_BUCKET_NAME`）
+  - 未配置 S3 端点时输出警告日志，初始化成功时输出存储桶/区域信息
+  - `StorageModule` 在 `useFactory` 中输出当前使用的存储提供程序类型（S3 或 Local）
 
 ## 数据库迁移与种子数据
 
