@@ -16,11 +16,13 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StorageService } from './storage.service';
 import { uploadFileSchema, listFilesQuerySchema } from './dto';
 import type { Request, Response } from 'express';
 
+@ApiTags('storage')
 @Controller('storage')
 export class StorageController {
   constructor(@Inject('STORAGE_SERVICE') private readonly storageService: StorageService) {}

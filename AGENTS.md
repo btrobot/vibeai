@@ -95,6 +95,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **Phase 8 ✅**: 安全加固（API 限流 + 存储配置兼容 + 前端测试修复）
 - **Phase 9 ✅**: 密码重置 + 集成测试修复 + CustomThrottlerGuard
 - **Phase 10 ✅**: 运维可观测性（结构化日志 + 深度健康检查）+ 支付准备层（Stripe Checkout + Webhook）
+- **Phase 11 ✅**: 生产就绪增强（Swagger/OpenAPI + CI/CD 管道 + 优雅关停 + HTTP 请求日志 + 前端支付集成）
 
 ## 开发规范
 
@@ -332,6 +333,34 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
   - `decimal` 类型字段需 `String()` 转换以适配 Drizzle 类型
   - 文件：`server/src/modules/billing/payment.service.ts` + `billing.controller.ts` + `billing.module.ts` 更新
   - 环境变量：`stripe` 包（v22.4.0）
+- **Swagger/OpenAPI 文档**（Phase 11）
+  - `@nestjs/swagger` 集成，自动扫描所有 Controller 生成 API 文档
+  - Swagger UI 访问路径：`/api/docs`（需在 `app.init()` 之前注册，否则被 NestJS 路由器拦截返回 404）
+  - 10 个 API 标签分组：auth/billing/gateway/storage/gallery/project/task/create/user/admin
+  - JWT Bearer 认证方案，支持在 UI 中直接测试需认证接口
+  - 所有 Controller 添加 `@ApiTags` 装饰器
+  - 环境变量：`@nestjs/swagger` 包
+- **CI/CD 管道增强**（Phase 11）
+  - CI 流水线：5 个 Job 并行（前端质量 + 后端质量 + 构建 + E2E + Docker）
+  - `backend-quality` Job：后端 tsc 构建 + 523 测试（含 22 条 Spec 合规）
+  - `e2e` Job：Playwright E2E（11 个测试），含报告上传
+  - `ci-pass` 汇总 Job：用于分支保护规则
+  - 并发控制：同一 PR 新提交自动取消旧构建
+  - CD 流水线：版本推断（tag → 语义版本，main → dev.SHA）+ 多架构 Docker 构建 + Trivy 安全扫描 + GitHub Release
+- **生产就绪增强**（Phase 11）
+  - **优雅关停**：`app.enableShutdownHooks()` 处理 SIGTERM/SIGINT，WsService `onModuleDestroy()` 关闭 WebSocket
+  - **HTTP 请求日志中间件**：`HttpRequestLoggerMiddleware` 记录每个 API 请求的方法/路径/状态码/耗时
+    - 5xx → error 级别，4xx → warn 级别，2xx/3xx → log 级别
+    - 跳过 `/api/health` 和 `/api/health/deep`（避免探活日志噪声）
+    - 文件：`server/src/common/http-request-logger.middleware.ts`
+  - **前端支付集成**：BillingPage 根据 `/api/billing/payment-status` 动态选择支付流程
+    - 支付已启用 → Stripe Checkout 重定向（`/api/billing/checkout` → `window.location.href = data.url`）
+    - 支付未启用 → 直接订阅（`/api/billing/subscription`）
+    - 按月/按年计费切换器（仅支付已启用时显示）
+    - 价格根据计费周期动态切换，按年显示节省金额
+- **LoggerModule 修复**（Phase 11）
+  - 原实现 `useClass` + 导出类导致 `UnknownExportException`
+  - 修复：注册 `AppLoggerService` 为独立 provider，`APP_LOGGER` 使用 `useExisting` 别名
 
 ## 数据库迁移与种子数据
 
@@ -374,13 +403,13 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 ### CI (`.github/workflows/ci.yml`)
 - **触发**: 所有 PR + push to main/release/*
 - **并发控制**: 同一 PR 新提交自动取消旧构建
-- **Jobs**:
-  - `quality` — ESLint + TypeScript 类型检查
-  - `test` — 前端/后端单元测试矩阵（并行，含 Postgres 服务容器）
-  - `build` — Vite + tsc 编译验证
-  - `e2e` — Playwright E2E 测试（启动后端 + Postgres）
-  - `docker-check` — PR 时验证 Dockerfile 可构建（仅 PR）
-  - `ci-pass` — 结果汇总（用于分支保护规则）
+- **Jobs** (5 个并行 + 1 个汇总):
+  - `quality` — 前端 ESLint + TypeScript 类型检查 + 前端测试
+  - `backend-quality` — 后端 tsc 构建 + 后端测试（523 tests + 22 spec compliance）
+  - `build` — 前端 Vite + 后端 tsc 联合构建
+  - `e2e` — Playwright E2E 测试（11 个测试 + 报告上传）
+  - `docker` — Dockerfile 构建验证（BuildKit 缓存）
+  - `ci-pass` — 结果汇总（用于分支保护规则，all-must-pass）
 
 ### CD (`.github/workflows/cd.yml`)
 - **触发**: push to main (dev 版本) + push tag v* (正式发布)

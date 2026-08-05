@@ -1,5 +1,5 @@
 import { join } from 'path';
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -7,6 +7,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { CustomThrottlerGuard } from './common/throttler.guard';
 import { LoggerModule } from './common/logger.module';
 import { HealthService } from './common/health.service';
+import { HttpRequestLoggerMiddleware } from './common/http-request-logger.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
@@ -79,4 +80,8 @@ import { DrizzleModule } from './common/drizzle.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(HttpRequestLoggerMiddleware).forRoutes('/api/*');
+  }
+}

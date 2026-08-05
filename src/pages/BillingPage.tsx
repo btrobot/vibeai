@@ -70,6 +70,8 @@ export default function BillingPage() {
   const [stats, setStats] = useState<UsageStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState<string | null>(null);
+  const [paymentEnabled, setPaymentEnabled] = useState(false);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
   useEffect(() => {
     if (!token) {
@@ -82,10 +84,11 @@ export default function BillingPage() {
   async function fetchData() {
     setLoading(true);
     try {
-      const [plansRes, subRes, statsRes] = await Promise.all([
+      const [plansRes, subRes, statsRes, payRes] = await Promise.all([
         fetch('/api/billing/plans'),
         fetch('/api/billing/subscription', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/billing/stats', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/billing/payment-status', { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       const plansData = await plansRes.json();
       if (plansData.success) setPlans(plansData.data);
@@ -93,6 +96,8 @@ export default function BillingPage() {
       if (subData.success) setSubscription(subData.data);
       const statsData = await statsRes.json();
       if (statsData.success) setStats(statsData.data);
+      const payData = await payRes.json();
+      setPaymentEnabled(payData.enabled === true);
     } catch {
       // Silently fail
     } finally {
@@ -100,16 +105,35 @@ export default function BillingPage() {
     }
   }
 
-  async function handleSubscribe(planSlug: string) {
+  async function handleSubscribe(planSlug: string, cycle: 'monthly' | 'yearly') {
     setSubscribing(planSlug);
     try {
+      // If payment is enabled and plan is not free, use Stripe Checkout
+      if (paymentEnabled && planSlug !== 'free') {
+        const res = await fetch('/api/billing/checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ planSlug, billingCycle: cycle }),
+        });
+        const data = await res.json();
+        if (data.url) {
+          // Redirect to Stripe Checkout
+          window.location.href = data.url;
+          return;
+        }
+      }
+
+      // Direct subscribe (free plans or when payment is not configured)
       const res = await fetch('/api/billing/subscription', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ planSlug, billingCycle: 'monthly' }),
+        body: JSON.stringify({ planSlug, billingCycle: cycle }),
       });
       const data = await res.json();
       if (data.success) {
@@ -216,7 +240,29 @@ export default function BillingPage() {
 
       {/* Plan Cards */}
       <section>
-        <h2 className="text-sm font-semibold text-foreground mb-3">选择套餐</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-foreground">选择套餐</h2>
+          {paymentEnabled && (
+            <div className="flex items-center gap-1 p-1 rounded-lg bg-muted">
+              <button
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  billingCycle === 'monthly' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+                }`}
+                onClick={() => setBillingCycle('monthly')}
+              >
+                按月
+              </button>
+              <button
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  billingCycle === 'yearly' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+                }`}
+                onClick={() => setBillingCycle('yearly')}
+              >
+                按年
+              </button>
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {plans.map((plan) => {
             const isCurrent = currentPlanSlug === plan.slug;
@@ -241,8 +287,15 @@ export default function BillingPage() {
                     {plan.description}
                   </CardDescription>
                   <div className="mt-3">
-                    <span className="text-3xl font-bold font-mono text-foreground">¥{plan.priceMonthly}</span>
-                    <span className="text-muted-foreground text-sm ml-1">/月</span>
+                    <span className="text-3xl font-bold font-mono text-foreground">
+                      ¥{billingCycle === 'yearly' && plan.priceYearly ? plan.priceYearly : plan.priceMonthly}
+                    </span>
+                    <span className="text-muted-foreground text-sm ml-1">
+                      /{billingCycle === 'yearly' ? '年' : '月'}
+                    </span>
+                    {billingCycle === 'yearly' && plan.priceMonthly > 0 && plan.priceYearly && (
+                      <span className="block text-xs text-brand mt-1">省 ¥{plan.priceMonthly * 12 - plan.priceYearly}/年</span>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -292,12 +345,12 @@ export default function BillingPage() {
                     className="w-full mt-4"
                     variant={isCurrent ? 'outline' : 'default'}
                     disabled={isCurrent || subscribing === plan.slug}
-                    onClick={() => handleSubscribe(plan.slug)}
+                    onClick={() => handleSubscribe(plan.slug, billingCycle)}
                   >
                     {subscribing === plan.slug ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     ) : null}
-                    {isCurrent ? '当前套餐' : plan.priceMonthly === 0 ? '免费使用' : '升级'}
+                    {isCurrent ? '当前套餐' : plan.priceMonthly === 0 ? '免费使用' : paymentEnabled ? '立即支付' : '升级'}
                   </Button>
                 </CardContent>
               </Card>

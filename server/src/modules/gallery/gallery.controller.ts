@@ -1,8 +1,10 @@
 import { Controller, Get, Post, Delete, Body, Param, Query, Req, UseGuards, HttpCode, HttpStatus, Patch, Inject } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { GalleryService } from './gallery.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Request } from 'express';
 
+@ApiTags('gallery')
 @Controller('gallery')
 export class GalleryController {
   constructor(@Inject('GALLERY_SERVICE') private readonly gallery: GalleryService) {}

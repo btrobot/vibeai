@@ -1,7 +1,9 @@
 import { Controller, Get, Param, UseGuards, Inject } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@ApiTags('user')
 @Controller('users')
 export class UserController {
   constructor(@Inject('USER_SERVICE') private readonly userService: UserService) {}

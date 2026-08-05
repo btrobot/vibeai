@@ -1,10 +1,12 @@
 import { Controller, Get, Post, Patch, Body, Param, Req, Headers, UseGuards, HttpCode, HttpStatus, Inject, BadRequestException, RawBodyRequest } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { BillingService } from './billing.service';
 import { PaymentService } from './payment.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Request } from 'express';
 import type { CreateSubscriptionInput } from '../../shared-types';
 
+@ApiTags('billing')
 @Controller('billing')
 export class BillingController {
   constructor(

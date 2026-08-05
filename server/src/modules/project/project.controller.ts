@@ -1,10 +1,12 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Req, UseGuards, HttpCode, HttpStatus, ParseUUIDPipe, Inject } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { ProjectService } from './project.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateProjectSchema, UpdateProjectSchema } from '../../shared-types';
 import type { CreateProjectInput, UpdateProjectInput } from '../../shared-types';
 import { ZodValidationPipe } from '../../common/zod-validation.pipe';
 
+@ApiTags('project')
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
 export class ProjectController {

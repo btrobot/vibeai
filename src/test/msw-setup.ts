@@ -124,6 +124,7 @@ defaultHandlers.push(
       currentPeriod: { start: '2026-01-01', end: '2026-01-31' },
     },
   })),
+  http.get('/api/billing/payment-status', () => HttpResponse.json({ enabled: false })),
 );
 
 export const server = setupServer(...defaultHandlers);

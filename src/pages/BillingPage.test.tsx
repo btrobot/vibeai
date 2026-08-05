@@ -102,6 +102,9 @@ describe('BillingPage', () => {
       http.get('/api/billing/stats', () =>
         HttpResponse.json({ success: true, data: mockStats }),
       ),
+      http.get('/api/billing/payment-status', () =>
+        HttpResponse.json({ enabled: false }),
+      ),
     );
 
     renderBillingPage('mock-token');
@@ -125,6 +128,9 @@ describe('BillingPage', () => {
       ),
       http.get('/api/billing/stats', () =>
         HttpResponse.json({ success: true, data: mockStats }),
+      ),
+      http.get('/api/billing/payment-status', () =>
+        HttpResponse.json({ enabled: false }),
       ),
     );
 

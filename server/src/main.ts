@@ -8,6 +8,7 @@ config({ path: path.resolve(__dirname, '..', '.env'), override: false });
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { join } from 'path';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -86,21 +87,8 @@ async function bootstrap() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // 显式初始化模块（ServeStaticModule 的中间件在此阶段注册）
-  await app.init();
-
-  // Seed AI models (moved from GatewayModule.onModuleInit to avoid DI issues with tsx)
-  try {
-    const gatewayService = app.get('GATEWAY_SERVICE') as any;
-    await gatewayService.seedModels();
-  } catch (e) {
-    console.error('Seed models failed:', (e as Error).message);
-  }
-
-  // SPA fallback — 必须在 app.init() 之后注册，
-  // 否则会在 serve-static 之前执行，导致 JS/CSS 等静态资源返回 index.html
-
-  // Deep health check — 需要 DI，注册在 app.init() 之后
+  // Deep health check — 需要 DI，但必须在 app.init() 之前注册路由
+  // HealthService 在请求到来时已经可用（app.init() 已完成）
   expressApp.get('/api/health/deep', async (_req: any, res: any) => {
     try {
       const healthService = app.get(HealthService);
@@ -116,6 +104,51 @@ async function bootstrap() {
     }
   });
 
+  // Swagger / OpenAPI documentation — 必须在 app.init() 之前注册
+  // 否则 NestJS 路由器会拦截 /api/docs 返回 404
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('VibeAI API')
+    .setDescription('AI 视频/图片生成 + 电商内容工具 + 后台管理平台 API 文档')
+    .setVersion('1.0.0')
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      'JWT',
+    )
+    .addTag('auth', '认证与用户管理')
+    .addTag('billing', '计费与订阅')
+    .addTag('gateway', 'AI 能力与生成')
+    .addTag('storage', '文件存储')
+    .addTag('gallery', '画廊与社区')
+    .addTag('project', '项目管理')
+    .addTag('task', '任务管理')
+    .addTag('create', '创作管理')
+    .addTag('user', '用户信息')
+    .addTag('admin', '管理后台')
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api/docs', app, swaggerDocument, {
+    swaggerOptions: {
+      persistAuthorization: true,
+      tagsSorter: 'alpha',
+      operationsSorter: 'alpha',
+    },
+  });
+  console.log(`Swagger UI available at http://localhost:${port}/api/docs`);
+
+  // 显式初始化模块（ServeStaticModule 的中间件在此阶段注册）
+  await app.init();
+
+  // Seed AI models (moved from GatewayModule.onModuleInit to avoid DI issues with tsx)
+  try {
+    const gatewayService = app.get('GATEWAY_SERVICE') as any;
+    await gatewayService.seedModels();
+  } catch (e) {
+    console.error('Seed models failed:', (e as Error).message);
+  }
+
+  // SPA fallback — 必须在 app.init() 之后注册，
+  // 否则会在 serve-static 之前执行，导致 JS/CSS 等静态资源返回 index.html
+
   expressApp.use((req: any, res: any, next: any) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/ws')) return next();
     res.sendFile(join(__dirname, '..', '..', 'dist', 'index.html'), (err: any) => {
@@ -124,6 +157,9 @@ async function bootstrap() {
   });
 
   await app.listen(port);
+
+  // Graceful shutdown
+  app.enableShutdownHooks();
 
   // Initialize WebSocket server on the same HTTP server
   const httpServer = app.getHttpServer();

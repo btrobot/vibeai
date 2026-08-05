@@ -4,11 +4,12 @@ import { AppLoggerService } from './logger.service';
 @Global()
 @Module({
   providers: [
+    AppLoggerService,
     {
       provide: 'APP_LOGGER',
-      useClass: AppLoggerService,
+      useExisting: AppLoggerService,
     },
   ],
-  exports: ['APP_LOGGER', AppLoggerService],
+  exports: [AppLoggerService, 'APP_LOGGER'],
 })
 export class LoggerModule {}

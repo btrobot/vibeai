@@ -1,8 +1,10 @@
 import { Controller, Get, UseGuards, Req, Logger, Inject } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Request } from 'express';
 
+@ApiTags('admin')
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
 export class AdminController {

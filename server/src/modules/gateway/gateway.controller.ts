@@ -14,6 +14,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { GatewayService } from './gateway.service';
 import { AdapterRegistry } from './adapters/adapter-registry';
@@ -22,6 +23,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GenerateSchema, ChatSchema, QuickCreateSchema } from './dto/index';
 import type { GenerateInput, ChatInput, QuickCreateInput } from './dto/index';
 
+@ApiTags('gateway')
 @Controller('gateway')
 export class GatewayController {
   constructor(

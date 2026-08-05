@@ -1,7 +1,9 @@
 import { Controller, Get, Post, Param, Query, Req, UseGuards, ParseUUIDPipe, Inject } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { TaskService } from './task.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@ApiTags('task')
 @Controller('tasks')
 @UseGuards(JwtAuthGuard)
 export class TaskController {
