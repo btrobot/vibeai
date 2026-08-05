@@ -374,6 +374,55 @@ operations:
     path: /
     description: 每月重置信用额度（Cron 任务）
     test: false
+  - name: createCheckout
+    method: POST
+    path: /billing/checkout
+    description: 创建 Stripe Checkout Session（支付准备层）
+    auth: jwt
+    pre:
+      - 用户已登录
+      - 支付功能已启用（STRIPE_SECRET_KEY 已配置）
+      - 目标套餐非免费套餐
+    effect:
+      - 创建 Stripe Checkout Session
+      - 返回 sessionId 和支付链接
+    errors:
+      - status: 400
+        condition: 支付功能未启用
+        message: 支付功能未启用
+      - status: 400
+        condition: 免费套餐无需支付
+        message: 免费套餐无需支付
+      - status: 404
+        condition: 套餐不存在
+        message: 套餐不存在
+    test: true
+  - name: handlePaymentWebhook
+    method: POST
+    path: /billing/webhook
+    description: 处理 Stripe Webhook 回调
+    auth: none
+    pre:
+      - STRIPE_WEBHOOK_SECRET 已配置
+      - 请求签名验证通过
+    effect:
+      - checkout.session.completed: 创建订阅 + 更新信用额度 + 记录发票
+      - invoice.paid: 记录发票（幂等）
+    errors:
+      - status: 400
+        condition: Webhook 签名验证失败
+        message: Webhook signature verification failed
+    test: true
+  - name: getPaymentStatus
+    method: GET
+    path: /billing/payment-status
+    description: 查询支付功能是否启用
+    auth: jwt
+    pre:
+      - 用户已登录
+    post:
+      - 返回 { enabled: boolean }
+    test: true
 rules:
   - name: credits_non_negative
     id: BIL-001

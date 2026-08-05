@@ -14,6 +14,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { AppModule } from './app.module';
+import { HealthService } from './common/health.service';
 import { WsService } from './modules/ws/ws.service';
 // WsService token is 'WS_SERVICE'
 
@@ -39,6 +40,30 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.use(cookieParser());
+
+  // Stripe webhook needs raw body — register before other middleware
+  // Only applies to the webhook endpoint
+  app.use('/api/billing/webhook', (req: any, res: any, next: any) => {
+    // NestJS by default parses JSON. For webhook, we need the raw body.
+    // We store it on req.rawBody if available from the body parser.
+    if (req.rawBody) {
+      next();
+    } else {
+      // Fallback: collect raw chunks
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        req.rawBody = Buffer.concat(chunks);
+        // Re-parse as JSON for NestJS body parsing
+        try {
+          req.body = JSON.parse(req.rawBody.toString());
+        } catch {
+          req.body = {};
+        }
+        next();
+      });
+    }
+  });
   app.enableCors({
     origin: process.env.CORS_ORIGIN || true,
     credentials: true,
@@ -56,6 +81,7 @@ async function bootstrap() {
   const expressApp = app.getHttpAdapter().getInstance();
 
   // Health check — 注册在 app.init() 之前，确保可被路由匹配
+  // 基础健康检查（无需 DI），用于 Docker HEALTHCHECK 和负载均衡器探活
   expressApp.get('/api/health', (_req: any, res: any) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
@@ -73,6 +99,23 @@ async function bootstrap() {
 
   // SPA fallback — 必须在 app.init() 之后注册，
   // 否则会在 serve-static 之前执行，导致 JS/CSS 等静态资源返回 index.html
+
+  // Deep health check — 需要 DI，注册在 app.init() 之后
+  expressApp.get('/api/health/deep', async (_req: any, res: any) => {
+    try {
+      const healthService = app.get(HealthService);
+      const result = await healthService.checkHealth();
+      const statusCode = result.status === 'ok' ? 200 : result.status === 'degraded' ? 200 : 503;
+      res.status(statusCode).json(result);
+    } catch (err) {
+      res.status(503).json({
+        status: 'down',
+        timestamp: new Date().toISOString(),
+        error: (err as Error).message,
+      });
+    }
+  });
+
   expressApp.use((req: any, res: any, next: any) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/ws')) return next();
     res.sendFile(join(__dirname, '..', '..', 'dist', 'index.html'), (err: any) => {

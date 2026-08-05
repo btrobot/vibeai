@@ -5,6 +5,8 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { CustomThrottlerGuard } from './common/throttler.guard';
+import { LoggerModule } from './common/logger.module';
+import { HealthService } from './common/health.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
@@ -57,6 +59,7 @@ import { DrizzleModule } from './common/drizzle.module';
       },
     ]),
     DrizzleModule,
+    LoggerModule,
     WsModule,
     AuthModule,
     StorageModule,
@@ -69,6 +72,7 @@ import { DrizzleModule } from './common/drizzle.module';
     GalleryModule,
   ],
   providers: [
+    HealthService,
     {
       provide: APP_GUARD,
       useClass: CustomThrottlerGuard,

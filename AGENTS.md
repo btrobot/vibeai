@@ -25,7 +25,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | 域 | 实体 | 操作 | 规则 | 合规测试 |
 |----|------|------|------|---------|
 | auth | 4 | 10 | 13 | ✅ |
-| billing | 4 | 10 | 8 | ✅ |
+| billing | 4 | 13 | 8 | ✅ |
 | engine | 4 | 14 | 10 | ✅ |
 | gallery | 2 | 7 | 5 | ✅ |
 | gateway | 3 | 7 | 5 | ✅ |
@@ -94,6 +94,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **Phase 7 ✅**: 多 Provider 支持（Replicate 适配器/ProviderService/渠道优先级/Fallback）
 - **Phase 8 ✅**: 安全加固（API 限流 + 存储配置兼容 + 前端测试修复）
 - **Phase 9 ✅**: 密码重置 + 集成测试修复 + CustomThrottlerGuard
+- **Phase 10 ✅**: 运维可观测性（结构化日志 + 深度健康检查）+ 支付准备层（Stripe Checkout + Webhook）
 
 ## 开发规范
 
@@ -220,11 +221,12 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 7: ReplicateAdapter | `replicate.adapter.test.ts` | 20 | — | ≥85% | ✅ |
 | Phase 7: Multi-Provider Fallback | `task-execution.service.test.ts` | 9 | — | ≥85% | ✅ |
 | Phase 7: Gateway Regression | `gateway.regression.test.ts` | 53 | — | — | ✅ |
-| **合计（后端）** | | **518** | — | — | **✅ 全部通过** |
+| Phase 10: Payment Service | `payment.service.test.ts` | 5 | — | ≥85% | ✅ |
+| **合计（后端）** | | **523** | — | — | **✅ 全部通过** |
 | **合计（前端）** | | **72** | — | — | **✅ 72/72 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **612** | — | — | **✅ 612/612 通过** |
+| **总计** | | **617** | — | — | **✅ 617/617 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ✅ 32/33 通过（1 个 AI SDK token 问题） |
 | Phase 7: Gateway Integration | `test-integration.js` | 13 | ✅ 含密码重置 8 项 |
 | Phase 7: Gateway E2E (测试机) | 手动 curl 验证 | — | — | — | ✅ 已验证 |
@@ -311,6 +313,25 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
   - 文件：`server/src/common/throttler.guard.ts`
 - **Gateway 输入校验修复**（Phase 9）
   - `generate` 接口增加 `projectId` 空值检查，空字符串返回 400 而非 500
+- **结构化日志系统**（Phase 10）
+  - `AppLoggerService` 实现 `NestLoggerService`，生产环境 JSON 结构化输出（timestamp/level/context/message/meta）
+  - 敏感字段自动脱敏（password/token/secret/authorization/apiKey/refreshToken），递归处理嵌套对象
+  - 全局模块 `LoggerModule`（`APP_LOGGER` token），开发环境人类可读格式
+  - 文件：`server/src/common/logger.service.ts` + `server/src/common/logger.module.ts`
+- **深度健康检查**（Phase 10）
+  - `/api/health` 保持轻量（Docker HEALTHCHECK 用），`/api/health/deep` 检查 DB 连接 + 存储配置
+  - `HealthService.checkHealth()` 执行 `SELECT 1` 测量 DB 延迟，检查 `STORAGE_PROVIDER` 环境变量
+  - 返回 `{ status: 'ok'|'degraded'|'down', services: { db, storage } }`，degraded/down 返回 503
+  - 文件：`server/src/common/health.service.ts`
+- **支付准备层（Stripe Checkout + Webhook）**（Phase 10）
+  - `PaymentService`：动态导入 stripe 包（未配置时不加载），`isPaymentEnabled()` 检查 `STRIPE_SECRET_KEY`
+  - `POST /billing/checkout`（JwtAuthGuard）：创建 Stripe Checkout Session，`client_reference_id` 编码 `{userId, planSlug, billingCycle}`
+  - `POST /billing/webhook`（无认证）：签名验证 + 事件分发（`checkout.session.completed` → 创建订阅+授信+发票；`invoice.paid` → 记录发票，幂等）
+  - `GET /billing/payment-status`：返回 `{ enabled: boolean }`
+  - Stripe webhook raw body 中间件在 NestJSON 解析之前捕获原始请求体，仅应用于 `/api/billing/webhook`
+  - `decimal` 类型字段需 `String()` 转换以适配 Drizzle 类型
+  - 文件：`server/src/modules/billing/payment.service.ts` + `billing.controller.ts` + `billing.module.ts` 更新
+  - 环境变量：`stripe` 包（v22.4.0）
 
 ## 数据库迁移与种子数据
 

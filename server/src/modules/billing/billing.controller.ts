@@ -1,12 +1,16 @@
-import { Controller, Get, Post, Patch, Body, Param, Req, UseGuards, HttpCode, HttpStatus, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Req, Headers, UseGuards, HttpCode, HttpStatus, Inject, BadRequestException, RawBodyRequest } from '@nestjs/common';
 import { BillingService } from './billing.service';
+import { PaymentService } from './payment.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Request } from 'express';
 import type { CreateSubscriptionInput } from '../../shared-types';
 
 @Controller('billing')
 export class BillingController {
-  constructor(@Inject('BILLING_SERVICE') private readonly billing: BillingService) {}
+  constructor(
+    @Inject('BILLING_SERVICE') private readonly billing: BillingService,
+    private readonly payment: PaymentService,
+  ) {}
 
   @Get('plans')
   async getPlans() {
@@ -62,5 +66,48 @@ export class BillingController {
     const userId = (req as any).user.userId;
     const history = await this.billing.getCreditHistory(userId);
     return { success: true, data: history };
+  }
+
+  // ===== Payment (Stripe) =====
+
+  @UseGuards(JwtAuthGuard)
+  @Post('checkout')
+  async createCheckoutSession(
+    @Req() req: Request,
+    @Body() body: { planSlug: string; billingCycle: 'monthly' | 'yearly' },
+  ) {
+    const userId = (req as any).user.userId;
+    if (!body.planSlug || !body.billingCycle) {
+      throw new BadRequestException('缺少 planSlug 或 billingCycle');
+    }
+    const result = await this.payment.createCheckoutSession(userId, body.planSlug, body.billingCycle);
+    return { success: true, data: result };
+  }
+
+  @Post('webhook')
+  @HttpCode(HttpStatus.OK)
+  async handleWebhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('stripe-signature') signature: string,
+  ) {
+    if (!signature) {
+      throw new BadRequestException('缺少 stripe-signature 头');
+    }
+    const rawBody = req.rawBody;
+    if (!rawBody) {
+      throw new BadRequestException('缺少请求体');
+    }
+    const result = await this.payment.handleWebhook(rawBody, signature);
+    return { success: true, data: result };
+  }
+
+  @Get('payment-status')
+  getPaymentStatus() {
+    return {
+      success: true,
+      data: {
+        enabled: this.payment.isPaymentEnabled(),
+      },
+    };
   }
 }
