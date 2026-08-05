@@ -215,13 +215,14 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 3: LLM Adapter | `llm.adapter.test.ts` | 11 | 96% | ≥85% | ✅ |
 | Phase 3: Task Execution | `task-execution.service.test.ts` | 19 | 98.5% | ≥85% | ✅ |
 | Phase 7: ProviderService | `provider.service.test.ts` | 8 | — | ≥85% | ✅ |
-| Phase 7: ReplicateAdapter | `replicate.adapter.test.ts` | 14 | — | ≥85% | ✅ |
+| Phase 7: ReplicateAdapter | `replicate.adapter.test.ts` | 20 | — | ≥85% | ✅ |
 | Phase 7: Multi-Provider Fallback | `task-execution.service.test.ts` | 9 | — | ≥85% | ✅ |
-| **合计（后端）** | | **495** | — | — | **✅ 全部通过** |
+| Phase 7: Gateway Regression | `gateway.regression.test.ts` | 53 | — | — | ✅ |
+| **合计（后端）** | | **510** | — | — | **✅ 全部通过** |
 | **合计（前端）** | | **73** | — | — | **⚠️ 72/73 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **601** | — | — | **✅ 600/601 通过** |
+| **总计** | | **616** | — | — | **✅ 615/616 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ⏹️ 需手动构建后运行 |
 | Phase 7: Gateway Integration | `test-integration.js` | 13 | ⏹️ 需手动构建后运行 |
 | Phase 7: Gateway E2E (测试机) | 手动 curl 验证 | — | — | — | ✅ 已验证 |

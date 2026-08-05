@@ -831,4 +831,296 @@ describe('AI Gateway 回归测试', () => {
       ).rejects.toThrow();
     });
   });
+
+  // ============================================================
+  // REG-015: resolvePreferredModel 三层查找路径
+  //
+  // 重构背景: submitGeneration 中 70 行嵌套逻辑被提取为
+  //   resolvePreferredModel() 和 resolveDefaultModel() 两个私有方法。
+  // 本组测试直接验证各查找路径的正确性，防止重构引入回归。
+  //
+  // 查找顺序:
+  // 1. DB (aiModels) — 支持 DB-only 模型（如 Replicate gpt-image-2）
+  // 2. 内存路由 (routeCapability + builtInModelMap) — Coze SDK 模型
+  // 3. Fallback → resolveDefaultModel
+  // ============================================================
+  describe('REG-015: resolvePreferredModel 三层查找路径', () => {
+    // Helper: 创建模拟 DB 行（aiModels.$inferSelect 结构）
+    function createDbModelRow(overrides: Record<string, unknown> = {}) {
+      return {
+        slug: 'gpt-image-2',
+        name: 'GPT Image 2',
+        sdkModelId: 'openai/gpt-image-2',
+        modality: 'image',
+        outputType: 'image',
+        providerName: 'replicate',
+        sdkClient: 'replicate',
+        capabilities: ['image-generation'],
+        constraints: {},
+        defaultParams: { maxWaitTime: 10 },
+        costCredits: 8,
+        sortOrder: 31,
+        description: '',
+        avatar: null,
+        contextWindow: null,
+        maxOutputTokens: null,
+        inputModes: [],
+        inputSchema: {},
+        tags: [],
+        isActive: true,
+        isFeatured: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...overrides,
+      };
+    }
+
+    it('DB 优先查找成功：preferredModel 在 DB 中且支持该能力', async () => {
+      const dbModel = createDbModelRow({
+        slug: 'gpt-image-2',
+        capabilities: ['image-generation'],
+        sdkClient: 'replicate',
+      });
+      mockSingle(db, dbModel as any);
+
+      const model = await (service as any).resolvePreferredModel('gpt-image-2', 'image-generation');
+
+      expect(model).not.toBeNull();
+      expect(model.slug).toBe('gpt-image-2');
+      expect(model.sdkClient).toBe('replicate');
+      expect(model.capabilities).toContain('image-generation');
+    });
+
+    it('DB 模型不支持该能力 → fallback 到默认模型', async () => {
+      // 使用 spy 精确控制 getModel 的返回：
+      // 第一次调用 (getModel('sdxl')) 返回不支持 image-generation 的 DB 模型
+      // 第二次调用 (getModel('doubao-seedream-5-0-260128')) 走真实路径 → DB 空 → 内存回退
+      mockEmpty(db);
+
+      const getModelSpy = vi.spyOn(service as any, 'getModel');
+      getModelSpy.mockResolvedValueOnce({
+        slug: 'sdxl',
+        name: 'SDXL',
+        sdkModelId: 'stability-ai/sdxl',
+        modality: 'image',
+        outputType: 'image',
+        providerName: 'replicate',
+        sdkClient: 'replicate',
+        capabilities: ['text-generation'], // 不支持 image-generation
+        constraints: {},
+        defaultParams: {},
+        costCredits: 6,
+        sortOrder: 32,
+      } as any);
+
+      const model = await (service as any).resolvePreferredModel('sdxl', 'image-generation');
+
+      // 不应返回 preferredModel 'sdxl'（因为它不支持该能力）
+      expect(model).not.toBeNull();
+      expect(model.slug).not.toBe('sdxl');
+      // 应 fallback 到 image-generation 的默认模型
+      expect(model.slug).toBe('doubao-seedream-5-0-260128');
+      expect(model.capabilities).toContain('image-generation');
+
+      getModelSpy.mockRestore();
+    });
+
+    it('DB 无此模型 + 内存路由匹配 → 使用内存模型', async () => {
+      mockEmpty(db);
+
+      // kimi-k2-5-260127 在 builtInModelMap 中且支持 text-generation
+      const model = await (service as any).resolvePreferredModel('kimi-k2-5-260127', 'text-generation');
+
+      expect(model).not.toBeNull();
+      expect(model.slug).toBe('kimi-k2-5-260127');
+    });
+
+    it('DB 无此模型 + preferredModel 在内存中但不支持该能力 → fallback 默认', async () => {
+      mockEmpty(db);
+
+      // doubao-seedream-5-0-260128 是图片模型，不支持 text-generation
+      const model = await (service as any).resolvePreferredModel('doubao-seedream-5-0-260128', 'text-generation');
+
+      // 应 fallback 到 text-generation 的默认模型
+      expect(model).not.toBeNull();
+      expect(model.slug).toBe('doubao-seed-2-0-pro-260215');
+    });
+
+    it('DB 无此模型 + preferredModel 不在内存中 → fallback 默认', async () => {
+      mockEmpty(db);
+
+      const model = await (service as any).resolvePreferredModel('non-existent-model', 'text-generation');
+
+      // 应 fallback 到 text-generation 的默认模型
+      expect(model).not.toBeNull();
+      expect(model.slug).toBe('doubao-seed-2-0-pro-260215');
+    });
+
+    it('submitGeneration 集成：DB 模型优先于内存模型', async () => {
+      const dbModel = createDbModelRow({
+        slug: 'gpt-image-2',
+        capabilities: ['image-generation'],
+        costCredits: 8,
+      });
+      mockSingle(db, dbModel as any);
+
+      const result = await service.submitGeneration(
+        'user-1', 'proj-1', 'image-generation', { prompt: 'a cat' }, 'gpt-image-2',
+      );
+
+      expect(result.modelSlug).toBe('gpt-image-2');
+      expect(result.status).toBe('queued');
+    });
+  });
+
+  // ============================================================
+  // REG-016: resolveDefaultModel 默认模型解析
+  //
+  // 验证 resolveDefaultModel 在不同条件下的行为：
+  // 1. 内存路由 → DB 命中
+  // 2. 内存路由 → DB 未命中 → 内存模型
+  // 3. 无效能力 → 抛异常
+  // ============================================================
+  describe('REG-016: resolveDefaultModel 默认模型解析', () => {
+    it('内存路由成功 + DB 有该默认模型 → 返回 DB 模型', async () => {
+      const dbModel = {
+        slug: 'doubao-seed-2-0-pro-260215',
+        name: 'Doubao Seed 2.0 Pro',
+        sdkModelId: 'doubao-seed-2-0-pro-260215',
+        modality: 'llm',
+        outputType: 'text',
+        providerName: 'coze',
+        sdkClient: 'llm',
+        capabilities: ['text-generation'],
+        constraints: {},
+        defaultParams: {},
+        costCredits: 5,
+        sortOrder: 1,
+        description: '',
+        avatar: null,
+        contextWindow: null,
+        maxOutputTokens: null,
+        inputModes: [],
+        inputSchema: {},
+        tags: [],
+        isActive: true,
+        isFeatured: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockSingle(db, dbModel as any);
+
+      const model = await (service as any).resolveDefaultModel('text-generation');
+
+      expect(model).not.toBeNull();
+      expect(model.slug).toBe('doubao-seed-2-0-pro-260215');
+      // DB 模型的 sdkModelId 可能与 slug 不同
+      expect(model.sdkModelId).toBeDefined();
+    });
+
+    it('内存路由成功 + DB 无此模型 → 返回内存模型', async () => {
+      mockEmpty(db);
+
+      const model = await (service as any).resolveDefaultModel('text-generation');
+
+      expect(model).not.toBeNull();
+      expect(model.slug).toBe('doubao-seed-2-0-pro-260215');
+      // 内存模型回退时 sdkModelId = slug
+      expect(model.sdkModelId).toBe(model.slug);
+    });
+
+    it('无效能力 → 抛 BadRequestException', async () => {
+      await expect(
+        (service as any).resolveDefaultModel('non-existent-capability'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('image-generation 默认模型正确解析', async () => {
+      mockEmpty(db);
+
+      const model = await (service as any).resolveDefaultModel('image-generation');
+
+      expect(model).not.toBeNull();
+      expect(model.slug).toBe('doubao-seedream-5-0-260128');
+      expect(model.modality).toBe('image');
+    });
+
+    it('video-generation 默认模型正确解析', async () => {
+      mockEmpty(db);
+
+      const model = await (service as any).resolveDefaultModel('video-generation');
+
+      expect(model).not.toBeNull();
+      expect(model.slug).toBe('doubao-seedance-1-5-pro-251215');
+      expect(model.modality).toBe('video');
+    });
+  });
+
+  // ============================================================
+  // REG-017: submitGeneration 模型解析集成验证
+  //
+  // 验证 submitGeneration 在有无 preferredModel 时
+  // 正确调用 resolvePreferredModel / resolveDefaultModel
+  // ============================================================
+  describe('REG-017: submitGeneration 模型解析集成', () => {
+    it('无 preferredModel 时使用默认模型', async () => {
+      mockEmpty(db);
+
+      const result = await service.submitGeneration(
+        'user-1', 'proj-1', 'text-generation', { prompt: 'test' },
+      );
+
+      expect(result.modelSlug).toBe('doubao-seed-2-0-pro-260215');
+    });
+
+    it('preferredModel 在 DB 中且支持能力 → 使用 DB 模型', async () => {
+      const dbModel = {
+        slug: 'replicate-sdxl',
+        name: 'SDXL (Replicate)',
+        sdkModelId: 'stability-ai/sdxl',
+        modality: 'image',
+        outputType: 'image',
+        providerName: 'replicate',
+        sdkClient: 'replicate',
+        capabilities: ['image-generation'],
+        constraints: {},
+        defaultParams: {},
+        costCredits: 6,
+        sortOrder: 32,
+        description: '',
+        avatar: null,
+        contextWindow: null,
+        maxOutputTokens: null,
+        inputModes: [],
+        inputSchema: {},
+        tags: [],
+        isActive: true,
+        isFeatured: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockSingle(db, dbModel as any);
+
+      const result = await service.submitGeneration(
+        'user-1', 'proj-1', 'image-generation', { prompt: 'a dog' }, 'replicate-sdxl',
+      );
+
+      expect(result.modelSlug).toBe('replicate-sdxl');
+      expect(result.status).toBe('queued');
+    });
+
+    it('preferredModel 不支持能力时 fallback 到默认（不抛异常）', async () => {
+      mockEmpty(db);
+
+      // doubao-seedance-1-5-pro-251215 是视频模型，不支持 text-generation
+      const result = await service.submitGeneration(
+        'user-1', 'proj-1', 'text-generation', { prompt: 'hello' },
+        'doubao-seedance-1-5-pro-251215',
+      );
+
+      // 不应使用视频模型，应 fallback 到 text-generation 默认模型
+      expect(result.modelSlug).toBe('doubao-seed-2-0-pro-260215');
+      expect(result.status).toBe('queued');
+    });
+  });
 });
