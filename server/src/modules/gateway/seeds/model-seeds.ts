@@ -340,7 +340,7 @@ export const SEED_MODELS: ModelSeed[] = [
     inputModes: ['text', 'image'],
     outputType: 'image',
     modality: 'image',
-    sdkModelId: 'openai/gpt-image-2:placeholder',
+    sdkModelId: 'openai/gpt-image-2',
     sdkClient: 'replicate',
     constraints: { supportsImageToImage: true },
     inputSchema: {
@@ -348,12 +348,14 @@ export const SEED_MODELS: ModelSeed[] = [
       properties: {
         prompt: { type: 'string', description: '图片描述' },
         image: { type: 'string', format: 'uri', description: '参考图片 URL（图生图）' },
-        width: { type: 'integer', default: 1024 },
-        height: { type: 'integer', default: 1024 },
+        quality: { type: 'string', enum: ['low', 'medium', 'high', 'auto'], default: 'low', description: '图片质量（low 最便宜）' },
+        aspect_ratio: { type: 'string', enum: ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', 'auto'], default: '1:1' },
+        output_format: { type: 'string', enum: ['webp', 'png', 'jpeg'], default: 'webp' },
+        number_of_images: { type: 'integer', minimum: 1, maximum: 10, default: 1 },
       },
       required: ['prompt'],
     },
-    defaultParams: { maxWaitTime: 300 },
+    defaultParams: { maxWaitTime: 300, quality: 'low', output_format: 'webp', number_of_images: 1, aspect_ratio: '1:1' },
     costCredits: 10,
     isActive: true,
     isFeatured: false,
@@ -368,7 +370,7 @@ export const SEED_MODELS: ModelSeed[] = [
     inputModes: ['text'],
     outputType: 'image',
     modality: 'image',
-    sdkModelId: 'stability-ai/sdxl:placeholder',
+    sdkModelId: 'stability-ai/sdxl',
     sdkClient: 'replicate',
     constraints: {},
     inputSchema: {
@@ -398,7 +400,7 @@ export const SEED_MODELS: ModelSeed[] = [
     inputModes: ['text'],
     outputType: 'image',
     modality: 'image',
-    sdkModelId: 'blackforestlabs/flux-schnell:placeholder',
+    sdkModelId: 'blackforestlabs/flux-schnell',
     sdkClient: 'replicate',
     constraints: {},
     inputSchema: {
@@ -429,7 +431,7 @@ export const SEED_MODEL_PROVIDERS: ProviderSeed[] = [
   {
     modelSlug: 'gpt-image-2',
     providerName: 'replicate',
-    sdkModelId: 'openai/gpt-image-2:placeholder',
+    sdkModelId: 'openai/gpt-image-2',
     sdkClient: 'replicate',
     priority: 1,
     costPerCall: '0.05',
@@ -439,7 +441,7 @@ export const SEED_MODEL_PROVIDERS: ProviderSeed[] = [
   {
     modelSlug: 'sdxl',
     providerName: 'replicate',
-    sdkModelId: 'stability-ai/sdxl:placeholder',
+    sdkModelId: 'stability-ai/sdxl',
     sdkClient: 'replicate',
     priority: 1,
     costPerCall: '0.002',
@@ -449,7 +451,7 @@ export const SEED_MODEL_PROVIDERS: ProviderSeed[] = [
   {
     modelSlug: 'flux-schnell',
     providerName: 'replicate',
-    sdkModelId: 'blackforestlabs/flux-schnell:placeholder',
+    sdkModelId: 'blackforestlabs/flux-schnell',
     sdkClient: 'replicate',
     priority: 1,
     costPerCall: '0.003',

@@ -62,17 +62,17 @@ export class ReplicateAdapter implements ProtocolAdapter {
     }
 
     // ===== Real mode =====
-    const version = model.sdkModelId;
+    const modelId = model.sdkModelId;
     const predictionInput = this.buildPredictionInput(input, model);
 
     this.logger.log(
-      `Replicate prediction: model=${version}, outputType=${model.outputType}, taskId=${context.taskId}`,
+      `Replicate prediction: model=${modelId}, outputType=${model.outputType}, taskId=${context.taskId}`,
     );
 
     // Step 1: Create prediction
     context.onProgress?.(5, '正在提交到 Replicate...');
 
-    const createResponse = await this.createPrediction(version, predictionInput);
+    const createResponse = await this.createPrediction(modelId, predictionInput);
     const predictionId = createResponse.id;
 
     this.logger.log(`Replicate prediction created: id=${predictionId}, taskId=${context.taskId}`);
@@ -117,16 +117,12 @@ export class ReplicateAdapter implements ProtocolAdapter {
       predictionInput.prompt = input.prompt;
     }
 
-    // Pass through common Replicate parameters
-    const passThroughKeys = [
-      'width', 'height', 'num_outputs', 'guidance_scale', 'num_inference_steps',
-      'seed', 'negative_prompt', 'prompt_strength', 'image', 'mask',
-      'duration', 'fps', 'aspect_ratio', 'resolution',
-    ];
-
-    for (const key of passThroughKeys) {
-      if (input[key] !== undefined) {
-        predictionInput[key] = input[key];
+    // Pass through ALL input keys (flexible for different model APIs)
+    // Exclude internal keys that are not Replicate API parameters
+    const internalKeys = new Set(['maxWaitTime', 'referenceImage', 'referenceImages']);
+    for (const [key, value] of Object.entries(input)) {
+      if (!internalKeys.has(key) && value !== undefined && key !== 'prompt') {
+        predictionInput[key] = value;
       }
     }
 
@@ -152,17 +148,30 @@ export class ReplicateAdapter implements ProtocolAdapter {
   }
 
   private async createPrediction(
-    version: string,
+    modelId: string,
     input: Record<string, unknown>,
   ): Promise<ReplicatePredictionResponse> {
-    const response = await fetch(`${this.baseUrl}/v1/predictions`, {
+    // Support two modes:
+    // 1. Version hash (e.g. "225c978a7f93...") → POST /v1/predictions with { version, input }
+    // 2. Owner/model format (e.g. "openai/gpt-image-2") → POST /v1/models/{owner}/{model}/predictions with { input }
+    const isModelEndpoint = modelId.includes('/');
+
+    const url = isModelEndpoint
+      ? `${this.baseUrl}/v1/models/${modelId}/predictions`
+      : `${this.baseUrl}/v1/predictions`;
+
+    const body = isModelEndpoint
+      ? { input }
+      : { version: modelId, input };
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.apiToken}`,
         'Content-Type': 'application/json',
         'Prefer': 'wait=0',
       },
-      body: JSON.stringify({ version, input }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {

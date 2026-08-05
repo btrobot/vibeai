@@ -19,7 +19,7 @@ function createMockModel(overrides: Partial<AdapterModel> = {}): AdapterModel {
   return {
     slug: 'sdxl',
     name: 'Stable Diffusion XL',
-    sdkModelId: 'stability-ai/sdxl:abc123',
+    sdkModelId: 'stability-ai/sdxl',
     modality: 'image',
     outputType: 'image',
     providerName: 'replicate',
@@ -377,9 +377,9 @@ describe('ReplicateAdapter - Real 模式', () => {
 
     await adapter.execute({ prompt: 'test', height: 768 }, model, context);
 
+    // sdkModelId contains '/', so model endpoint is used (no version field in body)
     expect(capturedBody).toEqual(
       expect.objectContaining({
-        version: 'stability-ai/sdxl:abc123',
         input: expect.objectContaining({
           prompt: 'test',
           width: 1024,
@@ -387,5 +387,6 @@ describe('ReplicateAdapter - Real 模式', () => {
         }),
       }),
     );
+    expect(capturedBody).not.toHaveProperty('version');
   });
 });
