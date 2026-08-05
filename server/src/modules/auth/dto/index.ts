@@ -54,3 +54,20 @@ export class ChangePasswordDto {
   @Matches(/[0-9]/, { message: '新密码必须包含数字' })
   newPassword!: string;
 }
+
+export class ForgotPasswordDto {
+  @IsEmail({}, { message: '请输入有效的邮箱地址' })
+  email!: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @MinLength(1, { message: '缺少重置令牌' })
+  token!: string;
+
+  @IsString()
+  @MinLength(8, { message: '密码至少8位' })
+  @Matches(/[A-Za-z]/, { message: '密码必须包含字母' })
+  @Matches(/[0-9]/, { message: '密码必须包含数字' })
+  newPassword!: string;
+}

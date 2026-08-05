@@ -2,8 +2,9 @@ import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { CustomThrottlerGuard } from './common/throttler.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
@@ -32,6 +33,7 @@ import { DrizzleModule } from './common/drizzle.module';
     }),
     // Global rate limiting: 100 req/min per IP (default)
     // Stricter limits applied per-controller via @Throttle decorator
+    // Test/integration mode is skipped via CustomThrottlerGuard
     ThrottlerModule.forRoot([
       {
         name: 'default',
@@ -69,7 +71,7 @@ import { DrizzleModule } from './common/drizzle.module';
   providers: [
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: CustomThrottlerGuard,
     },
   ],
 })

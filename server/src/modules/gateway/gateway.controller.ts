@@ -88,6 +88,10 @@ export class GatewayController {
     const { projectId, capabilitySlug, modelSlug, input, sourceCreateId } = body;
     const userId = req.user.userId;
 
+    if (!projectId || projectId.trim() === '') {
+      throw new BadRequestException('项目 ID 不能为空');
+    }
+
     const result = await this.gatewayService.submitGeneration(userId, projectId, capabilitySlug, input, modelSlug, sourceCreateId);
     return { success: true, data: result };
   }

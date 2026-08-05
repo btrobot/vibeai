@@ -332,4 +332,109 @@ describe('AuthService', () => {
       expect(result.data.id).toBe('user-1');
     });
   });
+
+  describe('forgotPassword', () => {
+    it('已注册邮箱应生成重置令牌', async () => {
+      mockSingle(db, buildUser({ email: 'test@vibeai.com', isActive: true }));
+
+      const result = await authService.forgotPassword({ email: 'test@vibeai.com' });
+
+      expect(result.success).toBe(true);
+      expect(result.data.resetToken).toBeDefined();
+      expect(result.data.resetUrl).toContain('/reset-password?token=');
+      expect(jwtService.signAsync).toHaveBeenCalled();
+    });
+
+    it('未注册邮箱也返回成功（防用户枚举）', async () => {
+      mockEmpty(db);
+
+      const result = await authService.forgotPassword({ email: 'nonexistent@vibeai.com' });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeUndefined();
+      expect(result.message).toContain('已注册');
+    });
+
+    it('非活跃用户也返回成功（不泄露状态）', async () => {
+      mockSingle(db, buildUser({ email: 'inactive@vibeai.com', isActive: false }));
+
+      const result = await authService.forgotPassword({ email: 'inactive@vibeai.com' });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeUndefined();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('有效令牌应成功重置密码', async () => {
+      jwtService.verifyAsync.mockResolvedValueOnce({
+        sub: 'user-1',
+        email: 'test@vibeai.com',
+        purpose: 'password-reset',
+      });
+      mockSingle(db, buildUser({ id: 'user-1', isActive: true }));
+
+      const result = await authService.resetPassword({
+        token: 'valid-reset-token',
+        newPassword: 'NewPassword123',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('重置');
+      // Should update password and revoke sessions
+      expect(db.update).toHaveBeenCalled();
+    });
+
+    it('重置密码后撤销所有会话', async () => {
+      jwtService.verifyAsync.mockResolvedValueOnce({
+        sub: 'user-1',
+        email: 'test@vibeai.com',
+        purpose: 'password-reset',
+      });
+      mockSingle(db, buildUser({ id: 'user-1', isActive: true }));
+
+      await authService.resetPassword({
+        token: 'valid-reset-token',
+        newPassword: 'NewPassword123',
+      });
+
+      // update should be called at least twice: once for password, once for sessions
+      expect(db.update).toHaveBeenCalledTimes(2);
+    });
+
+    it('无效令牌应抛出异常', async () => {
+      jwtService.verifyAsync.mockRejectedValueOnce(new Error('jwt expired'));
+
+      await expect(
+        authService.resetPassword({ token: 'invalid-token', newPassword: 'NewPassword123' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('非 password-reset 用途的令牌应被拒绝', async () => {
+      jwtService.verifyAsync.mockResolvedValueOnce({
+        sub: 'user-1',
+        email: 'test@vibeai.com',
+        purpose: 'access',
+      });
+
+      mockSingle(db, buildUser({ id: 'user-1', isActive: true }));
+
+      await expect(
+        authService.resetPassword({ token: 'wrong-purpose-token', newPassword: 'NewPassword123' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('用户不存在时应抛出异常', async () => {
+      jwtService.verifyAsync.mockResolvedValueOnce({
+        sub: 'ghost-user',
+        email: 'ghost@vibeai.com',
+        purpose: 'password-reset',
+      });
+      mockEmpty(db);
+
+      await expect(
+        authService.resetPassword({ token: 'valid-token', newPassword: 'NewPassword123' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+  });
 });

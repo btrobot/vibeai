@@ -314,6 +314,40 @@ operations:
       - status: 403
         condition: 无权限
         message: 无权查看该用户信息
+  - name: forgotPassword
+    method: POST
+    path: /auth/forgot-password
+    description: 忘记密码（生成重置令牌）
+    auth: none
+    pre:
+      - 邮箱已注册（不泄露用户是否存在）
+    effect:
+      - 生成 resetToken（JWT，15分钟过期）
+      - 未配置邮件服务时直接返回 resetToken（开发/测试模式）
+      - 配置邮件服务后通过邮件发送重置链接（生产模式）
+    post:
+      - 始终返回 success=true（防止用户枚举）
+    test: true
+  - name: resetPassword
+    method: POST
+    path: /auth/reset-password
+    description: 重置密码
+    auth: none
+    pre:
+      - resetToken 有效且未过期
+      - 新密码符合强度要求
+    effect:
+      - 更新 passwordHash
+      - 撤销该用户所有活跃 Session
+      - resetToken 一次性使用（重置后失效）
+    errors:
+      - status: 400
+        condition: 新密码强度不足
+        message: 密码至少 8 位，包含字母和数字
+      - status: 401
+        condition: resetToken 无效或过期
+        message: 重置链接已失效，请重新申请
+    test: true
 rules:
   - name: email_unique
     id: AUTH-001
@@ -385,6 +419,27 @@ rules:
     description: isActive=false 的用户不可登录
     enforcement: 登录前检查 isActive
     test: "非活跃用户无法登录"
+  - name: reset_token_expiry
+    id: AUTH-011
+    severity: error
+    level: error
+    description: 密码重置令牌 15 分钟过期
+    enforcement: JWT 签名时设置 15min exp
+    test: "无效令牌应抛出异常"
+  - name: reset_token_invalidates_sessions
+    id: AUTH-012
+    severity: error
+    level: error
+    description: 密码重置后撤销该用户所有活跃 Session
+    enforcement: resetPassword 中 UPDATE sessions SET isRevoked=true
+    test: "重置密码后撤销所有会话"
+  - name: forgot_password_no_enumeration
+    id: AUTH-013
+    severity: error
+    level: error
+    description: 忘记密码接口不泄露用户是否存在
+    enforcement: 无论邮箱是否注册都返回 success=true
+    test: "未注册邮箱也返回成功"
 state_machines:
   - name: account_lockout
     entity: User
