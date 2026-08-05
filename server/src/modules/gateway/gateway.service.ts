@@ -194,6 +194,70 @@ export class GatewayService {
     };
   }
 
+  // ===== Model Resolution Helpers =====
+
+  /**
+   * Resolve a user-specified preferred model to an AdapterModel.
+   *
+   * Lookup order:
+   * 1. DB (aiModels) — supports DB-only models like Replicate
+   * 2. In-memory router (builtInModelMap) — Coze SDK models
+   *
+   * If the preferred model doesn't support the requested capability,
+   * falls back to the default model for that capability.
+   */
+  private async resolvePreferredModel(
+    preferredModel: string,
+    capabilitySlug: string,
+  ): Promise<AdapterModel> {
+    // 1. Try DB first
+    const dbModel = await this.getModel(preferredModel);
+    if (dbModel) {
+      const caps = dbModel.capabilities ?? [];
+      if (caps.includes(capabilitySlug)) {
+        return dbModel;
+      }
+      // DB model exists but doesn't support this capability → fallback
+      return this.resolveDefaultModel(capabilitySlug);
+    }
+
+    // 2. Try in-memory router
+    const route = routeCapability(capabilitySlug, preferredModel);
+    if (route && route.modelSlug === preferredModel) {
+      const memModel = builtInModelMap.get(preferredModel);
+      if (!memModel) {
+        throw new BadRequestException(`模型 "${preferredModel}" 不存在`);
+      }
+      return this.modelDefToAdapterModel(memModel);
+    }
+
+    // 3. Preferred model not found or doesn't support capability → fallback
+    return this.resolveDefaultModel(capabilitySlug);
+  }
+
+  /**
+   * Resolve the default model for a capability.
+   * Uses in-memory router to find the default model slug, then resolves
+   * from DB (preferred) or in-memory definition (fallback).
+   */
+  private async resolveDefaultModel(capabilitySlug: string): Promise<AdapterModel> {
+    const route = routeCapability(capabilitySlug);
+    if (!route) {
+      throw new BadRequestException(`能力 "${capabilitySlug}" 没有可用的模型`);
+    }
+
+    const dbModel = await this.getModel(route.modelSlug);
+    if (dbModel) {
+      return dbModel;
+    }
+
+    const memModel = builtInModelMap.get(route.modelSlug);
+    if (!memModel) {
+      throw new BadRequestException(`模型 "${route.modelSlug}" 不存在`);
+    }
+    return this.modelDefToAdapterModel(memModel);
+  }
+
   // ===== Input Media Resolution (fileId → URL, at system boundary) =====
 
   /**
@@ -293,79 +357,10 @@ export class GatewayService {
       throw new NotFoundException(`能力 "${capabilitySlug}" 不存在`);
     }
 
-    // Get model (from DB or in-memory)
-    let model: AdapterModel;
-    if (preferredModel) {
-      // First, try to find the preferred model in DB (supports DB-only models like Replicate)
-      const dbModel = await this.getModel(preferredModel);
-      if (dbModel) {
-        // Found in DB — verify it supports the requested capability
-        const modelCapabilities = dbModel.capabilities ?? [];
-        if (modelCapabilities.includes(capabilitySlug)) {
-          model = dbModel;
-        } else {
-          // Preferred model doesn't support this capability, fallback to default
-          const defaultRoute = routeCapability(capabilitySlug);
-          if (!defaultRoute) {
-            throw new BadRequestException(`能力 "${capabilitySlug}" 没有可用的模型`);
-          }
-          const defaultDbModel = await this.getModel(defaultRoute.modelSlug);
-          if (defaultDbModel) {
-            model = defaultDbModel;
-          } else {
-            const memModel = builtInModelMap.get(defaultRoute.modelSlug);
-            if (!memModel) {
-              throw new BadRequestException(`模型 "${defaultRoute.modelSlug}" 不存在`);
-            }
-            model = this.modelDefToAdapterModel(memModel);
-          }
-        }
-      } else {
-        // Not in DB — check in-memory router
-        const route = routeCapability(capabilitySlug, preferredModel);
-        if (route && route.modelSlug === preferredModel) {
-          // Preferred model supports this capability (in-memory)
-          const memModel = builtInModelMap.get(preferredModel);
-          if (!memModel) {
-            throw new BadRequestException(`模型 "${preferredModel}" 不存在`);
-          }
-          model = this.modelDefToAdapterModel(memModel);
-        } else {
-          // Preferred model doesn't support this capability, fallback to default
-          const defaultRoute = routeCapability(capabilitySlug);
-          if (!defaultRoute) {
-            throw new BadRequestException(`能力 "${capabilitySlug}" 没有可用的模型`);
-          }
-          const defaultDbModel = await this.getModel(defaultRoute.modelSlug);
-          if (defaultDbModel) {
-            model = defaultDbModel;
-          } else {
-            const memModel = builtInModelMap.get(defaultRoute.modelSlug);
-            if (!memModel) {
-              throw new BadRequestException(`模型 "${defaultRoute.modelSlug}" 不存在`);
-            }
-            model = this.modelDefToAdapterModel(memModel);
-          }
-        }
-      }
-    } else {
-      // Route via in-memory router, then resolve to AdapterModel
-      const route = routeCapability(capabilitySlug);
-      if (!route) {
-        throw new BadRequestException(`能力 "${capabilitySlug}" 没有可用的模型`);
-      }
-      const found = await this.getModel(route.modelSlug);
-      if (!found) {
-        // Use in-memory definition
-        const memModel = builtInModelMap.get(route.modelSlug);
-        if (!memModel) {
-          throw new BadRequestException(`模型 "${route.modelSlug}" 不存在`);
-        }
-        model = this.modelDefToAdapterModel(memModel);
-      } else {
-        model = found;
-      }
-    }
+    // Resolve model: preferredModel (DB-first) → in-memory router → default fallback
+    const model = preferredModel
+      ? await this.resolvePreferredModel(preferredModel, capabilitySlug)
+      : await this.resolveDefaultModel(capabilitySlug);
 
     // Credit pre-deduction (reserve)
     const reserved = await this.billingService.reserveCredits(

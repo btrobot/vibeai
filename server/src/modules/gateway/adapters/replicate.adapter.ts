@@ -127,20 +127,11 @@ export class ReplicateAdapter implements ProtocolAdapter {
     }
 
     // Merge model.defaultParams (excluding internal keys)
+    // Note: provider config is already merged into defaultParams by TaskExecutionService
     const defaultParams = model.defaultParams || {};
     for (const [key, value] of Object.entries(defaultParams)) {
       if (key !== 'maxWaitTime' && predictionInput[key] === undefined) {
         predictionInput[key] = value;
-      }
-    }
-
-    // Merge model.config if present (provider-specific config)
-    const config = (model as AdapterModel & { config?: Record<string, unknown> }).config;
-    if (config) {
-      for (const [key, value] of Object.entries(config)) {
-        if (predictionInput[key] === undefined) {
-          predictionInput[key] = value;
-        }
       }
     }
 
