@@ -147,3 +147,5 @@ node-compile-cache/
 .vite/
 .coze-logs
 .codegraph/
+server/storage/
+assets/

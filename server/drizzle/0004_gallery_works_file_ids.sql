@@ -6,5 +6,5 @@
 -- Old columns are kept for backward compatibility during transition
 -- ============================================================
 
-ALTER TABLE "gallery_works" ADD COLUMN "image_file_id" uuid REFERENCES "files"("id") ON DELETE SET NULL;
-ALTER TABLE "gallery_works" ADD COLUMN "video_file_id" uuid REFERENCES "files"("id") ON DELETE SET NULL;
+ALTER TABLE "gallery_works" ADD COLUMN IF NOT EXISTS "image_file_id" uuid REFERENCES "files"("id") ON DELETE SET NULL;
+ALTER TABLE "gallery_works" ADD COLUMN IF NOT EXISTS "video_file_id" uuid REFERENCES "files"("id") ON DELETE SET NULL;

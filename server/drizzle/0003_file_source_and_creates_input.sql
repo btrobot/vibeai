@@ -7,11 +7,11 @@
 -- ============================================================
 
 -- ── 1. files table ──
-ALTER TABLE "files" ADD COLUMN "source" varchar(20) DEFAULT 'storage' NOT NULL;
-ALTER TABLE "files" ADD COLUMN "external_url" text;
+ALTER TABLE "files" ADD COLUMN IF NOT EXISTS "source" varchar(20) DEFAULT 'storage' NOT NULL;
+ALTER TABLE "files" ADD COLUMN IF NOT EXISTS "external_url" text;
 ALTER TABLE "files" ALTER COLUMN "storage_key" DROP NOT NULL;
-ALTER TABLE "files" ALTER COLUMN "storage_key" DROP CONSTRAINT IF EXISTS "files_storage_key_unique";
+ALTER TABLE "files" DROP CONSTRAINT IF EXISTS "files_storage_key_unique";
 ALTER TABLE "files" ALTER COLUMN "url" DROP NOT NULL;
 
 -- ── 2. creates table ──
-ALTER TABLE "creates" ADD COLUMN "input" jsonb DEFAULT '{}' NOT NULL;
+ALTER TABLE "creates" ADD COLUMN IF NOT EXISTS "input" jsonb DEFAULT '{}' NOT NULL;

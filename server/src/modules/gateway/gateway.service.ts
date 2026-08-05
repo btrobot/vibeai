@@ -163,6 +163,7 @@ export class GatewayService {
       outputType: row.outputType,
       providerName: row.providerName,
       sdkClient: row.sdkClient,
+      capabilities: row.capabilities ?? [],
       constraints: row.constraints as Record<string, unknown>,
       defaultParams: row.defaultParams as Record<string, unknown>,
       costCredits: row.costCredits,
@@ -185,6 +186,7 @@ export class GatewayService {
       outputType: m.outputTypes[0] || 'text',
       providerName: 'coze',
       sdkClient: modality,
+      capabilities: m.capabilities ?? [],
       constraints: m.config,
       defaultParams: {},
       costCredits: 1,
@@ -294,35 +296,56 @@ export class GatewayService {
     // Get model (from DB or in-memory)
     let model: AdapterModel;
     if (preferredModel) {
-      // Check if preferredModel supports this capability via in-memory router
-      const route = routeCapability(capabilitySlug, preferredModel);
-      if (route && route.modelSlug === preferredModel) {
-        // Preferred model supports this capability
-        const found = await this.getModel(preferredModel);
-        if (found) {
-          model = found;
+      // First, try to find the preferred model in DB (supports DB-only models like Replicate)
+      const dbModel = await this.getModel(preferredModel);
+      if (dbModel) {
+        // Found in DB — verify it supports the requested capability
+        const modelCapabilities = dbModel.capabilities ?? [];
+        if (modelCapabilities.includes(capabilitySlug)) {
+          model = dbModel;
         } else {
+          // Preferred model doesn't support this capability, fallback to default
+          const defaultRoute = routeCapability(capabilitySlug);
+          if (!defaultRoute) {
+            throw new BadRequestException(`能力 "${capabilitySlug}" 没有可用的模型`);
+          }
+          const defaultDbModel = await this.getModel(defaultRoute.modelSlug);
+          if (defaultDbModel) {
+            model = defaultDbModel;
+          } else {
+            const memModel = builtInModelMap.get(defaultRoute.modelSlug);
+            if (!memModel) {
+              throw new BadRequestException(`模型 "${defaultRoute.modelSlug}" 不存在`);
+            }
+            model = this.modelDefToAdapterModel(memModel);
+          }
+        }
+      } else {
+        // Not in DB — check in-memory router
+        const route = routeCapability(capabilitySlug, preferredModel);
+        if (route && route.modelSlug === preferredModel) {
+          // Preferred model supports this capability (in-memory)
           const memModel = builtInModelMap.get(preferredModel);
           if (!memModel) {
             throw new BadRequestException(`模型 "${preferredModel}" 不存在`);
           }
           model = this.modelDefToAdapterModel(memModel);
-        }
-      } else {
-        // Preferred model doesn't support this capability, fallback to default
-        const defaultRoute = routeCapability(capabilitySlug);
-        if (!defaultRoute) {
-          throw new BadRequestException(`能力 "${capabilitySlug}" 没有可用的模型`);
-        }
-        const found = await this.getModel(defaultRoute.modelSlug);
-        if (found) {
-          model = found;
         } else {
-          const memModel = builtInModelMap.get(defaultRoute.modelSlug);
-          if (!memModel) {
-            throw new BadRequestException(`模型 "${defaultRoute.modelSlug}" 不存在`);
+          // Preferred model doesn't support this capability, fallback to default
+          const defaultRoute = routeCapability(capabilitySlug);
+          if (!defaultRoute) {
+            throw new BadRequestException(`能力 "${capabilitySlug}" 没有可用的模型`);
           }
-          model = this.modelDefToAdapterModel(memModel);
+          const defaultDbModel = await this.getModel(defaultRoute.modelSlug);
+          if (defaultDbModel) {
+            model = defaultDbModel;
+          } else {
+            const memModel = builtInModelMap.get(defaultRoute.modelSlug);
+            if (!memModel) {
+              throw new BadRequestException(`模型 "${defaultRoute.modelSlug}" 不存在`);
+            }
+            model = this.modelDefToAdapterModel(memModel);
+          }
         }
       }
     } else {

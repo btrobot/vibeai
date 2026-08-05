@@ -47,6 +47,7 @@ export interface AdapterModel {
   outputType: string;
   providerName?: string;
   sdkClient: string;
+  capabilities: string[];
   constraints: Record<string, unknown>;
   defaultParams: Record<string, unknown>;
   costCredits: number;

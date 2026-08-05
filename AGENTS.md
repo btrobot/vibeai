@@ -243,7 +243,8 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **migrate 脚本路径**（已修复）：`migrate.ts` 的 `migrationsFolder` 从 `path.resolve(__dirname, '..', 'drizzle')` 改为 `path.resolve(__dirname, '..', '..', 'drizzle')`，修复编译后 `dist/scripts/migrate.js` 路径计算错误。
 - **storage serve 路由 splat 参数**（已修复）：NestJS 11 的 `@Param('splat')` 返回 `string | string[]`，多段路径时为数组。`serveFile` 方法增加 `Array.isArray(splat) ? splat.join('/') : splat` 处理。
 - **resolveInputForAdapter URL 转绝对路径**（已修复）：本地存储返回相对路径 `/api/storage/serve/...`，AI SDK 需要公网可达的绝对 URL。在出口转换时通过 `COZE_PROJECT_DOMAIN_DEFAULT` 拼接为绝对 URL。
-- **Drizzle 迁移静默失败**：drizzle-orm migrator 在迁移 SQL 执行失败时可能静默跳过（记录 hash 但不实际执行 SQL）。需要手动验证列是否存在，必要时手动执行 ALTER TABLE。
+- **Drizzle 迁移静默失败**（已修复）：drizzle-orm migrator 在迁移 SQL 执行失败时会抛出错误而非静默跳过。根因是 migration 0003 中 `ALTER TABLE ... ALTER COLUMN ... DROP CONSTRAINT IF EXISTS` 语法错误（应为 `ALTER TABLE ... DROP CONSTRAINT IF EXISTS`）。已修复语法并将所有迁移 SQL（0003/0004/0005）改为幂等（`ADD COLUMN IF NOT EXISTS`、`CREATE TABLE IF NOT EXISTS`、`CREATE INDEX IF NOT EXISTS`）。
+- **环境变量 DATABASE_URL 覆盖**（已修复）：沙箱环境注入的 `DATABASE_URL` 环境变量优先于 `.env` 文件（`dotenv` 的 `override: false`）。`.env` 中的 `DATABASE_URL` 指向旧数据库（159.75.76.131），而实际运行使用沙箱数据库。手动 SQL 操作必须使用 `process.env.DATABASE_URL` 而非 `.env` 中的值。
 - **AI SDK "t.data is not iterable" 错误**：`coze-coding-dev-sdk` 内部在调用 `/api/v3/images/generations` 时直接 `for(let e of t.data)` 迭代，当 API 返回的 `data` 不是数组（如 token 权限不足或 API 返回非预期格式）时抛出此错误。已在三个适配器（Image/Video/LLM）中增加 try-catch 包装，捕获 `is not iterable` 和 `Cannot read properties` 错误并转换为有意义的中文提示（如"请检查 COZE_LOOP_API_TOKEN 是否具有图片生成权限"）。
 
 ## 关键架构决策
