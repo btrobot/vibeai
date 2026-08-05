@@ -278,10 +278,14 @@ export class StorageService {
     this.logger.log(`Downloading from ${sourceUrl} for user ${userId}`);
 
     // 1. 下载
+    // 某些 AI 平台返回的 URL（如 Replicate 的 replicate.delivery）会重定向到 CDN，
+    // 且部分 CDN 会拒绝无 User-Agent 的请求，因此显式设置 UA 提升兼容性
     const response = await axios.get(sourceUrl, {
       responseType: 'arraybuffer',
       timeout: 120000,
       maxContentLength: 500 * 1024 * 1024, // 500MB max
+      maxRedirects: 5,
+      headers: { 'User-Agent': 'VibeAI/1.0 (+https://github.com/btrobot/vibeai)' },
     });
     const buffer = Buffer.from(response.data);
 
