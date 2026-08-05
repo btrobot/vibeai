@@ -240,6 +240,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **storage serve 路由 splat 参数**（已修复）：NestJS 11 的 `@Param('splat')` 返回 `string | string[]`，多段路径时为数组。`serveFile` 方法增加 `Array.isArray(splat) ? splat.join('/') : splat` 处理。
 - **resolveInputForAdapter URL 转绝对路径**（已修复）：本地存储返回相对路径 `/api/storage/serve/...`，AI SDK 需要公网可达的绝对 URL。在出口转换时通过 `COZE_PROJECT_DOMAIN_DEFAULT` 拼接为绝对 URL。
 - **Drizzle 迁移静默失败**：drizzle-orm migrator 在迁移 SQL 执行失败时可能静默跳过（记录 hash 但不实际执行 SQL）。需要手动验证列是否存在，必要时手动执行 ALTER TABLE。
+- **AI SDK "t.data is not iterable" 错误**：`coze-coding-dev-sdk` 内部在调用 `/api/v3/images/generations` 时直接 `for(let e of t.data)` 迭代，当 API 返回的 `data` 不是数组（如 token 权限不足或 API 返回非预期格式）时抛出此错误。已在三个适配器（Image/Video/LLM）中增加 try-catch 包装，捕获 `is not iterable` 和 `Cannot read properties` 错误并转换为有意义的中文提示（如"请检查 COZE_LOOP_API_TOKEN 是否具有图片生成权限"）。
 
 ## 关键架构决策
 

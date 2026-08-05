@@ -73,13 +73,27 @@ export class ImageAdapter implements ProtocolAdapter {
 
     this.logger.log(`Image generation: model=${model.sdkModelId}, size=${size}, taskId=${context.taskId}`);
 
-    const response = await this.client.generate({
-      prompt,
-      model: model.sdkModelId,
-      size,
-      watermark,
-      ...(imageInput ? { image: imageInput.length === 1 ? imageInput[0] : imageInput } : {}),
-    });
+    let response: Awaited<ReturnType<typeof this.client.generate>>;
+    try {
+      response = await this.client.generate({
+        prompt,
+        model: model.sdkModelId,
+        size,
+        watermark,
+        ...(imageInput ? { image: imageInput.length === 1 ? imageInput[0] : imageInput } : {}),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // SDK 内部 bug: 当 API 返回的 data 不是数组时，SDK 直接 for...of 抛出 "is not iterable"
+      // 根因通常是 API token 权限不足或 API 返回了非预期格式
+      if (msg.includes('is not iterable') || msg.includes('Cannot read properties')) {
+        this.logger.error(`SDK internal error (likely API token/permission issue): ${msg}`);
+        throw new Error(
+          `图片生成 API 返回了非预期格式的响应。请检查 COZE_LOOP_API_TOKEN 是否具有图片生成权限，或 API 端点是否可达。原始错误: ${msg}`,
+        );
+      }
+      throw err;
+    }
 
     const helper = this.client.getResponseHelper(response);
     if (!helper.success) {

@@ -87,7 +87,21 @@ export class VideoAdapter implements ProtocolAdapter {
     context.onProgress?.(10, '提交生成请求');
     this.logger.log(`Video generation: model=${model.sdkModelId}, taskId=${context.taskId}`);
 
-    const response = await this.client.videoGeneration(content, options);
+    let response: Awaited<ReturnType<typeof this.client.videoGeneration>>;
+    try {
+      response = await this.client.videoGeneration(content, options);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // SDK 内部 bug: 当 API 返回的 data 不是预期格式时，SDK 直接迭代抛出 "is not iterable"
+      // 根因通常是 API token 权限不足或 API 返回了非预期格式
+      if (msg.includes('is not iterable') || msg.includes('Cannot read properties')) {
+        this.logger.error(`SDK internal error (likely API token/permission issue): ${msg}`);
+        throw new Error(
+          `视频生成 API 返回了非预期格式的响应。请检查 COZE_LOOP_API_TOKEN 是否具有视频生成权限，或 API 端点是否可达。原始错误: ${msg}`,
+        );
+      }
+      throw err;
+    }
 
     if (!response.videoUrl) {
       throw new Error(response.response.error_message || '视频生成失败');

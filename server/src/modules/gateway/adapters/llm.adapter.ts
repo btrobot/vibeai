@@ -78,15 +78,38 @@ export class LlmAdapter implements ProtocolAdapter {
 
     this.logger.log(`LLM streaming: model=${model.sdkModelId}, taskId=${context.taskId}`);
 
-    const stream = this.client.stream(messages, llmConfig);
+    let stream: ReturnType<typeof this.client.stream>;
+    try {
+      stream = this.client.stream(messages, llmConfig);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('is not iterable') || msg.includes('Cannot read properties')) {
+        this.logger.error(`SDK internal error (likely API token/permission issue): ${msg}`);
+        throw new Error(
+          `LLM API返回了非预期格式的响应。请检查 COZE_LOOP_API_TOKEN 是否具有 LLM 调用权限。原始错误: ${msg}`,
+        );
+      }
+      throw err;
+    }
 
     let fullContent = '';
-    for await (const chunk of stream) {
-      const text = chunk.content?.toString() ?? '';
-      if (text) {
-        fullContent += text;
-        context.onProgress?.(0, text);
+    try {
+      for await (const chunk of stream) {
+        const text = chunk.content?.toString() ?? '';
+        if (text) {
+          fullContent += text;
+          context.onProgress?.(0, text);
+        }
       }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('is not iterable') || msg.includes('Cannot read properties')) {
+        this.logger.error(`SDK stream error (likely API token/permission issue): ${msg}`);
+        throw new Error(
+          `LLM 流式响应解析失败。请检查 COZE_LOOP_API_TOKEN 权限或网络连接。原始错误: ${msg}`,
+        );
+      }
+      throw err;
     }
 
     return {
