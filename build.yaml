@@ -1,0 +1,11 @@
+schema: build/v1
+project: vibeai
+platform: linux/amd64
+
+base_images:
+  - node
+
+images:
+  - name: vibeai
+    dockerfile: Dockerfile
+    base_image_args: [NODE_IMAGE]

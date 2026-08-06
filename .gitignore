@@ -149,3 +149,6 @@ node-compile-cache/
 .codegraph/
 server/storage/
 assets/
+.omx/
+.codex/
+.artifacts/

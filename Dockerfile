@@ -16,23 +16,34 @@ ARG BUILD_DATE
 ARG GIT_COMMIT
 ARG DEPLOY_REGION=auto
 
+# ─── Forge base image & mirror args ────────────────────────────────
+ARG NODE_IMAGE=node:${NODE_VERSION}-bookworm-slim
+ARG NPM_REGISTRY=""
+ARG APT_MIRROR_HOST="" 
+
 # ============================================================
 # 阶段 1: 全量依赖安装 (deps)
 # ============================================================
-FROM node:${NODE_VERSION}-bookworm-slim AS deps
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 
 ARG DEPLOY_REGION
+ARG NPM_REGISTRY
+ARG APT_MIRROR_HOST
 
-# 镜像源自动检测（npm/apt/corepack）
+# 镜像源配置（forge 注入或 detect-mirror.sh 兜底）
 COPY scripts/detect-mirror.sh /tmp/
-RUN if [ "${DEPLOY_REGION}" = "cn" ] || [ "${DEPLOY_REGION}" = "global" ]; then \
+RUN if [ -n "${APT_MIRROR_HOST}" ]; then \
+      sed -i "s|deb.debian.org|${APT_MIRROR_HOST}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+      sed -i "s|security.debian.org|${APT_MIRROR_HOST}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+    elif [ "${DEPLOY_REGION}" = "cn" ] || [ "${DEPLOY_REGION}" = "global" ]; then \
       bash /tmp/detect-mirror.sh --force-${DEPLOY_REGION}; \
     else \
       bash /tmp/detect-mirror.sh; \
     fi
 
 # 安装 pnpm（固定大版本，兼容 lockfile）
+RUN if [ -n "${NPM_REGISTRY}" ]; then npm config set registry "${NPM_REGISTRY}"; fi
 RUN npm install -g pnpm@9
 
 # 前端依赖（含 devDependencies，构建阶段需要 vite/tsc 等）
@@ -52,7 +63,7 @@ RUN tar cf /tmp/frontend_node_modules.tar node_modules && \
 # ============================================================
 # 阶段 2: 生产依赖裁剪 (prod-deps)
 # ============================================================
-FROM node:${NODE_VERSION}-bookworm-slim AS prod-deps
+FROM ${NODE_IMAGE} AS prod-deps
 WORKDIR /app
 
 RUN npm install -g pnpm@9
@@ -75,7 +86,7 @@ RUN tar cf /tmp/frontend_prod_node_modules.tar node_modules && \
 # ============================================================
 # 阶段 3: 构建应用 (builder)
 # ============================================================
-FROM node:${NODE_VERSION}-bookworm-slim AS builder
+FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 
 RUN npm install -g pnpm@9
@@ -105,7 +116,7 @@ RUN tar cf /tmp/dist.tar dist && \
 # ============================================================
 # 阶段 4: 运行环境 (runner)
 # ============================================================
-FROM node:${NODE_VERSION}-bookworm-slim AS runner
+FROM ${NODE_IMAGE} AS runner
 
 # ─── OCI 标准标签 ───
 ARG PROJECT_NAME=vibeai
@@ -123,7 +134,12 @@ LABEL org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 
 # 最小运行时依赖
-RUN apt-get update && \
+ARG APT_MIRROR_HOST
+RUN if [ -n "${APT_MIRROR_HOST}" ]; then \
+      sed -i "s|deb.debian.org|${APT_MIRROR_HOST}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+      sed -i "s|security.debian.org|${APT_MIRROR_HOST}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+    fi && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
       curl \
     && rm -rf /var/lib/apt/lists/*
