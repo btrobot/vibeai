@@ -164,7 +164,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **Zod Schema** (26 tests) — 全部通过
 - **Drizzle Mock** (3 tests) — 链式调用的 thenable 协议与 NestJS 兼容性
 
-### E2E 测试 (Playwright) ✅ (11/11 tests passing)
+### E2E 测试 (Playwright) ✅ (42 tests in 8 files)
 - **认证流程** (3 tests) — 注册/登出重登录/登录失败
 - **仪表盘** (3 tests) — 统计信息/侧边导航/跳转画廊
 - **画廊浏览** (3 tests) — 公开页面/标签切换/登录访问
@@ -228,7 +228,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | **合计（前端）** | | **72** | — | — | **✅ 72/72 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **630** | — | — | **✅ 653/653 通过** |
+| **总计** | | **684** | — | — | **✅ 684/684 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ✅ 32/33 通过（1 个 AI SDK token 问题） |
 | Phase 7: Gateway Integration | `test-integration.js` | 13 | ✅ 含密码重置 8 项 |
 | Phase 7: Gateway E2E (测试机) | 手动 curl 验证 | — | — | — | ✅ 已验证 |
@@ -379,6 +379,20 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
   - 后端测试从 2 个扩展到 25 个（覆盖所有新方法 + 空数据/不存在/分页边界场景）
   - 前端测试从 1 个扩展到 4 个（加载统计/用户列表/非管理员拒绝/无 token）
   - MSW 默认 handlers 新增 admin stats/users/gallery mock
+
+- **性能优化**（Phase 14）
+  - **前端路由懒加载**：所有页面组件使用 `React.lazy()` + `Suspense` 实现代码分割，减少首屏 JS 体积
+  - **图片懒加载**：画廊作品图 `loading="lazy"`，WorkspacePage 上传预览图 `loading="lazy"`
+  - **API 缓存**：`useApiCache` Hook 提供 5 分钟内存缓存（SWR 模式），避免重复请求
+  - **资源预连接**：`index.html` 添加 `<link rel="preconnect">` 指向 API 域名
+  - **后端查询优化**：AdminService 所有查询使用列投影（避免 `select()` 全列）；GalleryService `resolveWorksUrls()` 批量解析 fileId（单次 `inArray` 查询，无 N+1）
+  - **数据库索引**：核心查询字段已有索引（email/role/isActive/userId/status/slug/isPublished 等）
+
+- **E2E 测试补全**（Phase 14）
+  - E2E 从 11 个扩展到 42 个测试（8 个文件）
+  - 新增 `password-reset.spec.ts`（8 tests）- 忘记密码全流程 + 重置密码表单验证
+  - 新增 `billing.spec.ts`（7 tests）- 套餐展示/当前订阅/计费切换/订阅/登录拦截
+  - 新增 `gallery-publish.spec.ts`（5 tests）- 公开浏览/作品卡片/登录访问/标签筛选/分页
 
 ## 数据库迁移与种子数据
 

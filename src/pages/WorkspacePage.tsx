@@ -550,7 +550,7 @@ export default function WorkspacePage() {
                       {create.capabilitySlug === 'image-generation' || create.capabilitySlug === 'background-removal' || create.capabilitySlug === 'scene-composition' || create.capabilitySlug === 'model-dressing' || create.capabilitySlug === 'image-editing' ? (
                         (create.output as { images?: Array<{ url: string }> | string[] }).images?.map((img, i: number) => {
                           const url = typeof img === 'string' ? img : img.url;
-                          return <img key={i} src={url} alt="" className="max-h-48 rounded object-contain" />;
+                          return <img key={i} src={url} alt="" className="max-h-48 rounded object-contain" loading="lazy" />;
                         })
                       ) : create.capabilitySlug === 'video-generation' || create.capabilitySlug === 'style-cloning' ? (
                         (create.output as { video?: { url: string } | string }).video ? (

@@ -1,19 +1,24 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import { useAuth } from './hooks/useAuth';
+import AppLayout from './components/layout/AppLayout';
+
+// Eager: auth pages (small, needed immediately)
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-import AppLayout from './components/layout/AppLayout';
-import DashboardPage from './pages/DashboardPage';
-import ProjectsPage from './pages/ProjectsPage';
-import WorkspacePage from './pages/WorkspacePage';
-import StoragePage from './pages/StoragePage';
-import BillingPage from './pages/BillingPage';
-import ToolPage from './pages/ToolPage';
-import GalleryPage from './pages/GalleryPage';
-import SettingsPage from './pages/SettingsPage';
-import AdminPage from './pages/AdminPage';
+
+// Lazy: route-level code splitting
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
+const WorkspacePage = lazy(() => import('./pages/WorkspacePage'));
+const StoragePage = lazy(() => import('./pages/StoragePage'));
+const BillingPage = lazy(() => import('./pages/BillingPage'));
+const ToolPage = lazy(() => import('./pages/ToolPage'));
+const GalleryPage = lazy(() => import('./pages/GalleryPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AdminPage = lazy(() => import('./pages/AdminPage'));
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, initializing } = useAuth();
@@ -54,18 +59,18 @@ export default function App() {
           }
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="projects" element={<ProjectsPage />} />
-          <Route path="workspace/:projectId" element={<WorkspacePage />} />
-          <Route path="storage" element={<StoragePage />} />
-          <Route path="billing" element={<BillingPage />} />
-          <Route path="tools/background-removal" element={<ToolPage toolSlug="background-removal" />} />
-          <Route path="tools/scene-composition" element={<ToolPage toolSlug="scene-composition" />} />
-          <Route path="tools/model-dressing" element={<ToolPage toolSlug="model-dressing" />} />
-          <Route path="tools/detail-page" element={<ToolPage toolSlug="detail-page" />} />
-          <Route path="gallery" element={<GalleryPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="admin" element={<AdminPage />} />
+          <Route path="dashboard" element={<Suspense fallback={null}><DashboardPage /></Suspense>} />
+          <Route path="projects" element={<Suspense fallback={null}><ProjectsPage /></Suspense>} />
+          <Route path="workspace/:projectId" element={<Suspense fallback={null}><WorkspacePage /></Suspense>} />
+          <Route path="storage" element={<Suspense fallback={null}><StoragePage /></Suspense>} />
+          <Route path="billing" element={<Suspense fallback={null}><BillingPage /></Suspense>} />
+          <Route path="tools/background-removal" element={<Suspense fallback={null}><ToolPage toolSlug="background-removal" /></Suspense>} />
+          <Route path="tools/scene-composition" element={<Suspense fallback={null}><ToolPage toolSlug="scene-composition" /></Suspense>} />
+          <Route path="tools/model-dressing" element={<Suspense fallback={null}><ToolPage toolSlug="model-dressing" /></Suspense>} />
+          <Route path="tools/detail-page" element={<Suspense fallback={null}><ToolPage toolSlug="detail-page" /></Suspense>} />
+          <Route path="gallery" element={<Suspense fallback={null}><GalleryPage /></Suspense>} />
+          <Route path="settings" element={<Suspense fallback={null}><SettingsPage /></Suspense>} />
+          <Route path="admin" element={<Suspense fallback={null}><AdminPage /></Suspense>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
