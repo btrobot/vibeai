@@ -195,7 +195,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 6: Gallery Service | `gallery.service.test.ts` | 22 | 85.0% | ≥85% | ✅ |
 | Phase 6: Create Service | `create.service.test.ts` | 23 | — | ≥85% | ✅ |
 | Phase 6: User Service | `user.service.test.ts` | 4 | 100% | ≥80% | ✅ |
-| Phase 6: Admin Service | `admin.service.test.ts` | 2 | 100% | ≥60% | ✅ |
+| Phase 6: Admin Service | `admin.service.test.ts` | 25 | 100% | ≥90% | ✅ |
 | Phase 6: Spec Compliance | `spec-compliance.test.ts` | 22 | — | — | ✅ |
 | Phase 6: Dashboard Page | `DashboardPage.test.tsx` | 4 | 100% | ≥30% | ✅ |
 | Phase 6: Billing Page | `BillingPage.test.tsx` | 4 | 85.26% | ≥30% | ✅ |
@@ -224,11 +224,11 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 7: Multi-Provider Fallback | `task-execution.service.test.ts` | 9 | — | ≥85% | ✅ |
 | Phase 7: Gateway Regression | `gateway.regression.test.ts` | 53 | — | — | ✅ |
 | Phase 10: Payment Service | `payment.service.test.ts` | 5 | — | ≥85% | ✅ |
-| **合计（后端）** | | **525** | — | — | **✅ 全部通过** |
+| **合计（后端）** | | **548** | — | — | **✅ 全部通过** |
 | **合计（前端）** | | **72** | — | — | **✅ 72/72 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **630** | — | — | **✅ 630/630 通过** |
+| **总计** | | **630** | — | — | **✅ 653/653 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ✅ 32/33 通过（1 个 AI SDK token 问题） |
 | Phase 7: Gateway Integration | `test-integration.js` | 13 | ✅ 含密码重置 8 项 |
 | Phase 7: Gateway E2E (测试机) | 手动 curl 验证 | — | — | — | ✅ 已验证 |
@@ -371,6 +371,14 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
   - `AuthService.forgotPassword()` 调用 EmailService：邮件发送成功返回"已发送至邮箱"，失败回退返回 token
   - 重置 URL 使用 `COZE_PROJECT_DOMAIN_DEFAULT` 拼接绝对路径
   - 测试 mock：AuthService 构造函数使用 `@Inject(EmailService)` 显式注入，解决 NestJS DI 元数据解析问题
+
+- **管理后台增强**（Phase 13）
+  - AdminService 从 1 个方法扩展到 9 个：getStats / getUsers / banUser / unbanUser / updateUserRole / getGalleryWorks / unpublishWork / deleteWork
+  - AdminController 从 1 个端点扩展到 8 个：GET stats / GET users / PATCH ban / PATCH unban / PATCH role / GET gallery / PATCH unpublish / DELETE work
+  - 前端 AdminPage 重写为标签页界面：数据看板（8 项指标卡片）+ 用户管理（分页表格 + 封禁/解禁/角色切换）+ 内容审核（分页表格 + 取消发布/删除）
+  - 后端测试从 2 个扩展到 25 个（覆盖所有新方法 + 空数据/不存在/分页边界场景）
+  - 前端测试从 1 个扩展到 4 个（加载统计/用户列表/非管理员拒绝/无 token）
+  - MSW 默认 handlers 新增 admin stats/users/gallery mock
 
 ## 数据库迁移与种子数据
 

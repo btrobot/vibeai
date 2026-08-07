@@ -125,6 +125,91 @@ defaultHandlers.push(
     },
   })),
   http.get('/api/billing/payment-status', () => HttpResponse.json({ enabled: false })),
+  // Admin handlers
+  http.get('/api/admin/stats', () => HttpResponse.json({
+    success: true,
+    data: {
+      totalUsers: 100,
+      activeUsers: 80,
+      bannedUsers: 5,
+      totalProjects: 50,
+      totalTasks: 200,
+      failedTasks: 10,
+      totalStorage: 52428800,
+      totalGalleryWorks: 30,
+      publishedGalleryWorks: 25,
+      totalCreditsInCirculation: 5000,
+    },
+  })),
+  http.get('/api/admin/users', ({ request }) => {
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    return HttpResponse.json({
+      success: true,
+      data: {
+        users: [
+          {
+            id: 'u1',
+            email: 'user1@test.com',
+            name: 'User One',
+            avatar: null,
+            role: 'user',
+            credits: 100,
+            isActive: true,
+            isEmailVerified: true,
+            lastLoginAt: '2026-01-15T00:00:00Z',
+            createdAt: '2026-01-01T00:00:00Z',
+          },
+          {
+            id: 'u2',
+            email: 'user2@test.com',
+            name: 'User Two',
+            avatar: null,
+            role: 'admin',
+            credits: 500,
+            isActive: true,
+            isEmailVerified: true,
+            lastLoginAt: null,
+            createdAt: '2026-01-02T00:00:00Z',
+          },
+        ],
+        total: 100,
+        page,
+        totalPages: 10,
+      },
+    });
+  }),
+  http.patch('/api/admin/users/:id/ban', () => HttpResponse.json({ success: true })),
+  http.patch('/api/admin/users/:id/unban', () => HttpResponse.json({ success: true })),
+  http.patch('/api/admin/users/:id/role', () => HttpResponse.json({ success: true })),
+  http.get('/api/admin/gallery', ({ request }) => {
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    return HttpResponse.json({
+      success: true,
+      data: {
+        works: [
+          {
+            id: 'w1',
+            userId: 'u1',
+            title: 'Test Art',
+            type: 'image',
+            prompt: 'A beautiful landscape',
+            modelSlug: 'dall-e-3',
+            isPublished: true,
+            likes: 10,
+            views: 100,
+            createdAt: '2026-01-10T00:00:00Z',
+          },
+        ],
+        total: 30,
+        page,
+        totalPages: 3,
+      },
+    });
+  }),
+  http.patch('/api/admin/gallery/:id/unpublish', () => HttpResponse.json({ success: true })),
+  http.delete('/api/admin/gallery/:id', () => HttpResponse.json({ success: true })),
 );
 
 export const server = setupServer(...defaultHandlers);
