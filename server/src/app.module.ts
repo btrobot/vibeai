@@ -6,6 +6,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { CustomThrottlerGuard } from './common/throttler.guard';
 import { LoggerModule } from './common/logger.module';
+import { EmailModule } from './common/email.module';
 import { HealthService } from './common/health.service';
 import { HttpRequestLoggerMiddleware } from './common/http-request-logger.middleware';
 import { AuthModule } from './modules/auth/auth.module';
@@ -61,6 +62,7 @@ import { DrizzleModule } from './common/drizzle.module';
     ]),
     DrizzleModule,
     LoggerModule,
+    EmailModule,
     WsModule,
     AuthModule,
     StorageModule,

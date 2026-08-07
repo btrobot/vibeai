@@ -13,6 +13,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { EmailService } from '../../common/email.service';
 import { createDrizzleMockForNestJS, mockSingle, mockEmpty, mockReturning } from '../../test/drizzle-mock';
 import { createMockJwtService } from '../../test/nest-test-utils';
 import { buildUser } from '../../test/factories';
@@ -32,16 +33,22 @@ describe('AuthService', () => {
   let authService: AuthService;
   let db: ReturnType<typeof createDrizzleMockForNestJS>;
   let jwtService: ReturnType<typeof createMockJwtService>;
+  let emailService: { isEmailEnabled: ReturnType<typeof vi.fn>; sendPasswordResetEmail: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     db = createDrizzleMockForNestJS();
     jwtService = createMockJwtService();
+    emailService = {
+      isEmailEnabled: vi.fn().mockReturnValue(false),
+      sendPasswordResetEmail: vi.fn().mockResolvedValue(true),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: DRIZZLE, useValue: db },
         { provide: JwtService, useValue: jwtService },
+        { provide: EmailService, useValue: emailService },
       ],
     }).compile();
 
@@ -362,6 +369,33 @@ describe('AuthService', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toBeUndefined();
+    });
+
+    it('邮件服务启用时应发送邮件并返回成功', async () => {
+      mockSingle(db, buildUser({ email: 'test@vibeai.com', isActive: true }));
+      emailService.isEmailEnabled.mockReturnValueOnce(true);
+      emailService.sendPasswordResetEmail.mockResolvedValueOnce(true);
+
+      const result = await authService.forgotPassword({ email: 'test@vibeai.com' });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('重置链接已发送至您的邮箱');
+      expect(result.data).toBeUndefined();
+      expect(emailService.sendPasswordResetEmail).toHaveBeenCalledWith(
+        'test@vibeai.com',
+        expect.stringContaining('/reset-password?token='),
+      );
+    });
+
+    it('邮件发送失败时回退返回令牌', async () => {
+      mockSingle(db, buildUser({ email: 'test@vibeai.com', isActive: true }));
+      emailService.isEmailEnabled.mockReturnValueOnce(true);
+      emailService.sendPasswordResetEmail.mockResolvedValueOnce(false);
+
+      const result = await authService.forgotPassword({ email: 'test@vibeai.com' });
+
+      expect(result.success).toBe(true);
+      expect(result.data.resetToken).toBeDefined();
     });
   });
 

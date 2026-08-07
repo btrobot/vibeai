@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import { EmailService } from '../../common/email.service';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE } from '../../common/drizzle.constants';
 import { users, sessions, loginLogs } from '../../db/schema';
@@ -23,6 +24,7 @@ export class AuthService {
   constructor(
     @Inject(DRIZZLE) private db: PostgresJsDatabase<typeof schema>,
     @Inject(JwtService) private jwtService: JwtService,
+    @Inject(EmailService) private readonly emailService: EmailService,
   ) {
     this.saltRounds = 12;
     this.refreshExpiresIn = '7d';
@@ -310,13 +312,21 @@ export class AuthService {
 
     // In production with email service configured, send via email.
     // In dev/staging without email, return the token directly.
-    const hasEmailService = !!process.env.SMTP_HOST || !!process.env.EMAIL_API_KEY;
+    const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000';
+    const resetUrl = `${domain}/reset-password?token=${resetToken}`;
 
-    if (hasEmailService) {
-      // TODO: Send email with reset link
-      // For now, fall through to return token
+    if (this.emailService.isEmailEnabled()) {
+      const sent = await this.emailService.sendPasswordResetEmail(user.email, resetUrl);
+      if (sent) {
+        return {
+          success: true,
+          message: '重置链接已发送至您的邮箱',
+        };
+      }
+      // Email failed to send, fall through to return token
     }
 
+    // Dev mode: return token directly for testing
     return {
       success: true,
       message: '重置令牌已生成',

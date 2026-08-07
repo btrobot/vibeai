@@ -96,6 +96,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **Phase 9 ✅**: 密码重置 + 集成测试修复 + CustomThrottlerGuard
 - **Phase 10 ✅**: 运维可观测性（结构化日志 + 深度健康检查）+ 支付准备层（Stripe Checkout + Webhook）
 - **Phase 11 ✅**: 生产就绪增强（Swagger/OpenAPI + CI/CD 管道 + 优雅关停 + HTTP 请求日志 + 前端支付集成）
+- **Phase 12 ✅**: 邮件服务（SMTP 集成 + 密码重置真实发信 + EmailService 全局模块）
 
 ## 开发规范
 
@@ -182,7 +183,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 
 | 模块 | 测试文件 | 测试数 | 覆盖率 | 目标 | 状态 |
 |------|---------|-------|--------|------|------|
-| Phase 1: Auth | `auth.service.test.ts` | 21 | 89.43% | ≥90% | ✅ |
+| Phase 1: Auth | `auth.service.test.ts` | 29 | 89.43% | ≥90% | ✅ |
 | Phase 1: Zod Schema | `schema.test.ts` | 26 | 100% | 100% | ✅ |
 | Phase 1: Drizzle Mock | `drizzle-mock.test.ts` | 3 | — | — | ✅ |
 | Phase 2: Storage | `storage.service.test.ts` | 15 | 97.18% | ≥90% | ✅ |
@@ -223,11 +224,11 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 7: Multi-Provider Fallback | `task-execution.service.test.ts` | 9 | — | ≥85% | ✅ |
 | Phase 7: Gateway Regression | `gateway.regression.test.ts` | 53 | — | — | ✅ |
 | Phase 10: Payment Service | `payment.service.test.ts` | 5 | — | ≥85% | ✅ |
-| **合计（后端）** | | **523** | — | — | **✅ 全部通过** |
+| **合计（后端）** | | **525** | — | — | **✅ 全部通过** |
 | **合计（前端）** | | **72** | — | — | **✅ 72/72 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **617** | — | — | **✅ 617/617 通过** |
+| **总计** | | **630** | — | — | **✅ 630/630 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ✅ 32/33 通过（1 个 AI SDK token 问题） |
 | Phase 7: Gateway Integration | `test-integration.js` | 13 | ✅ 含密码重置 8 项 |
 | Phase 7: Gateway E2E (测试机) | 手动 curl 验证 | — | — | — | ✅ 已验证 |
@@ -361,6 +362,15 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 - **LoggerModule 修复**（Phase 11）
   - 原实现 `useClass` + 导出类导致 `UnknownExportException`
   - 修复：注册 `AppLoggerService` 为独立 provider，`APP_LOGGER` 使用 `useExisting` 别名
+- **邮件服务**（Phase 12）
+  - `EmailService`（`server/src/common/email.service.ts`）：基于 `nodemailer` 的 SMTP 发信服务
+  - 全局模块 `EmailModule`（`@Global()`），所有模块可直接注入
+  - 环境变量：`SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`/`SMTP_SECURE`/`SMTP_FROM`
+  - `isEmailEnabled()` 检查 SMTP 是否配置；未配置时密码重置回退返回 token（开发模式）
+  - `sendPasswordResetEmail(to, resetUrl)` 发送 HTML 格式重置邮件（翡翠绿品牌色模板）
+  - `AuthService.forgotPassword()` 调用 EmailService：邮件发送成功返回"已发送至邮箱"，失败回退返回 token
+  - 重置 URL 使用 `COZE_PROJECT_DOMAIN_DEFAULT` 拼接绝对路径
+  - 测试 mock：AuthService 构造函数使用 `@Inject(EmailService)` 显式注入，解决 NestJS DI 元数据解析问题
 
 ## 数据库迁移与种子数据
 
