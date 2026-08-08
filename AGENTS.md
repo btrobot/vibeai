@@ -224,11 +224,11 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | Phase 7: Multi-Provider Fallback | `task-execution.service.test.ts` | 9 | — | ≥85% | ✅ |
 | Phase 7: Gateway Regression | `gateway.regression.test.ts` | 53 | — | — | ✅ |
 | Phase 10: Payment Service | `payment.service.test.ts` | 5 | — | ≥85% | ✅ |
-| **合计（后端）** | | **548** | — | — | **✅ 全部通过** |
+| **合计（后端）** | | **553** | — | — | **✅ 全部通过** |
 | **合计（前端）** | | **72** | — | — | **✅ 72/72 通过** |
 | **合计（合规）** | | **22** | — | — | **✅ 全部通过** |
 | **合计（E2E）** | | **11** | — | — | **✅ 全部通过** |
-| **总计** | | **684** | — | — | **✅ 684/684 通过** |
+| **总计** | | **684** | — | — | **✅ 689/689 通过** |
 | Phase 7: Auth Integration | `test-integration.js` | 10 | ✅ 32/33 通过（1 个 AI SDK token 问题） |
 | Phase 7: Gateway Integration | `test-integration.js` | 13 | ✅ 含密码重置 8 项 |
 | Phase 7: Gateway E2E (测试机) | 手动 curl 验证 | — | — | — | ✅ 已验证 |
@@ -393,6 +393,17 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
   - 新增 `password-reset.spec.ts`（8 tests）- 忘记密码全流程 + 重置密码表单验证
   - 新增 `billing.spec.ts`（7 tests）- 套餐展示/当前订阅/计费切换/订阅/登录拦截
   - 新增 `gallery-publish.spec.ts`（5 tests）- 公开浏览/作品卡片/登录访问/标签筛选/分页
+
+- **OAuth 社交登录**（Phase 15）
+  - `OAuthService`（`server/src/modules/auth/oauth.service.ts`）：Google + GitHub OAuth 2.0 授权码流程
+  - 纯 REST 实现（fetch），无第三方 OAuth 库依赖
+  - `GET /auth/oauth/:provider` -> 重定向到 Provider 授权页（支持 scope/prompt 参数）
+  - `GET /auth/oauth/:provider/callback` -> 交换授权码 -> 获取用户信息 -> 创建/查找/关联用户 -> 生成 JWT -> 重定向到前端
+  - 三种关联场景：已绑定 OAuth 账号直接登录、邮箱已注册关联 OAuth、全新用户创建（随机密码占位）
+  - 前端：`OAuthButtons` 组件（Google/GitHub 按钮）+ `OAuthCallbackPage` 回调页面
+  - 环境变量：`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`、`GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`
+  - 重定向 URL 使用 `COZE_PROJECT_DOMAIN_DEFAULT` 拼接绝对路径
+  - Auth 域新增 2 个操作（oauthRedirect/oauthCallback），AUTH-014~016 规则
 
 ## 数据库迁移与种子数据
 

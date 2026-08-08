@@ -11,9 +11,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
-import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, UnauthorizedException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { EmailService } from '../../common/email.service';
+import { OAuthService } from './oauth.service';
 import { createDrizzleMockForNestJS, mockSingle, mockEmpty, mockReturning } from '../../test/drizzle-mock';
 import { createMockJwtService } from '../../test/nest-test-utils';
 import { buildUser } from '../../test/factories';
@@ -29,11 +30,17 @@ vi.mock('bcryptjs', () => ({
   compare: vi.fn().mockResolvedValue(true),
 }));
 
+// 模拟 crypto
+vi.mock('crypto', () => ({
+  randomBytes: vi.fn(() => Buffer.alloc(32)),
+}));
+
 describe('AuthService', () => {
   let authService: AuthService;
   let db: ReturnType<typeof createDrizzleMockForNestJS>;
   let jwtService: ReturnType<typeof createMockJwtService>;
   let emailService: { isEmailEnabled: ReturnType<typeof vi.fn>; sendPasswordResetEmail: ReturnType<typeof vi.fn> };
+  let oauthService: { exchangeCodeForUser: ReturnType<typeof vi.fn>; getAuthorizationRedirect: ReturnType<typeof vi.fn>; isProviderConfigured: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     db = createDrizzleMockForNestJS();
@@ -42,6 +49,11 @@ describe('AuthService', () => {
       isEmailEnabled: vi.fn().mockReturnValue(false),
       sendPasswordResetEmail: vi.fn().mockResolvedValue(true),
     };
+    oauthService = {
+      exchangeCodeForUser: vi.fn(),
+      getAuthorizationRedirect: vi.fn().mockReturnValue('https://provider.com/auth?client_id=xxx'),
+      isProviderConfigured: vi.fn().mockReturnValue(true),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -49,6 +61,7 @@ describe('AuthService', () => {
         { provide: DRIZZLE, useValue: db },
         { provide: JwtService, useValue: jwtService },
         { provide: EmailService, useValue: emailService },
+        { provide: OAuthService, useValue: oauthService },
       ],
     }).compile();
 
@@ -469,6 +482,77 @@ describe('AuthService', () => {
       await expect(
         authService.resetPassword({ token: 'valid-token', newPassword: 'NewPassword123' }),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('oauthLogin', () => {
+    const oauthProfile = {
+      provider: 'google',
+      providerAccountId: 'google-123',
+      email: 'oauthuser@test.com',
+      name: 'OAuth User',
+      avatar: 'https://avatar.url/photo.jpg',
+    };
+
+    it('已有 OAuth 账号时应直接登录', async () => {
+      const user = buildUser({ id: 'user-1', email: oauthProfile.email, isActive: true, role: 'user' as const });
+      oauthService.exchangeCodeForUser.mockResolvedValueOnce(oauthProfile);
+      // 第一次 .limit(1) 查询: oauth_accounts -> 返回关联记录
+      (db as any).limit.mockResolvedValueOnce([{ userId: 'user-1', provider: 'google', providerAccountId: 'google-123' }]);
+      // 第二次 .limit(1) 查询: users -> 返回用户
+      (db as any).limit.mockResolvedValueOnce([user]);
+
+      const result = await authService.oauthLogin('google', 'valid-code');
+
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect(result).toHaveProperty('user');
+    });
+
+    it('邮箱已存在时应关联 OAuth 账号', async () => {
+      const user = buildUser({ id: 'user-2', email: oauthProfile.email, isActive: true, role: 'user' as const });
+      oauthService.exchangeCodeForUser.mockResolvedValueOnce(oauthProfile);
+      // 第一次 .limit(1) 查询: oauth_accounts -> 无结果
+      (db as any).limit.mockResolvedValueOnce([]);
+      // 第二次 .limit(1) 查询: users by email -> 找到用户
+      (db as any).limit.mockResolvedValueOnce([user]);
+      // insert oauth_accounts -> returning
+      mockReturning(db, { id: 'oa-1' });
+
+      const result = await authService.oauthLogin('google', 'valid-code');
+
+      expect(result).toHaveProperty('accessToken');
+    });
+
+    it('全新用户应创建账号并关联 OAuth', async () => {
+      oauthService.exchangeCodeForUser.mockResolvedValueOnce(oauthProfile);
+      // 第一次 .limit(1) 查询: oauth_accounts -> 无结果
+      (db as any).limit.mockResolvedValueOnce([]);
+      // 第二次 .limit(1) 查询: users by email -> 无结果
+      (db as any).limit.mockResolvedValueOnce([]);
+      // insert users -> returning
+      mockReturning(db, buildUser({ id: 'new-user', email: oauthProfile.email, role: 'user' as const }));
+      // insert oauth_accounts -> returning (需要第二次 returning mock)
+      (db as any).returning.mockResolvedValueOnce([{ id: 'oa-1' }]);
+
+      const result = await authService.oauthLogin('google', 'valid-code');
+
+      expect(result).toHaveProperty('accessToken');
+    });
+
+    it('被封禁用户应拒绝登录', async () => {
+      const user = buildUser({ id: 'user-1', email: oauthProfile.email, isActive: false, role: 'user' as const });
+      oauthService.exchangeCodeForUser.mockResolvedValueOnce(oauthProfile);
+      (db as any).limit.mockResolvedValueOnce([{ userId: 'user-1' }]);
+      (db as any).limit.mockResolvedValueOnce([user]);
+
+      await expect(authService.oauthLogin('google', 'valid-code')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('OAuth 交换失败应抛出异常', async () => {
+      oauthService.exchangeCodeForUser.mockRejectedValueOnce(new Error('Invalid code'));
+
+      await expect(authService.oauthLogin('google', 'invalid-code')).rejects.toThrow();
     });
   });
 });

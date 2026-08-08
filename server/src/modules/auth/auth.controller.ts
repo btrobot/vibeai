@@ -5,23 +5,31 @@ import {
   Patch,
   Body,
   Req,
+  Res,
+  Query,
+  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
   UnauthorizedException,
   Inject,
+  BadRequestException,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { Request } from 'express';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
+import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RegisterDto, LoginDto, RefreshTokenDto, UpdateProfileDto, ChangePasswordDto, ForgotPasswordDto, ResetPasswordDto } from './dto';
+import { OAuthService } from './oauth.service';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(@Inject('AUTH_SERVICE') private readonly authService: AuthService) {}
+  constructor(
+    @Inject('AUTH_SERVICE') private readonly authService: AuthService,
+    @Inject(OAuthService) private readonly oauthService: OAuthService,
+  ) {}
 
   @Post('register')
   @Throttle({ auth: { ttl: 60_000, limit: 5 } })
@@ -89,5 +97,40 @@ export class AuthController {
   @Throttle({ auth: { ttl: 60_000, limit: 5 } })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  // OAuth social login - redirect to provider
+  @Get('oauth/:provider')
+  @ApiOperation({ summary: 'OAuth 登录重定向' })
+  @ApiParam({ name: 'provider', enum: ['google', 'github'] })
+  async oauthRedirect(@Param('provider') provider: string, @Res() res: any) {
+    if (!['google', 'github'].includes(provider)) {
+      throw new BadRequestException('不支持的 OAuth 提供商');
+    }
+    const url = this.oauthService.getAuthorizationRedirect(provider);
+    return res.redirect(url);
+  }
+
+  // OAuth callback - exchange code, create/find user, redirect to frontend
+  @Get('oauth/:provider/callback')
+  @ApiOperation({ summary: 'OAuth 回调' })
+  @ApiParam({ name: 'provider', enum: ['google', 'github'] })
+  async oauthCallback(
+    @Param('provider') provider: string,
+    @Query('code') code: string,
+    @Query('error') error: string,
+    @Res() res: any,
+  ) {
+    if (error) {
+      const frontendBase = process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000';
+      return res.redirect(`${frontendBase}/login?oauth_error=${encodeURIComponent(error)}`);
+    }
+    if (!code) {
+      throw new BadRequestException('缺少授权码');
+    }
+    const result = await this.authService.oauthLogin(provider, code);
+    const frontendBase = process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000';
+    const redirectUrl = `${frontendBase}/oauth-callback?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}`;
+    return res.redirect(redirectUrl);
   }
 }

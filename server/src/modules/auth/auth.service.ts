@@ -5,13 +5,16 @@ import {
   BadRequestException,
   Inject,
   ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { EmailService } from '../../common/email.service';
+import { OAuthService, OAuthUserInfo } from './oauth.service';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE } from '../../common/drizzle.constants';
-import { users, sessions, loginLogs } from '../../db/schema';
+import { users, sessions, loginLogs, oauthAccounts } from '../../db/schema';
 import { RegisterDto, LoginDto, UpdateProfileDto, ChangePasswordDto, ForgotPasswordDto, ResetPasswordDto } from './dto';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
@@ -25,6 +28,7 @@ export class AuthService {
     @Inject(DRIZZLE) private db: PostgresJsDatabase<typeof schema>,
     @Inject(JwtService) private jwtService: JwtService,
     @Inject(EmailService) private readonly emailService: EmailService,
+    @Inject(OAuthService) private readonly oauthService: OAuthService,
   ) {
     this.saltRounds = 12;
     this.refreshExpiresIn = '7d';
@@ -287,6 +291,118 @@ export class AuthService {
       .where(eq(users.id, userId));
 
     return { success: true, message: '密码已修改' };
+  }
+
+  async oauthLogin(provider: string, code: string) {
+    const profile = await this.oauthService.exchangeCodeForUser(provider, code);
+
+    const existingLink = await this.db
+      .select()
+      .from(oauthAccounts)
+      .where(
+        and(
+          eq(oauthAccounts.provider, provider),
+          eq(oauthAccounts.providerAccountId, String(profile.providerAccountId)),
+        ),
+      )
+      .limit(1);
+
+    if (existingLink.length > 0) {
+      const link = existingLink[0];
+      const userResult = await this.db
+        .select()
+        .from(users)
+        .where(eq(users.id, link.userId))
+        .limit(1);
+
+      if (userResult.length === 0) throw new NotFoundException('用户不存在');
+      const user = userResult[0];
+      if (!user.isActive) throw new ForbiddenException('账号已被封禁');
+
+      const tokens = await this.generateTokens(user.id, user.email, user.role);
+      await this.db
+        .update(sessions)
+        .set({ isRevoked: true })
+        .where(eq(sessions.userId, user.id));
+      await this.db.insert(sessions).values({
+        userId: user.id,
+        refreshToken: tokens.refreshToken,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      });
+
+      await this.db
+        .update(users)
+        .set({ lastLoginAt: new Date() })
+        .where(eq(users.id, user.id));
+
+      const { passwordHash, ...safeUser } = user;
+      return { user: safeUser, ...tokens };
+    }
+
+    if (profile.email) {
+      const existingUser = await this.db
+        .select()
+        .from(users)
+        .where(eq(users.email, profile.email))
+        .limit(1);
+
+      if (existingUser.length > 0) {
+        const user = existingUser[0];
+        if (!user.isActive) throw new ForbiddenException('账号已被封禁');
+
+        await this.db.insert(oauthAccounts).values({
+          userId: user.id,
+          provider,
+          providerAccountId: String(profile.providerAccountId),
+          providerData: JSON.stringify(profile),
+        });
+
+        const tokens = await this.generateTokens(user.id, user.email, user.role);
+        await this.db
+          .update(sessions)
+          .set({ isRevoked: true })
+          .where(eq(sessions.userId, user.id));
+        await this.db.insert(sessions).values({
+          userId: user.id,
+          refreshToken: tokens.refreshToken,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        });
+
+        const { passwordHash, ...safeUser } = user;
+        return { user: safeUser, ...tokens };
+      }
+    }
+
+    const randomPassword = crypto.randomBytes(32).toString('hex');
+    const hashedPassword = await bcrypt.hash(randomPassword, this.saltRounds);
+    const [newUser] = await this.db
+      .insert(users)
+      .values({
+        email: profile.email || `oauth_${provider}_${profile.providerAccountId}@placeholder.local`,
+        name: profile.name || `用户${String(profile.providerAccountId).slice(-6)}`,
+        avatar: profile.avatar || null,
+        passwordHash: hashedPassword,
+        role: 'user',
+        isActive: true,
+      })
+      .returning();
+
+    await this.db.insert(oauthAccounts).values({
+      userId: newUser.id,
+      provider,
+      providerAccountId: String(profile.providerAccountId),
+      providerData: JSON.stringify(profile),
+    });
+
+    const tokens = await this.generateTokens(newUser.id, newUser.email, newUser.role);
+    await this.db.insert(sessions).values({
+      userId: newUser.id,
+      refreshToken: tokens.refreshToken,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const { passwordHash, ...safeUser } = newUser;
+    return { user: safeUser, ...tokens };
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {

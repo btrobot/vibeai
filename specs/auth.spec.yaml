@@ -348,6 +348,45 @@ operations:
         condition: resetToken 无效或过期
         message: 重置链接已失效，请重新申请
     test: true
+  - name: oauthRedirect
+    method: GET
+    path: /auth/oauth/:provider
+    description: 重定向到 OAuth 提供商授权页面
+    auth: none
+    pre:
+      - provider 为 'google' 或 'github'
+      - 对应的 client_id 已配置
+    effect:
+      - 重定向到 provider 的 OAuth 授权页面
+      - state 参数防止 CSRF
+    errors:
+      - status: 400
+        condition: 不支持的 provider
+        message: 不支持的 OAuth 提供商
+  - name: oauthCallback
+    method: GET
+    path: /auth/oauth/:provider/callback
+    description: OAuth 回调，交换授权码并登录
+    auth: none
+    pre:
+      - code 参数有效
+      - state 参数匹配
+    effect:
+      - 用 code 换取 access_token
+      - 获取用户信息（email/name/avatar）
+      - 若 oauth_account 已存在 -> 获取关联用户
+      - 若 email 已注册 -> 关联 oauth_account
+      - 若新用户 -> 创建用户 + oauth_account（随机密码）
+      - 生成 JWT + 创建 Session
+      - 重定向前端回调页面（含 accessToken/refreshToken）
+    errors:
+      - status: 400
+        condition: 授权码无效或已使用
+        message: OAuth 授权码无效
+      - status: 500
+        condition: 提供商 API 调用失败
+        message: OAuth 服务暂时不可用
+    test: true
 rules:
   - name: email_unique
     id: AUTH-001

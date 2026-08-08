@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
+import { OAuthButtons } from '@/components/OAuthButtons';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -122,6 +123,7 @@ export default function RegisterPage() {
             </Button>
           </CardContent>
         </form>
+        <OAuthButtons />
         <CardFooter className="justify-center border-t border-border pt-4">
           <p className="text-sm text-muted-foreground">
             已有账户？{' '}
