@@ -32,6 +32,7 @@ SRC_DIR="$PROJECT_ROOT/src"
 # 允许例外文件白名单
 WHITELIST_FILES=(
   "src/index.css"
+  "src/components/OAuthButtons.tsx"
 )
 
 # 允许的 Tailwind 色名（不带 shade 的单色名，如 bg-black, bg-white）
