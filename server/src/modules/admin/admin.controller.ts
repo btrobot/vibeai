@@ -1,8 +1,14 @@
-import { Controller, Get, Patch, Delete, Query, Param, Body, UseGuards, Req, Logger, Inject, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiQuery, ApiOperation } from '@nestjs/swagger';
-import { AdminService } from './admin.service';
+import { Controller, Get, Patch, Delete, Query, Param, Body, Post, UseGuards, Req, Logger, Inject, BadRequestException, Res } from '@nestjs/common';
+import { ApiTags, ApiQuery, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { 
+  AdminUserQueryService, 
+  AdminUserMutationService, 
+  AdminExportService,
+  AdminNotificationService 
+} from './services';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
+import { AdminSendNotificationDto, AdminBroadcastNotificationDto } from './dto/user';
 
 @ApiTags('admin')
 @Controller('admin')
@@ -10,7 +16,12 @@ import type { Request } from 'express';
 export class AdminController {
   private readonly logger = new Logger(AdminController.name);
 
-  constructor(@Inject('ADMIN_SERVICE') private readonly adminService: AdminService) {}
+  constructor(
+    @Inject('ADMIN_USER_QUERY_SERVICE') private readonly queryService: AdminUserQueryService,
+    @Inject('ADMIN_USER_MUTATION_SERVICE') private readonly mutationService: AdminUserMutationService,
+    @Inject('ADMIN_EXPORT_SERVICE') private readonly exportService: AdminExportService,
+    @Inject('ADMIN_NOTIFICATION_SERVICE') private readonly notificationService: AdminNotificationService,
+  ) {}
 
   private checkAdmin(req: Request) {
     const user = (req as any).user;
@@ -26,7 +37,7 @@ export class AdminController {
   @ApiOperation({ summary: '获取平台统计数据' })
   async getStats(@Req() req: Request) {
     this.checkAdmin(req);
-    return await this.adminService.getStats();
+    return await this.queryService.getStats();
   }
 
   // ===== User Management =====
@@ -48,7 +59,89 @@ export class AdminController {
     if (p < 1 || l < 1 || l > 100) {
       throw new BadRequestException('分页参数无效');
     }
-    return await this.adminService.getUsers(p, l, search);
+    return await this.queryService.getUsers(p, l, search);
+  }
+
+  @Get('users/search')
+  @ApiOperation({ summary: '搜索用户' })
+  async searchUsers(
+    @Req() req: Request,
+    @Query('keyword') keyword?: string,
+    @Query('limit') limit?: string,
+  ) {
+    this.checkAdmin(req);
+    const l = limit ? parseInt(limit, 10) : 10;
+    if (l < 1 || l > 50) {
+      throw new BadRequestException('限制参数无效（1-50）');
+    }
+    if (!keyword) {
+      throw new BadRequestException('搜索关键词不能为空');
+    }
+    return await this.queryService.searchUsers(keyword, l);
+  }
+
+  @Get('users/export')
+  @ApiOperation({ summary: '导出用户列表为 CSV' })
+  @ApiResponse({ type: 'text/csv', description: 'CSV file' })
+  async exportUsers(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('search') search?: string,
+    @Query('role') role?: 'user' | 'admin',
+    @Query('status') status?: 'active' | 'banned',
+    @Query('limit') limit?: string,
+    @Query('includeBOM') includeBOM?: string,
+  ) {
+    this.checkAdmin(req);
+    
+    const l = limit ? parseInt(limit, 10) : 10000;
+    const bom = includeBOM === 'true' ? true : includeBOM === 'false' ? false : true;
+    
+    this.logger.log(`Admin ${(req as any).user?.email} exporting users`);
+    
+    const result = await this.exportService.exportUsersToCsv({
+      search,
+      role,
+      status,
+      limit: l,
+      includeBOM: bom,
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=${result.filename}`);
+    res.send(result.csv);
+  }
+
+  @Post('users/:id/notify')
+  @ApiOperation({ summary: '发送通知给用户' })
+  async sendNotificationToUser(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: AdminSendNotificationDto,
+  ) {
+    this.checkAdmin(req);
+    this.logger.log(`Admin ${(req as any).user?.email} sending notification to user ${id}`);
+    
+    return await this.notificationService.sendNotificationToUser(
+      id,
+      dto,
+      (req as any).user?.id
+    );
+  }
+
+  @Post('users/notify/broadcast')
+  @ApiOperation({ summary: '群发通知' })
+  async broadcastNotification(
+    @Req() req: Request,
+    @Body() dto: AdminBroadcastNotificationDto,
+  ) {
+    this.checkAdmin(req);
+    this.logger.log(`Admin ${(req as any).user?.email} broadcasting notification to ${dto.targetRole || 'all'} users`);
+    
+    return await this.notificationService.broadcastNotification(
+      dto,
+      (req as any).user?.id
+    );
   }
 
   @Patch('users/:id/ban')
@@ -56,7 +149,7 @@ export class AdminController {
   async banUser(@Req() req: Request, @Param('id') id: string) {
     this.checkAdmin(req);
     this.logger.log(`Admin ${(req as any).user?.email} banned user ${id}`);
-    return await this.adminService.banUser(id);
+    return await this.mutationService.banUser(id);
   }
 
   @Patch('users/:id/unban')
@@ -64,7 +157,7 @@ export class AdminController {
   async unbanUser(@Req() req: Request, @Param('id') id: string) {
     this.checkAdmin(req);
     this.logger.log(`Admin ${(req as any).user?.email} unbanned user ${id}`);
-    return await this.adminService.unbanUser(id);
+    return await this.mutationService.unbanUser(id);
   }
 
   @Patch('users/:id/role')
@@ -79,7 +172,7 @@ export class AdminController {
       throw new BadRequestException('角色不能为空');
     }
     this.logger.log(`Admin ${(req as any).user?.email} changed user ${id} role to ${role}`);
-    return await this.adminService.updateUserRole(id, role);
+    return await this.mutationService.updateUserRole(id, role);
   }
 
   // ===== Gallery Moderation =====
@@ -101,7 +194,37 @@ export class AdminController {
     if (p < 1 || l < 1 || l > 100) {
       throw new BadRequestException('分页参数无效');
     }
-    return await this.adminService.getGalleryWorks(p, l, status);
+    return await this.queryService.getGalleryWorks(p, l, status);
+  }
+
+  @Get('gallery/export')
+  @ApiOperation({ summary: '导出画廊作品为 CSV' })
+  @ApiResponse({ type: 'text/csv', description: 'CSV file' })
+  async exportGallery(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('status') status?: 'published' | 'unpublished',
+    @Query('type') type?: string,
+    @Query('limit') limit?: string,
+    @Query('includeBOM') includeBOM?: string,
+  ) {
+    this.checkAdmin(req);
+    
+    const l = limit ? parseInt(limit, 10) : 10000;
+    const bom = includeBOM === 'true' ? true : includeBOM === 'false' ? false : true;
+    
+    this.logger.log(`Admin ${(req as any).user?.email} exporting gallery`);
+    
+    const result = await this.exportService.exportGalleryToCsv({
+      status,
+      type,
+      limit: l,
+      includeBOM: bom,
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=${result.filename}`);
+    res.send(result.csv);
   }
 
   @Patch('gallery/:id/unpublish')
@@ -109,7 +232,7 @@ export class AdminController {
   async unpublishWork(@Req() req: Request, @Param('id') id: string) {
     this.checkAdmin(req);
     this.logger.log(`Admin ${(req as any).user?.email} unpublished work ${id}`);
-    return await this.adminService.unpublishWork(id);
+    return await this.mutationService.unpublishWork(id);
   }
 
   @Delete('gallery/:id')
@@ -117,6 +240,6 @@ export class AdminController {
   async deleteWork(@Req() req: Request, @Param('id') id: string) {
     this.checkAdmin(req);
     this.logger.log(`Admin ${(req as any).user?.email} deleted work ${id}`);
-    return await this.adminService.deleteWork(id);
+    return await this.mutationService.deleteWork(id);
   }
 }
