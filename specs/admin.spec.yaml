@@ -1,0 +1,75 @@
+domain: admin
+version: '1.0'
+last_updated: '2025-04-06'
+entities:
+  - name: Notification
+    table: notifications
+    description: 用户通知
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk: { table: users, field: id, onDelete: cascade }
+      - name: type
+        type: varchar(20)
+        notNull: true
+        default: in_app
+      - name: title
+        type: varchar(200)
+        notNull: true
+      - name: content
+        type: text
+        notNull: true
+      - name: link
+        type: text
+        nullable: true
+      - name: icon
+        type: text
+        nullable: true
+      - name: isRead
+        type: boolean
+        notNull: true
+        default: false
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: notifications_user_id_idx
+        columns: [userId]
+      - name: notifications_is_read_idx
+        columns: [isRead]
+operations:
+  - name: sendNotificationToUser
+    method: POST
+    path: /admin/users/:id/notify
+    auth: jwt
+    description: 向指定用户发送通知
+  - name: broadcastNotification
+    method: POST
+    path: /admin/users/notify/broadcast
+    auth: jwt
+    description: 向多个用户群发通知
+rules:
+  - id: ADMIN-001
+    level: error
+    severity: error
+    description: 管理员不能封禁自己
+    enforcement: service
+    test: ban an active user
+  - id: ADMIN-002
+    level: error
+    severity: error
+    description: 不能封禁管理员账户
+    enforcement: service
+    test: banning an admin
+  - id: ADMIN-003
+    level: error
+    severity: error
+    description: 用户角色只能是 user 或 admin
+    enforcement: service
+    test: update user role to admin

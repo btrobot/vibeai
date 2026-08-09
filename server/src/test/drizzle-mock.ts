@@ -55,8 +55,27 @@ export function createDrizzleMock(): DrizzleMock {
     // ── 写入链（链式，返回自身） ──
     insert: vi.fn(() => chainable),
     values: vi.fn(() => chainable),
-    update: vi.fn(() => chainable),
-    set: vi.fn(() => chainable),
+    update: vi.fn(() => {
+      // 返回一个对象，其中 set 是原始的 db.set spy
+      return {
+        ...chainable,
+        set: chainable.set, // 使用原始的 db.set spy
+      };
+    }),
+    set: vi.fn(function(values: any) {
+      // 更新 chainable._result 中的数据（总是更新原始 chainable）
+      if (chainable._result && chainable._result.length > 0) {
+        chainable._result = [{ ...chainable._result[0], ...values }];
+      }
+      // 返回包含 returning 的对象以支持链式调用
+      return {
+        ...chainable,
+        execute: chainable.execute,
+        all: chainable.all,
+        get: chainable.get,
+        returning: chainable.returning,
+      };
+    }).mockName('db.set'), // 添加 mockName 便于调试
     delete: vi.fn(() => chainable),
 
     // ── 事务支持 ──

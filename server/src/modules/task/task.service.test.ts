@@ -278,7 +278,7 @@ describe('TaskService', () => {
 
       const result = await service.cancelTask('task-1', 'user-1');
 
-      expect(result.status).toBe('queued'); // mock returns same record for both queries
+      expect(result.status).toBe('cancelled'); // service updates status to cancelled
     });
 
     it('should cancel a submitting task', async () => {
@@ -287,7 +287,7 @@ describe('TaskService', () => {
 
       const result = await service.cancelTask('task-1', 'user-1');
 
-      expect(result.status).toBe('submitting'); // mock returns same record
+      expect(result.status).toBe('cancelled'); // service updates status to cancelled
     });
 
     it('should throw NotFoundException when task not found', async () => {
@@ -322,7 +322,7 @@ describe('TaskService', () => {
 
       const result = await service.retryTask('task-4', 'user-1');
 
-      expect(result.status).toBe('failed'); // mock returns same record for getTask + update
+      expect(result.status).toBe('queued'); // service updates status to queued
     });
 
     it('should throw NotFoundException when task not found', async () => {
