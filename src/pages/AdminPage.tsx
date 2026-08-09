@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users,
   BarChart3,
@@ -18,12 +18,16 @@ import {
   ChevronRight,
   Search,
   Crown,
+  Download,
+  Send,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '../hooks/useAuth';
+import { NotificationDialog } from '@/components/admin';
+import { downloadFromUrl, getDownloadTimestamp } from '@/lib/download';
 
 type Tab = 'dashboard' | 'users' | 'gallery';
 
@@ -101,6 +105,13 @@ export default function AdminPage() {
   const [usersSearch, setUsersSearch] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  const [showNotificationDialog, setShowNotificationDialog] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserEmail, setSelectedUserEmail] = useState<string | null>(null);
+  const [broadcastMode, setBroadcastMode] = useState(false);
+
+  const [exportLoading, setExportLoading] = useState<string | null>(null);
+
   const [works, setWorks] = useState<GalleryWork[]>([]);
   const [worksPage, setWorksPage] = useState(1);
   const [worksTotal, setWorksTotal] = useState(0);
@@ -176,6 +187,20 @@ export default function AdminPage() {
     else if (activeTab === 'gallery') fetchWorks(worksPage);
   }, [activeTab, user?.role, usersPage, worksPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Debounce search - trigger search 500ms after user stops typing
+  useEffect(() => {
+    if (activeTab !== 'users') return;
+
+    const timeoutId = setTimeout(() => {
+      if (usersSearch !== '') {
+        setUsersPage(1);
+        fetchUsers(1, usersSearch);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [usersSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleBanUser = async (userId: string) => {
     setActionLoading(`ban-${userId}`);
     try {
@@ -244,6 +269,48 @@ export default function AdminPage() {
   const handleSearch = () => {
     setUsersPage(1);
     fetchUsers(1, usersSearch);
+  };
+
+  const handleNotifyUser = (userId: string, userEmail: string) => {
+    setSelectedUserId(userId);
+    setSelectedUserEmail(userEmail);
+    setBroadcastMode(false);
+    setShowNotificationDialog(true);
+  };
+
+  const handleBroadcastNotification = () => {
+    setSelectedUserId(null);
+    setSelectedUserEmail(null);
+    setBroadcastMode(true);
+    setShowNotificationDialog(true);
+  };
+
+  const handleExportUsers = async () => {
+    setExportLoading('users');
+    try {
+      const filename = `users-${getDownloadTimestamp()}.csv`;
+      await downloadFromUrl('/api/admin/users/export', filename, {
+        headers: { ...getAuthHeaders() },
+      });
+    } catch (error) {
+      console.error('导出失败:', error);
+    } finally {
+      setExportLoading(null);
+    }
+  };
+
+  const handleExportGallery = async () => {
+    setExportLoading('gallery');
+    try {
+      const filename = `gallery-${getDownloadTimestamp()}.csv`;
+      await downloadFromUrl('/api/admin/gallery/export', filename, {
+        headers: { ...getAuthHeaders() },
+      });
+    } catch (error) {
+      console.error('导出失败:', error);
+    } finally {
+      setExportLoading(null);
+    }
   };
 
   if (user?.role !== 'admin') {
@@ -353,18 +420,38 @@ export default function AdminPage() {
       {/* Users Tab */}
       {activeTab === 'users' && (
         <div className="space-y-4">
-          <div className="flex gap-2">
-            <Input
-              placeholder="搜索用户邮箱或姓名..."
-              value={usersSearch}
-              onChange={(e) => setUsersSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              className="max-w-xs"
-            />
-            <Button variant="outline" onClick={handleSearch}>
-              <Search className="h-4 w-4" />
-              搜索
-            </Button>
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              <Input
+                placeholder="搜索用户邮箱或姓名..."
+                value={usersSearch}
+                onChange={(e) => setUsersSearch(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                className="max-w-xs"
+              />
+              <Button variant="outline" onClick={handleSearch}>
+                <Search className="h-4 w-4" />
+                搜索
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleBroadcastNotification}>
+                <Send className="h-4 w-4 mr-2" />
+                群发通知
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleExportUsers}
+                disabled={exportLoading === 'users'}
+              >
+                {exportLoading === 'users' ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                导出用户
+              </Button>
+            </div>
           </div>
 
           {users.length === 0 && !loading ? (
@@ -412,6 +499,14 @@ export default function AdminPage() {
                       <td className="p-3 text-muted-foreground">{formatDate(u.createdAt)}</td>
                       <td className="p-3">
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleNotifyUser(u.id, u.email)}
+                            title="发送通知"
+                          >
+                            <Send className="h-4 w-4" />
+                          </Button>
                           {u.role !== 'admin' && (
                             <>
                               {u.isActive ? (
@@ -505,6 +600,21 @@ export default function AdminPage() {
       {/* Gallery Tab */}
       {activeTab === 'gallery' && (
         <div className="space-y-4">
+          <div className="flex items-center justify-end">
+            <Button
+              variant="outline"
+              onClick={handleExportGallery}
+              disabled={exportLoading === 'gallery'}
+            >
+              {exportLoading === 'gallery' ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              导出作品
+            </Button>
+          </div>
+
           {works.length === 0 && !loading ? (
             <EmptyState icon={ImageIcon} title="暂无作品" description="画廊中还没有作品" />
           ) : (
@@ -614,6 +724,26 @@ export default function AdminPage() {
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       )}
+
+      {/* Notification Dialog */}
+      <NotificationDialog
+        open={showNotificationDialog}
+        onOpenChange={(open) => {
+          setShowNotificationDialog(open);
+          if (!open) {
+            setSelectedUserId(null);
+            setSelectedUserEmail(null);
+            setBroadcastMode(false);
+          }
+        }}
+        userId={selectedUserId || undefined}
+        userEmail={selectedUserEmail || undefined}
+        broadcastMode={broadcastMode}
+        userCount={broadcastMode ? usersTotal : undefined}
+        onSuccess={() => {
+          if (activeTab === 'users') fetchUsers(usersPage, usersSearch);
+        }}
+      />
     </div>
   );
 }
