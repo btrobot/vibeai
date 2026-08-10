@@ -41,6 +41,11 @@ export class CreateOrderDto {
   @IsOptional()
   metadata?: Record<string, unknown>;
 
+  @ApiPropertyOptional({ example: 'SAVE20', description: '促销码' })
+  @IsString()
+  @IsOptional()
+  promoCode?: string;
+
   @ApiPropertyOptional({ description: '过期时间（ISO 8601格式）' })
   @IsString()
   @IsOptional()

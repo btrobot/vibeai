@@ -2,9 +2,10 @@ import { Injectable, Logger, NotFoundException, BadRequestException, Inject } fr
 import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
-import { subscriptionPlans, subscriptions, invoices } from '../../db/schema/billing';
+import { subscriptionPlans, subscriptions, invoices, creditUsage } from '../../db/schema/billing';
 import { users } from '../../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { payments, refunds as refundsTable } from '../../db/schema/payments';
+import { eq, and, sql } from 'drizzle-orm';
 import type Stripe from 'stripe';
 
 export interface CheckoutSessionResult {
@@ -80,7 +81,7 @@ export class PaymentService {
     const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000';
 
     const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
+      mode: 'subscription',
       payment_method_types: ['card'],
       customer_email: user.email,
       line_items: [
@@ -88,14 +89,24 @@ export class PaymentService {
           price_data: {
             currency: 'cny',
             product_data: {
-              name: `${plan.name} - ${billingCycle === 'yearly' ? '年付' : '月付'}`,
+              name: plan.name,
               description: plan.description || undefined,
             },
-            unit_amount: Math.round(amount * 100), // Stripe uses cents
+            unit_amount: Math.round(amount * 100),
+            recurring: {
+              interval: billingCycle === 'yearly' ? 'year' : 'month',
+            },
           },
           quantity: 1,
         },
       ],
+      subscription_data: {
+        metadata: {
+          userId,
+          planSlug,
+          billingCycle,
+        },
+      },
       success_url: `${domain}/billing?session_id={CHECKOUT_SESSION_ID}&status=success`,
       cancel_url: `${domain}/billing?status=cancelled`,
       client_reference_id: JSON.stringify({
@@ -138,11 +149,35 @@ export class PaymentService {
     switch (event.type) {
       case 'checkout.session.completed': {
         await this.handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
-        return { processed: true, action: 'subscription_activated' };
+        return { processed: true, action: 'subscription_created' };
+      }
+      case 'customer.subscription.created': {
+        await this.handleSubscriptionCreated(event.data.object as Stripe.Subscription);
+        return { processed: true, action: 'subscription_confirmed' };
+      }
+      case 'customer.subscription.updated': {
+        await this.handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
+        return { processed: true, action: 'subscription_updated' };
+      }
+      case 'customer.subscription.deleted': {
+        await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+        return { processed: true, action: 'subscription_cancelled' };
       }
       case 'invoice.paid': {
         await this.handleInvoicePaid(event.data.object as Stripe.Invoice);
-        return { processed: true, action: 'invoice_recorded' };
+        return { processed: true, action: 'subscription_renewed' };
+      }
+      case 'invoice.payment_failed': {
+        await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+        return { processed: true, action: 'payment_failed' };
+      }
+      case 'charge.refund.updated': {
+        await this.handleChargeRefundUpdated(event.data.object as Stripe.Refund);
+        return { processed: true, action: 'refund_updated' };
+      }
+      case 'charge.refunded': {
+        await this.handleChargeRefunded(event.data.object as Stripe.Charge);
+        return { processed: true, action: 'charge_refunded' };
       }
       default:
         this.logger.log(`Unhandled event type: ${event.type}`);
@@ -222,16 +257,19 @@ export class PaymentService {
   }
 
   private async handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
-    // Record invoice for history
-    if (!invoice.customer_email) return;
+    // Record invoice for history and renew credits
+    if (!invoice.customer_email && !invoice.customer) return;
 
     const [user] = await this.db
       .select()
       .from(users)
-      .where(eq(users.email, invoice.customer_email))
+      .where(eq(users.email, invoice.customer_email || ''))
       .limit(1);
 
-    if (!user) return;
+    if (!user) {
+      this.logger.warn(`User not found for invoice ${invoice.id}`);
+      return;
+    }
 
     // Check if invoice already recorded (idempotency)
     const [existing] = await this.db
@@ -245,16 +283,213 @@ export class PaymentService {
       return;
     }
 
+    // Find subscription by Stripe subscription ID
+    const [sub] = await this.db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, (invoice as any).subscription as string))
+      .limit(1);
+
+    if (!sub) {
+      this.logger.warn(`Subscription not found for invoice ${invoice.id}`);
+      return;
+    }
+
+    // Get plan details
+    const [plan] = await this.db
+      .select()
+      .from(subscriptionPlans)
+      .where(eq(subscriptionPlans.id, sub.planId))
+      .limit(1);
+
+    if (!plan) {
+      this.logger.warn(`Plan not found for subscription ${sub.id}`);
+      return;
+    }
+
+    // Record invoice
     await this.db.insert(invoices).values({
       userId: user.id,
+      subscriptionId: sub.id,
       stripeInvoiceId: invoice.id,
       amount: String(invoice.total / 100),
       currency: invoice.currency || 'cny',
       status: 'paid',
-      description: invoice.description || 'Stripe Invoice',
+      description: `${plan.name} - 订阅续费`,
+      periodStart: invoice.period_start ? new Date(invoice.period_start * 1000) : null,
+      periodEnd: invoice.period_end ? new Date(invoice.period_end * 1000) : null,
       paidAt: new Date(),
     });
 
-    this.logger.log(`Invoice recorded: ${invoice.id} for user ${user.id}`);
+    // Renew credits
+    await this.db.transaction(async (tx) => {
+      // Reset subscription credits
+      await tx.update(subscriptions)
+        .set({
+          creditsRemaining: plan.credits,
+          creditsUsed: 0,
+          currentPeriodStart: new Date(invoice.period_start * 1000),
+          currentPeriodEnd: new Date(invoice.period_end * 1000),
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.id, sub.id));
+
+      // Add credits to user balance
+      await tx.update(users)
+        .set({
+          credits: sql`${users.credits} + ${plan.credits}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      // Record credit addition
+      await tx.insert(creditUsage).values({
+        userId: user.id,
+        subscriptionId: sub.id,
+        taskId: null,
+        credits: plan.credits,
+        action: 'plan_renewal',
+        description: `订阅续费：${plan.name}`,
+        balanceAfter: (user.credits || 0) + plan.credits,
+      });
+    });
+
+    this.logger.log(`Subscription renewed: user=${user.id}, invoice=${invoice.id}, credits=${plan.credits}`);
+  }
+
+  private async handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
+    this.logger.warn(`Invoice payment failed: ${invoice.id}, subscription=${(invoice as any).subscription}`);
+
+    // Update subscription status if needed
+    const [sub] = await this.db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, (invoice as any).subscription as string))
+      .limit(1);
+
+    if (sub) {
+      await this.db.update(subscriptions)
+        .set({ status: 'past_due', updatedAt: new Date() })
+        .where(eq(subscriptions.id, sub.id));
+
+      this.logger.log(`Subscription ${sub.id} marked as past_due`);
+    }
+  }
+
+  private async handleSubscriptionCreated(subscription: Stripe.Subscription): Promise<void> {
+    this.logger.log(`Subscription created in Stripe: ${subscription.id}`);
+    // Subscription is already created in checkout.session.completed
+    // This event confirms the subscription is active in Stripe
+  }
+
+  private async handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
+    this.logger.log(`Subscription updated in Stripe: ${subscription.id}`);
+
+    // Sync subscription status from Stripe
+    const [existing] = await this.db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, subscription.id))
+      .limit(1);
+
+    if (!existing) {
+      this.logger.warn(`Local subscription not found for Stripe subscription ${subscription.id}`);
+      return;
+    }
+
+    // Map Stripe status to our status
+    const statusMap: Record<string, string> = {
+      active: 'active',
+      past_due: 'past_due',
+      canceled: 'cancelled',
+      incomplete: 'active',
+      incomplete_expired: 'expired',
+      trialing: 'trialing',
+      unpaid: 'past_due',
+    };
+
+    const newStatus = statusMap[subscription.status] || existing.status;
+
+    await this.db.update(subscriptions)
+      .set({
+        status: newStatus as any,
+        currentPeriodStart: new Date((subscription as any).current_period_start * 1000),
+        currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
+        autoRenew: !(subscription as any).cancel_at_period_end,
+        updatedAt: new Date(),
+      })
+      .where(eq(subscriptions.id, existing.id));
+
+    this.logger.log(`Subscription ${existing.id} updated to status ${newStatus}`);
+  }
+
+  private async handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void> {
+    this.logger.log(`Subscription deleted in Stripe: ${subscription.id}`);
+
+    const [existing] = await this.db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, subscription.id))
+      .limit(1);
+
+    if (!existing) {
+      this.logger.warn(`Local subscription not found for Stripe subscription ${subscription.id}`);
+      return;
+    }
+
+    await this.db.update(subscriptions)
+      .set({
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        autoRenew: false,
+        updatedAt: new Date(),
+      })
+      .where(eq(subscriptions.id, existing.id));
+
+    this.logger.log(`Subscription ${existing.id} cancelled`);
+  }
+
+  private async handleChargeRefundUpdated(refund: Stripe.Refund): Promise<void> {
+    this.logger.log(`Refund updated in Stripe: ${refund.id}, status: ${refund.status}`);
+
+    // Find existing refund record by Stripe refund ID
+    const [existingRefund] = await this.db
+      .select()
+      .from(refundsTable)
+      .where(eq(refundsTable.providerRefundId, refund.id))
+      .limit(1);
+
+    if (!existingRefund) {
+      this.logger.warn(`Local refund not found for Stripe refund ${refund.id}`);
+      return;
+    }
+
+    // Map Stripe status to our status
+    const statusMap: Record<string, string> = {
+      pending: 'pending',
+      succeeded: 'completed',
+      failed: 'failed',
+      canceled: 'rejected',
+    };
+
+    const refundStatus = refund.status || 'pending';
+    const newStatus = statusMap[refundStatus] || existingRefund.status;
+
+    await this.db.update(refundsTable)
+      .set({
+        status: newStatus as any,
+        completedAt: refund.status === 'succeeded' ? new Date(refund.created * 1000) : null,
+      })
+      .where(eq(refundsTable.id, existingRefund.id));
+
+    this.logger.log(`Refund ${existingRefund.id} updated to status ${newStatus}`);
+  }
+
+  private async handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
+    this.logger.log(`Charge refunded: ${charge.id}, amount: ${charge.amount_refunded}`);
+
+    // This event is sent when a charge is refunded
+    // We handle the specific refund in charge.refund.updated
+    // This is just for logging/notification purposes
   }
 }

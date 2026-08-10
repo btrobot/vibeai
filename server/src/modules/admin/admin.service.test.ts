@@ -78,6 +78,7 @@ describe('AdminService', () => {
   describe('banUser', () => {
     it('should ban an active user and return user info', async () => {
       mockSingle(db, { id: 'u1', email: 'user@test.com', isActive: true, role: 'user' });
+      mockSingle(db, { id: 'u1', email: 'user@test.com', isActive: false });
       const result = await service.banUser('u1');
       expect(result.id).toBe('u1');
       expect(result.email).toBe('user@test.com');
@@ -103,7 +104,8 @@ describe('AdminService', () => {
 
   describe('unbanUser', () => {
     it('should unban a banned user and return user info', async () => {
-      mockSingle(db, { id: 'u1', email: 'user@test.com', isActive: false });
+      mockSingle(db, { id: 'u1', email: 'user@test.com', isActive: false, role: 'user' });
+      mockSingle(db, { id: 'u1', email: 'user@test.com', isActive: true });
       const result = await service.unbanUser('u1');
       expect(result.id).toBe('u1');
       expect(result.email).toBe('user@test.com');
@@ -125,6 +127,7 @@ describe('AdminService', () => {
   describe('updateUserRole', () => {
     it('should update user role to admin', async () => {
       mockSingle(db, { id: 'u1', email: 'user@test.com', role: 'user' });
+      mockSingle(db, { id: 'u1', email: 'user@test.com', role: 'admin' });
       const result = await service.updateUserRole('u1', 'admin');
       expect(result.id).toBe('u1');
       expect(result.email).toBe('user@test.com');
@@ -132,6 +135,7 @@ describe('AdminService', () => {
 
     it('should update user role to user', async () => {
       mockSingle(db, { id: 'u1', email: 'admin@test.com', role: 'admin' });
+      mockSingle(db, { id: 'u1', email: 'admin@test.com', role: 'user' });
       const result = await service.updateUserRole('u1', 'user');
       expect(result.id).toBe('u1');
     });
@@ -184,6 +188,7 @@ describe('AdminService', () => {
   describe('unpublishWork', () => {
     it('should unpublish a published work', async () => {
       mockSingle(db, { id: 'w1', title: 'Art 1', isPublished: true });
+      mockSingle(db, { id: 'w1', title: 'Art 1', isPublished: false });
       const result = await service.unpublishWork('w1');
       expect(result.id).toBe('w1');
       expect(result.title).toBe('Art 1');

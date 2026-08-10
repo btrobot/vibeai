@@ -1,9 +1,10 @@
-import { Injectable, Logger, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { orders, orderItems, payments } from '../../db/schema/payments';
 import { eq, and, desc, count } from 'drizzle-orm';
+import { PromoCodeService } from '../commerce/services/promo-code.service';
 import type {
   OrderResponse,
   CreateOrderResponse,
@@ -15,7 +16,10 @@ import type { CreateOrderDto } from './dto';
 export class OrderService {
   private readonly logger = new Logger(OrderService.name);
 
-  constructor(@Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly promoCodeService: PromoCodeService,
+  ) {}
 
   /**
    * Generate unique order number
@@ -48,6 +52,33 @@ export class OrderService {
       calculatedCredits = items.reduce((sum, item) => sum + (item.credits || 0) * item.quantity, 0);
     }
 
+    // 促销码折扣处理
+    let originalAmount: number | null = null;
+    let discountAmount = 0;
+    let promoCodeId: string | null = null;
+    const promoCode = (metadata.promoCode as string) || (dto as any).promoCode;
+
+    if (promoCode) {
+      const validation = await this.promoCodeService.validate({
+        code: promoCode,
+        orderAmount: calculatedAmount,
+        userId,
+      });
+
+      if (!validation.isValid) {
+        throw new BadRequestException(`Promo code invalid: ${validation.message}`);
+      }
+
+      originalAmount = calculatedAmount;
+      discountAmount = validation.discountAmount || 0;
+      calculatedAmount = Math.max(0, calculatedAmount - discountAmount);
+      promoCodeId = validation.promoCode?.id || null;
+
+      this.logger.log(
+        `Promo code applied: ${promoCode}, original=${originalAmount}, discount=${discountAmount}, final=${calculatedAmount}`,
+      );
+    }
+
     // Generate order number
     const orderNumber = this.generateOrderNumber();
 
@@ -64,6 +95,9 @@ export class OrderService {
         status: 'pending',
         metadata,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
+        originalAmount: originalAmount !== null ? originalAmount.toString() : null,
+        discountAmount: discountAmount.toString(),
+        promoCodeId,
       })
       .returning();
 
@@ -203,6 +237,18 @@ export class OrderService {
       throw new NotFoundException('Order not found');
     }
 
+    // 订单完成时记录促销码使用
+    if (status === 'completed' && order.promoCodeId) {
+      const promoCode = (order.metadata as Record<string, unknown>)?.promoCode as string;
+      if (promoCode) {
+        try {
+          await this.promoCodeService.applyCode(promoCode, order.userId, orderId);
+        } catch (err) {
+          this.logger.warn(`Failed to record promo code usage for order ${orderId}: ${(err as Error).message}`);
+        }
+      }
+    }
+
     this.logger.log(`Order status updated: ${orderId} -> ${status}`);
 
     return this.toResponse(order);
@@ -311,6 +357,9 @@ export class OrderService {
       orderNumber: order.orderNumber,
       type: order.type as any,
       amount: order.amount,
+      originalAmount: order.originalAmount,
+      discountAmount: order.discountAmount,
+      promoCodeId: order.promoCodeId,
       currency: order.currency,
       credits: order.credits,
       status: order.status as OrderStatus,

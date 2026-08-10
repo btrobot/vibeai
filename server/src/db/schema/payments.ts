@@ -49,9 +49,14 @@ export const orders = pgTable('orders', {
   // credit_pack | subscription | product | service
 
   // 订单金额和积分
-  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(), // 折扣后实付金额
   currency: varchar('currency', { length: 3 }).notNull().default('USD'),
   credits: integer('credits').notNull().default(0), // 购买积分数
+
+  // 促销码折扣
+  originalAmount: decimal('original_amount', { precision: 10, scale: 2 }), // 折扣前金额（有促销码时记录）
+  discountAmount: decimal('discount_amount', { precision: 10, scale: 2 }).notNull().default('0'), // 折扣金额
+  promoCodeId: uuid('promo_code_id'), // 关联 promo_codes.id（应用层校验，避免 schema 循环依赖）
 
   // 订单状态
   status: varchar('status', { length: 20 }).notNull().default('pending'),

@@ -273,8 +273,9 @@ describe('TaskService', () => {
 
   describe('cancelTask', () => {
     it('should cancel a queued task', async () => {
-      // cancelTask calls getTask (SELECT) then UPDATE — mockSingle covers both
+      // cancelTask calls getTask (SELECT) then UPDATE returning
       mockSingle(db, taskRecord);
+      mockSingle(db, { ...taskRecord, status: 'cancelled' });
 
       const result = await service.cancelTask('task-1', 'user-1');
 
@@ -284,6 +285,7 @@ describe('TaskService', () => {
     it('should cancel a submitting task', async () => {
       const submittingTask = { ...taskRecord, status: 'submitting' };
       mockSingle(db, submittingTask);
+      mockSingle(db, { ...taskRecord, status: 'cancelled' });
 
       const result = await service.cancelTask('task-1', 'user-1');
 
@@ -319,6 +321,7 @@ describe('TaskService', () => {
   describe('retryTask', () => {
     it('should retry a failed task (failed → queued)', async () => {
       mockSingle(db, failedTask);
+      mockSingle(db, { ...failedTask, status: 'queued' });
 
       const result = await service.retryTask('task-4', 'user-1');
 

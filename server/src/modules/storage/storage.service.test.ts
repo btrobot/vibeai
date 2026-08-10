@@ -127,10 +127,9 @@ describe('StorageService', () => {
       const file1 = buildFile({ id: 'file-1', originalName: 'img1.png' });
       const file2 = buildFile({ id: 'file-2', originalName: 'img2.png' });
 
-      // Both count and list queries read from the same _result.
-      // Set _result to file records so the list query returns them.
-      // The count query reads totalResult from _result[0].total, which is undefined,
-      // so total falls back to 0. This is a known limitation of the shared _result.
+      // count 查询先消费一次
+      mockSingle(db, { total: 2 });
+      // list 查询消费第二次
       mockMany(db, [file1, file2]);
 
       const result = await service.listFiles('user-1', { page: 1, pageSize: 20 });

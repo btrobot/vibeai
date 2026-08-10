@@ -18,8 +18,9 @@ describe('AdminUserMutationService', () => {
   describe('banUser', () => {
     it('should ban an active user and return user info', async () => {
       mockSingle(db, { id: 'u1', email: 'user@test.com', isActive: true, role: 'user' });
+      mockSingle(db, { id: 'u1', email: 'user@test.com', isActive: false });
       const result = await service.banUser('u1');
-      
+
       expect(result.id).toBe('u1');
       expect(result.email).toBe('user@test.com');
       expect(result.isActive).toBe(false);
@@ -34,12 +35,14 @@ describe('AdminUserMutationService', () => {
     it('should throw ForbiddenException when banning an admin', async () => {
       mockSingle(db, { id: 'u1', isActive: true, role: 'admin' });
       await expect(service.banUser('u1')).rejects.toThrow(ForbiddenException);
+      mockSingle(db, { id: 'u1', isActive: true, role: 'admin' });
       await expect(service.banUser('u1')).rejects.toThrow('不能封禁管理员账户');
     });
 
     it('should throw BadRequestException when user already banned', async () => {
       mockSingle(db, { id: 'u1', isActive: false, role: 'user' });
       await expect(service.banUser('u1')).rejects.toThrow(BadRequestException);
+      mockSingle(db, { id: 'u1', isActive: false, role: 'user' });
       await expect(service.banUser('u1')).rejects.toThrow('用户已被封禁');
     });
   });
@@ -49,8 +52,9 @@ describe('AdminUserMutationService', () => {
   describe('unbanUser', () => {
     it('should unban a banned user', async () => {
       mockSingle(db, { id: 'u1', email: 'user@test.com', isActive: false });
+      mockSingle(db, { id: 'u1', email: 'user@test.com', isActive: true });
       const result = await service.unbanUser('u1');
-      
+
       expect(result.id).toBe('u1');
       expect(result.isActive).toBe(true);
     });
@@ -63,6 +67,7 @@ describe('AdminUserMutationService', () => {
     it('should throw BadRequestException when user is not banned', async () => {
       mockSingle(db, { id: 'u1', isActive: true });
       await expect(service.unbanUser('u1')).rejects.toThrow(BadRequestException);
+      mockSingle(db, { id: 'u1', isActive: true });
       await expect(service.unbanUser('u1')).rejects.toThrow('用户未被封禁');
     });
   });
@@ -72,22 +77,25 @@ describe('AdminUserMutationService', () => {
   describe('updateUserRole', () => {
     it('should update user role to admin', async () => {
       mockSingle(db, { id: 'u1', email: 'user@test.com', role: 'user' });
+      mockSingle(db, { id: 'u1', email: 'user@test.com', role: 'admin' });
       const result = await service.updateUserRole('u1', 'admin');
-      
+
       expect(result.id).toBe('u1');
       expect(result.role).toBe('admin');
     });
 
     it('should update user role to user', async () => {
       mockSingle(db, { id: 'u1', email: 'admin@test.com', role: 'admin' });
+      mockSingle(db, { id: 'u1', email: 'admin@test.com', role: 'user' });
       const result = await service.updateUserRole('u1', 'user');
-      
+
       expect(result.role).toBe('user');
     });
 
     it('should throw BadRequestException for invalid role', async () => {
       mockSingle(db, { id: 'u1', role: 'user' });
       await expect(service.updateUserRole('u1', 'invalid')).rejects.toThrow(BadRequestException);
+      mockSingle(db, { id: 'u1', role: 'user' });
       await expect(service.updateUserRole('u1', 'invalid')).rejects.toThrow('角色只能是 user 或 admin');
     });
 
@@ -99,6 +107,7 @@ describe('AdminUserMutationService', () => {
     it('should throw BadRequestException when role is already set', async () => {
       mockSingle(db, { id: 'u1', role: 'admin' });
       await expect(service.updateUserRole('u1', 'admin')).rejects.toThrow(BadRequestException);
+      mockSingle(db, { id: 'u1', role: 'admin' });
       await expect(service.updateUserRole('u1', 'admin')).rejects.toThrow('用户角色已为 admin');
     });
   });
@@ -108,8 +117,9 @@ describe('AdminUserMutationService', () => {
   describe('unpublishWork', () => {
     it('should unpublish a published work', async () => {
       mockSingle(db, { id: 'w1', title: 'Test Work', isPublished: true });
+      mockSingle(db, { id: 'w1', title: 'Test Work', isPublished: false });
       const result = await service.unpublishWork('w1');
-      
+
       expect(result.id).toBe('w1');
       expect(result.isPublished).toBe(false);
     });
@@ -123,6 +133,7 @@ describe('AdminUserMutationService', () => {
     it('should throw BadRequestException when work already unpublished', async () => {
       mockSingle(db, { id: 'w1', isPublished: false });
       await expect(service.unpublishWork('w1')).rejects.toThrow(BadRequestException);
+      mockSingle(db, { id: 'w1', isPublished: false });
       await expect(service.unpublishWork('w1')).rejects.toThrow('作品未发布');
     });
   });
@@ -276,6 +287,7 @@ describe('AdminUserMutationService', () => {
       // 设置初始用户状态（用于查询）
       const initialUser = { id: 'u1', email: 'user@example.com', credits: 100 };
       mockSingle(db, initialUser);
+      mockSingle(db, { id: 'u1', email: 'user@example.com', credits: 150 });
 
       const result = await service.adjustCredits('u1', 50, 'Bonus credits', 'admin-id');
 
@@ -286,6 +298,7 @@ describe('AdminUserMutationService', () => {
       // 设置初始用户状态（用于查询）
       const initialUser = { id: 'u1', email: 'user@example.com', credits: 100 };
       mockSingle(db, initialUser);
+      mockSingle(db, { id: 'u1', email: 'user@example.com', credits: 50 });
 
       const result = await service.adjustCredits('u1', -50, 'Used credits', 'admin-id');
 
@@ -300,6 +313,7 @@ describe('AdminUserMutationService', () => {
     it('should throw BadRequestException when insufficient credits', async () => {
       mockSingle(db, { id: 'u1', credits: 10 });
       await expect(service.adjustCredits('u1', -50, 'Test', 'admin-id')).rejects.toThrow(BadRequestException);
+      mockSingle(db, { id: 'u1', credits: 10 });
       await expect(service.adjustCredits('u1', -50, 'Test', 'admin-id')).rejects.toThrow('余额不足');
     });
   });

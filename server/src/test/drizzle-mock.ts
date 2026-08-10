@@ -30,7 +30,9 @@ export interface DrizzleMock {
   execute: ReturnType<typeof vi.fn>;
   all: ReturnType<typeof vi.fn>;
   get: ReturnType<typeof vi.fn>;
-  /** 内部属性：终端结果集 */
+  /** 内部属性：结果队列（支持多次查询） */
+  _resultQueue: unknown[];
+  /** @deprecated 兼容旧测试，等同 _resultQueue[0] */
   _result: unknown[];
   /** thenable 协议，支持 await chainable */
   then: (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => void;
@@ -63,10 +65,7 @@ export function createDrizzleMock(): DrizzleMock {
       };
     }),
     set: vi.fn(function(values: any) {
-      // 更新 chainable._result 中的数据（总是更新原始 chainable）
-      if (chainable._result && chainable._result.length > 0) {
-        chainable._result = [{ ...chainable._result[0], ...values }];
-      }
+      // .set() 是链式方法，不修改队列
       // 返回包含 returning 的对象以支持链式调用
       return {
         ...chainable,
@@ -85,19 +84,54 @@ export function createDrizzleMock(): DrizzleMock {
     }),
 
     // ── 终端操作（返回 Promise） ──
-    execute: vi.fn(() => Promise.resolve(chainable._result ?? [])),
-    all: vi.fn(() => Promise.resolve(chainable._result ?? [])),
-    get: vi.fn(() => Promise.resolve((chainable._result ?? [])[0])),
-    returning: vi.fn(() => Promise.resolve(chainable._result ?? [])),
+    execute: vi.fn(() => {
+      const result = chainable._stickyResult
+        ? (chainable._resultQueue[0] ?? [])
+        : (chainable._resultQueue.length > 0 ? chainable._resultQueue.shift() : []);
+      return Promise.resolve(result);
+    }),
+    all: vi.fn(() => {
+      const result = chainable._stickyResult
+        ? (chainable._resultQueue[0] ?? [])
+        : (chainable._resultQueue.length > 0 ? chainable._resultQueue.shift() : []);
+      return Promise.resolve(result);
+    }),
+    get: vi.fn(() => {
+      const result = chainable._stickyResult
+        ? (chainable._resultQueue[0] ?? [])
+        : (chainable._resultQueue.length > 0 ? chainable._resultQueue.shift() : []);
+      return Promise.resolve(Array.isArray(result) ? result[0] : result);
+    }),
+    returning: vi.fn(() => {
+      const result = chainable._stickyResult
+        ? (chainable._resultQueue[0] ?? [])
+        : (chainable._resultQueue.length > 0 ? chainable._resultQueue.shift() : []);
+      return Promise.resolve(result);
+    }),
 
     // ── thenable 协议：支持 await 无显式终端方法 ──
     // 例如: const [user] = await db.select().from(users).where(eq(...))
     then(resolve: (v: unknown) => void, _reject?: (e: unknown) => void) {
-      resolve(chainable._result ?? []);
+      const result = chainable._stickyResult
+        ? (chainable._resultQueue[0] ?? [])
+        : (chainable._resultQueue.length > 0 ? chainable._resultQueue.shift() : []);
+      resolve(result);
     },
 
-    // 初始化 _result
-    _result: [],
+    // 初始化 _resultQueue
+    _resultQueue: [],
+
+    // @deprecated 兼容旧测试：_result 读写映射到队列首项
+    // 读取：返回队列首项（不消费）
+    // 写入：设置"粘性结果"，所有后续查询都返回此值（模拟旧 _result 行为）
+    get _result() {
+      return chainable._resultQueue[0] ?? [];
+    },
+    set _result(v: unknown[]) {
+      // 旧测试直接赋值，用粘性模式：终端方法不消费队列
+      chainable._resultQueue = [v];
+      chainable._stickyResult = true;
+    },
   };
 
   return chainable as DrizzleMock;
@@ -107,7 +141,8 @@ export function createDrizzleMock(): DrizzleMock {
  * 预设：模拟数据库查询返回空结果
  */
 export function mockEmpty(db: DrizzleMock) {
-  db._result = [];
+  (db as any)._stickyResult = false;
+  db._resultQueue.push([]);
   return db;
 }
 
@@ -115,7 +150,8 @@ export function mockEmpty(db: DrizzleMock) {
  * 预设：模拟数据库查询返回单条记录
  */
 export function mockSingle<T>(db: DrizzleMock, record: T) {
-  db._result = [record];
+  (db as any)._stickyResult = false;
+  db._resultQueue.push([record]);
   return db;
 }
 
@@ -123,7 +159,8 @@ export function mockSingle<T>(db: DrizzleMock, record: T) {
  * 预设：模拟数据库查询返回多条记录
  */
 export function mockMany<T>(db: DrizzleMock, records: T[]) {
-  db._result = records;
+  (db as any)._stickyResult = false;
+  db._resultQueue.push(records);
   return db;
 }
 
@@ -131,7 +168,8 @@ export function mockMany<T>(db: DrizzleMock, records: T[]) {
  * 预设：模拟写入操作返回结果
  */
 export function mockReturning<T>(db: DrizzleMock, records: T[]) {
-  db._result = records;
+  (db as any)._stickyResult = false;
+  db._resultQueue.push(records);
   return db;
 }
 
@@ -151,8 +189,10 @@ export function createDrizzleMockForNestJS(): DrizzleMock {
   // 创建代理对象，委托所有属性到原始 chainable，但隐藏 then 方法
   // 不能使用 Proxy（NestJS 会破坏），也不能删除 then（破坏 await 链）
   const proxy: any = {};
-  for (const key of Object.keys(db)) {
+  // 用 getOwnPropertyNames 以覆盖 getter/setter 定义的属性
+  for (const key of Object.getOwnPropertyNames(db)) {
     if (key === 'then') continue;
+    const desc = Object.getOwnPropertyDescriptor(db, key);
     Object.defineProperty(proxy, key, {
       get: () => (db as any)[key],
       set: (v) => { (db as any)[key] = v; },

@@ -7,3 +7,4 @@ export * from './billing';
 export * from './payments';
 export * from './gallery';
 export * from './notifications';
+export * from './commerce';

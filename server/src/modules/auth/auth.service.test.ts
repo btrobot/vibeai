@@ -338,6 +338,14 @@ describe('AuthService', () => {
     });
 
     it('管理员角色可以访问管理接口', async () => {
+      // refresh 先查 session 再查 user
+      mockSingle(db, {
+        id: 'session-1',
+        userId: 'admin-1',
+        refreshToken: 'admin-token',
+        isRevoked: false,
+        expiresAt: new Date(Date.now() + 86400000),
+      });
       mockSingle(db, { id: 'admin-1', email: 'admin@test.com', name: 'Admin', isActive: true, role: 'admin' });
 
       const result = await authService.refresh('admin-token');

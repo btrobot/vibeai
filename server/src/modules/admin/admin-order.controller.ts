@@ -95,4 +95,54 @@ export class AdminOrderController {
     res.setHeader('Content-Disposition', `attachment; filename=orders_${Date.now()}.csv`);
     res.send(bom + csv);
   }
+
+  // ===== Refund Management Endpoints =====
+
+  /**
+   * Get refund statistics
+   */
+  @Get('refunds/stats')
+  @ApiOperation({ summary: 'Get refund statistics' })
+  @ApiResponse({ status: 200, description: 'Statistics retrieved successfully' })
+  async getRefundStats(@Query('range') range?: string) {
+    return this.adminOrderService.getRefundStats(range);
+  }
+
+  /**
+   * List all refunds
+   */
+  @Get('refunds')
+  @ApiOperation({ summary: 'List all refunds' })
+  @ApiResponse({ status: 200, description: 'Refunds retrieved successfully' })
+  async listRefunds(@Query() query: any) {
+    return this.adminOrderService.listRefunds(query);
+  }
+
+  /**
+   * Get refund detail
+   */
+  @Get('refunds/:id')
+  @ApiOperation({ summary: 'Get refund detail' })
+  @ApiResponse({ status: 200, description: 'Refund retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Refund not found' })
+  async getRefundDetail(@Param('id') id: string) {
+    return this.adminOrderService.getRefundDetail(id);
+  }
+
+  /**
+   * Export refunds to CSV
+   */
+  @Get('refunds/export')
+  @ApiOperation({ summary: 'Export refunds to CSV' })
+  @ApiResponse({ status: 200, description: 'Refunds exported successfully', type: 'text/csv' })
+  async exportRefunds(
+    @Query() query: any,
+    @Res() res: Response,
+  ) {
+    const csv = await this.adminOrderService.exportRefunds(query);
+    const bom = '﻿';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=refunds_${Date.now()}.csv`);
+    res.send(bom + csv);
+  }
 }

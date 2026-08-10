@@ -23,6 +23,9 @@ export interface OrderResponse {
   orderNumber: string;
   type: OrderType;
   amount: string;
+  originalAmount: string | null;
+  discountAmount: string;
+  promoCodeId: string | null;
   currency: string;
   credits: number;
   status: OrderStatus;
