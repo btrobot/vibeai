@@ -9,3 +9,4 @@ export * from './gallery';
 export * from './notifications';
 export * from './commerce';
 export * from './content';
+export * from './audit';

@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, Req, UseGuards, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, Req, UseGuards, Logger, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { SystemConfigService } from './system-config.service';
-import { UpsertSettingDto, SettingQueryDto } from './dto';
+import { UpsertSettingDto, SettingQueryDto, ImportSettingsDto, TestEmailDto } from './dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('system-config')
@@ -31,6 +31,21 @@ export class SystemConfigController {
   }
 
   /**
+   * 管理员：导出所有配置
+   */
+  @Get('export')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '管理员：导出所有配置' })
+  async exportAll(@Req() req: Request, @Res() res: Response) {
+    this.checkAdmin(req);
+    const result = await this.configService.exportAll();
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="system-config-export.json"');
+    res.json(result);
+  }
+
+  /**
    * 管理员：获取所有配置
    */
   @Get()
@@ -40,6 +55,43 @@ export class SystemConfigController {
   async listForAdmin(@Query() query: SettingQueryDto, @Req() req: Request) {
     this.checkAdmin(req);
     return this.configService.listForAdmin(query);
+  }
+
+  /**
+   * 管理员：批量导入配置
+   */
+  @Post('import')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '管理员：批量导入配置' })
+  @ApiResponse({ status: 201, description: '导入完成' })
+  async importAll(@Body() dto: ImportSettingsDto, @Req() req: Request) {
+    this.checkAdmin(req);
+    return this.configService.importAll(dto);
+  }
+
+  /**
+   * 管理员：测试邮件连通性
+   */
+  @Post('test-email')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '管理员：测试邮件连通性' })
+  async testEmail(@Body() dto: TestEmailDto, @Req() req: Request) {
+    this.checkAdmin(req);
+    return this.configService.testEmail(dto.to);
+  }
+
+  /**
+   * 管理员：测试存储连通性
+   */
+  @Post('test-storage')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '管理员：测试存储连通性' })
+  async testStorage(@Req() req: Request) {
+    this.checkAdmin(req);
+    return this.configService.testStorage();
   }
 
   /**
@@ -68,7 +120,7 @@ export class SystemConfigController {
   }
 
   private checkAdmin(req: Request) {
-    const user = (req as any).user;
+    const user = (req as unknown as { user?: { role?: string } }).user;
     if (user?.role !== 'admin') {
       throw new Error('无权限访问');
     }

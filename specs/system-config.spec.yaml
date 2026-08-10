@@ -1,7 +1,7 @@
 domain: system-config
-version: '1.0'
+version: '1.1'
 last_updated: '2026-08-10'
-description: 系统配置域 - 键值对配置存储，支持首页轮播、推荐作品、SEO 等配置
+description: 系统配置域 - 键值对配置存储，支持首页轮播、推荐作品、SEO、站点、安全、邮件、存储、支付等配置
 
 entities:
   - name: SystemSetting
@@ -16,7 +16,7 @@ entities:
         type: varchar(100)
         notNull: true
         unique: true
-        desc: 配置键 如 homepage.carousel, seo.title
+        desc: 配置键 如 homepage.carousel, seo.title, email.smtp_host
       - name: value
         type: jsonb
         notNull: true
@@ -26,7 +26,7 @@ entities:
         type: varchar(50)
         notNull: true
         default: general
-        desc: homepage | seo | feature | general
+        desc: homepage | seo | feature | general | site | register | security | ai | email | storage | payment
       - name: description
         type: text
         nullable: true
@@ -86,7 +86,7 @@ operations:
     input:
       key: { type: string, minLength: 1, maxLength: 100 }
       value: { type: object }
-      category: { type: string, enum: [homepage, seo, feature, general] }
+      category: { type: string, enum: [homepage, seo, feature, general, site, register, security, ai, email, storage, payment] }
     post:
       - "key 已存在则更新，不存在则创建"
     errors:
@@ -103,6 +103,52 @@ operations:
         condition: "配置不存在"
         message: "配置不存在"
         test: should throw NotFoundException when key does not exist
+  - name: exportSettings
+    summary: 管理员导出所有配置
+    method: GET
+    path: /system-config/export
+    auth: jwt
+    pre:
+      - "管理员权限"
+    post:
+      - "返回所有配置的 JSON"
+      - "Content-Disposition: attachment"
+  - name: importSettings
+    summary: 管理员批量导入配置
+    method: POST
+    path: /system-config/import
+    auth: jwt
+    input:
+      settings: { type: array, items: { key, value, category, description, isPublic } }
+    pre:
+      - "管理员权限"
+    post:
+      - "逐条 upsert（存在则更新，不存在则创建）"
+      - "返回 created/updated 计数"
+  - name: testEmail
+    summary: 测试邮件连通性
+    method: POST
+    path: /system-config/test-email
+    auth: jwt
+    input:
+      to: { type: string }
+    pre:
+      - "管理员权限"
+    post:
+      - "检查 EmailService 是否配置"
+      - "发送测试邮件"
+      - "返回成功/失败信息"
+  - name: testStorage
+    summary: 测试存储连通性
+    method: POST
+    path: /system-config/test-storage
+    auth: jwt
+    pre:
+      - "管理员权限"
+    post:
+      - "检查 STORAGE_PROVIDER 环境变量"
+      - "S3 模式检查 bucket/endpoint 配置"
+      - "返回配置状态详情"
 
 rules:
   - id: CONF-001
@@ -121,6 +167,17 @@ rules:
     enforcement: "upsert 方法先查询再决定 insert 或 update"
     test: should update existing setting when key exists
   - id: CONF-004
-    description: "配置分类只能是 homepage/seo/feature/general"
+    description: "配置分类支持 11 种：homepage/seo/feature/general/site/register/security/ai/email/storage/payment"
     severity: warning
     enforcement: "category 字段使用 IsEnum 校验"
+    test: should accept all valid categories
+  - id: CONF-005
+    description: "导入操作逐条 upsert，不使用事务回滚"
+    severity: warning
+    enforcement: "importAll 方法循环 upsert"
+    test: should import settings with created/updated counts
+  - id: CONF-006
+    description: "邮件测试在 SMTP 未配置时返回失败而非抛出异常"
+    severity: error
+    enforcement: "testEmail 方法检查 isEmailEnabled 后返回"
+    test: should return failure when email not configured

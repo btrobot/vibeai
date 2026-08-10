@@ -164,3 +164,62 @@ export function unwrap<T>(result: T & { data?: unknown; success?: boolean }): T 
   }
   return result;
 }
+
+// ===== Audit Log =====
+export interface AuditLog {
+  id: string;
+  adminId: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  changes: Record<string, unknown> | null;
+  status: 'success' | 'failed';
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
+
+export interface AuditLogStats {
+  total: number;
+  failed: number;
+  byAction: Record<string, number>;
+  byEntityType: Record<string, number>;
+}
+
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  create: '创建',
+  update: '更新',
+  delete: '删除',
+  ban: '封禁',
+  unban: '解禁',
+  refund: '退款',
+  export: '导出',
+  update_role: '角色变更',
+  notify: '通知',
+};
+
+export const AUDIT_ENTITY_LABELS: Record<string, string> = {
+  user: '用户',
+  order: '订单',
+  gallery: '画廊',
+  announcement: '公告',
+  config: '配置',
+  product: '商品',
+  promo_code: '促销码',
+  category: '分类',
+  unknown: '未知',
+};
+
+export const SETTING_CATEGORY_LABELS: Record<string, string> = {
+  homepage: '首页',
+  seo: 'SEO',
+  feature: '功能',
+  general: '通用',
+  site: '站点',
+  register: '注册',
+  security: '安全',
+  ai: 'AI',
+  email: '邮件',
+  storage: '存储',
+  payment: '支付',
+};

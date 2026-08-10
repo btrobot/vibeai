@@ -1,6 +1,8 @@
 domain: admin
-version: '1.0'
-last_updated: '2025-04-06'
+version: '1.1'
+last_updated: '2026-08-10'
+description: 管理后台域 - 用户管理、通知、审计日志
+
 entities:
   - name: Notification
     table: notifications
@@ -43,6 +45,59 @@ entities:
         columns: [userId]
       - name: notifications_is_read_idx
         columns: [isRead]
+
+  - name: AuditLog
+    table: audit_logs
+    description: 审计日志 - 记录所有管理员操作
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: adminId
+        type: uuid
+        notNull: true
+        fk: { table: users, field: id, onDelete: set null }
+      - name: action
+        type: varchar(50)
+        notNull: true
+        desc: create | update | delete | ban | unban | refund | export | update_role | notify
+      - name: entityType
+        type: varchar(50)
+        notNull: true
+        desc: user | order | gallery | announcement | config | product | promo_code | category
+      - name: entityId
+        type: varchar(255)
+        nullable: true
+      - name: changes
+        type: jsonb
+        nullable: true
+        desc: 变更前后的值
+      - name: status
+        type: varchar(20)
+        notNull: true
+        default: success
+        desc: success | failed
+      - name: ipAddress
+        type: varchar(50)
+        nullable: true
+      - name: userAgent
+        type: text
+        nullable: true
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: audit_logs_admin_id_idx
+        columns: [adminId]
+      - name: audit_logs_action_idx
+        columns: [action]
+      - name: audit_logs_entity_type_idx
+        columns: [entityType]
+      - name: audit_logs_created_at_idx
+        columns: [createdAt]
+
 operations:
   - name: sendNotificationToUser
     method: POST
@@ -54,6 +109,26 @@ operations:
     path: /admin/users/notify/broadcast
     auth: jwt
     description: 向多个用户群发通知
+  - name: listAuditLogs
+    summary: 获取审计日志列表
+    method: GET
+    path: /admin/audit-logs
+    auth: jwt
+    pre:
+      - "管理员权限"
+    post:
+      - "支持按 adminId/action/entityType/status 筛选"
+      - "支持分页"
+  - name: getAuditStats
+    summary: 获取审计日志统计
+    method: GET
+    path: /admin/audit-logs/stats
+    auth: jwt
+    pre:
+      - "管理员权限"
+    post:
+      - "返回总数、失败数、按操作类型和实体类型的统计"
+
 rules:
   - id: ADMIN-001
     level: error
@@ -73,3 +148,21 @@ rules:
     description: 用户角色只能是 user 或 admin
     enforcement: service
     test: update user role to admin
+  - id: ADMIN-004
+    level: error
+    severity: error
+    description: 审计日志自动记录所有管理员变更操作（POST/PATCH/DELETE）
+    enforcement: AuditInterceptor 全局拦截器
+    test: should create audit log entry on admin mutation
+  - id: ADMIN-005
+    level: error
+    severity: error
+    description: 审计日志记录失败不影响主操作
+    enforcement: AuditInterceptor catch 块吞掉日志写入错误
+    test: should not fail main operation when audit log write fails
+  - id: ADMIN-006
+    level: warning
+    severity: warning
+    description: GET 请求不记录审计日志
+    enforcement: AuditInterceptor 跳过 GET 方法
+    test: should not log audit entry for GET requests

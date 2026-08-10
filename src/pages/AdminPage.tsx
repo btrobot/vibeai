@@ -25,16 +25,17 @@ import {
   Package,
   Ticket as TicketIcon,
   Settings as SettingsIcon,
+  ScrollText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '../hooks/useAuth';
-import { NotificationDialog, AnnouncementTab, OrderTab, ProductTab, PromoCodeTab, SystemConfigTab } from '@/components/admin';
+import { NotificationDialog, AnnouncementTab, OrderTab, ProductTab, PromoCodeTab, SystemConfigTab, AuditLogTab } from '@/components/admin';
 import { downloadFromUrl, getDownloadTimestamp } from '@/lib/download';
 
-type Tab = 'dashboard' | 'users' | 'gallery' | 'announcements' | 'orders' | 'products' | 'promoCodes' | 'systemConfig';
+type Tab = 'dashboard' | 'users' | 'gallery' | 'announcements' | 'orders' | 'products' | 'promoCodes' | 'systemConfig' | 'auditLogs';
 
 interface AdminStats {
   totalUsers: number;
@@ -100,6 +101,7 @@ const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
   { id: 'products', label: '商品管理', icon: Package },
   { id: 'promoCodes', label: '促销码', icon: TicketIcon },
   { id: 'systemConfig', label: '系统配置', icon: SettingsIcon },
+  { id: 'auditLogs', label: '审计日志', icon: ScrollText },
 ];
 
 export default function AdminPage() {
@@ -774,6 +776,9 @@ export default function AdminPage() {
 
       {/* System Config Tab */}
       {activeTab === 'systemConfig' && <SystemConfigTab />}
+
+      {/* Audit Logs Tab */}
+      {activeTab === 'auditLogs' && <AuditLogTab />}
 
       {loading && activeTab === 'dashboard' && (
         <div className="flex items-center justify-center py-12">

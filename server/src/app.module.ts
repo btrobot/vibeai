@@ -3,8 +3,9 @@ import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { CustomThrottlerGuard } from './common/throttler.guard';
+import { AuditInterceptor } from './common/audit.interceptor';
 import { LoggerModule } from './common/logger.module';
 import { EmailModule } from './common/email.module';
 import { HealthService } from './common/health.service';
@@ -89,6 +90,10 @@ import { DrizzleModule } from './common/drizzle.module';
     {
       provide: APP_GUARD,
       useClass: CustomThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
     },
   ],
 })

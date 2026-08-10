@@ -6,6 +6,7 @@ export { default as OrderTab } from './OrderTab';
 export { default as ProductTab } from './ProductTab';
 export { default as PromoCodeTab } from './PromoCodeTab';
 export { default as SystemConfigTab } from './SystemConfigTab';
+export { default as AuditLogTab } from './AuditLogTab';
 
 export type {
   Announcement,
@@ -22,4 +23,6 @@ export type {
   PromoCode,
   PromoCodeType,
   PromoCodeUsageStats,
+  AuditLog,
+  AuditLogStats,
 } from './types';

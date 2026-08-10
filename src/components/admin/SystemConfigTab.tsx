@@ -1,10 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   Settings,
   Plus,
   Pencil,
   Trash2,
   Loader2,
+  Download,
+  Upload,
+  Mail,
+  HardDrive,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,20 +25,14 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import type { SystemSetting, SettingCategory } from './types';
-import { getAuthHeaders, formatDateTime } from './types';
+import { getAuthHeaders, formatDateTime, SETTING_CATEGORY_LABELS } from './types';
 import { useAdminCrud } from '@/hooks/useAdminCrud';
-
-const CATEGORY_LABELS: Record<SettingCategory, string> = {
-  homepage: '首页',
-  seo: 'SEO',
-  feature: '功能',
-  general: '通用',
-};
+import { downloadFromUrl, getDownloadTimestamp } from '@/lib/download';
 
 interface FormState {
   key: string;
   value: string;
-  category: SettingCategory;
+  category: SettingCategory | string;
   description: string;
   isPublic: boolean;
 }
@@ -47,15 +45,22 @@ const EMPTY_FORM: FormState = {
   isPublic: false,
 };
 
+const CATEGORY_OPTIONS = Object.entries(SETTING_CATEGORY_LABELS);
+
 export default function SystemConfigTab() {
-  const [categoryFilter, setCategoryFilter] = useState<'all' | SettingCategory>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [jsonError, setJsonError] = useState<string | null>(null);
+
+  const [emailTestOpen, setEmailTestOpen] = useState(false);
+  const [testEmailAddr, setTestEmailAddr] = useState('');
+  const [emailTestLoading, setEmailTestLoading] = useState(false);
 
   const filterParams = useMemo<Record<string, string>>(() => {
     const params: Record<string, string> = {};
@@ -74,6 +79,8 @@ export default function SystemConfigTab() {
     paginated: false,
     filterParams,
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const openCreate = () => {
     setEditingKey(null);
@@ -116,7 +123,6 @@ export default function SystemConfigTab() {
       };
 
       if (editingKey) {
-        // Edit: optimistically update existing item, POST upsert, rollback on failure
         const existing = items.find((i) => i.key === editingKey);
         if (existing) {
           await patchItem(
@@ -124,7 +130,7 @@ export default function SystemConfigTab() {
             (item) => ({
               ...item,
               value: parsedValue,
-              category: form.category,
+              category: form.category as SettingCategory,
               description: form.description.trim() || null,
               isPublic: form.isPublic,
             }),
@@ -139,7 +145,6 @@ export default function SystemConfigTab() {
           );
         }
       } else {
-        // Create: POST and insert returned item at head (no full refetch)
         const res = await fetch('/api/system-config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -177,6 +182,88 @@ export default function SystemConfigTab() {
     }
   };
 
+  const handleExport = async () => {
+    setActionLoading('export');
+    try {
+      await downloadFromUrl(
+        '/api/system-config/export',
+        `system-config-${getDownloadTimestamp()}.json`,
+        { headers: { ...getAuthHeaders() } },
+      );
+    } catch {
+      // ignore
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setActionLoading('import');
+    setTestResult(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const settings = data.data ?? data;
+      if (!Array.isArray(settings)) {
+        setTestResult('导入失败：文件格式无效');
+        return;
+      }
+      const res = await fetch('/api/system-config/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ settings }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        setTestResult(`导入完成：新增 ${result.data.created} 条，更新 ${result.data.updated} 条`);
+      } else {
+        setTestResult('导入失败');
+      }
+    } catch {
+      setTestResult('导入失败：文件解析错误');
+    } finally {
+      setActionLoading(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleTestEmail = async () => {
+    if (!testEmailAddr.trim()) return;
+    setEmailTestLoading(true);
+    try {
+      const res = await fetch('/api/system-config/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ to: testEmailAddr.trim() }),
+      });
+      const result = await res.json();
+      setTestResult(result.message ?? (result.success ? '测试成功' : '测试失败'));
+    } catch {
+      setTestResult('测试失败：网络错误');
+    } finally {
+      setEmailTestLoading(false);
+    }
+  };
+
+  const handleTestStorage = async () => {
+    setActionLoading('test-storage');
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/system-config/test-storage', {
+        method: 'POST',
+        headers: { ...getAuthHeaders() },
+      });
+      const result = await res.json();
+      setTestResult(result.message ?? (result.success ? '存储正常' : '存储异常'));
+    } catch {
+      setTestResult('测试失败：网络错误');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -184,21 +271,51 @@ export default function SystemConfigTab() {
           <label className="text-sm text-muted-foreground">分类筛选</label>
           <select
             value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value as 'all' | SettingCategory)}
+            onChange={(e) => setCategoryFilter(e.target.value)}
             className="rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="all">全部分类</option>
-            <option value="homepage">首页</option>
-            <option value="seo">SEO</option>
-            <option value="feature">功能</option>
-            <option value="general">通用</option>
+            {CATEGORY_OPTIONS.map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
           </select>
         </div>
-        <Button variant="brand" size="sm" onClick={openCreate}>
-          <Plus className="mr-1 h-4 w-4" />
-          新建配置
-        </Button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleImport}
+          />
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={actionLoading === 'import'}>
+            {actionLoading === 'import' ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Upload className="mr-1 h-4 w-4" />}
+            导入
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={actionLoading === 'export'}>
+            {actionLoading === 'export' ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Download className="mr-1 h-4 w-4" />}
+            导出
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setEmailTestOpen(true)}>
+            <Mail className="mr-1 h-4 w-4" />
+            测试邮件
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleTestStorage} disabled={actionLoading === 'test-storage'}>
+            {actionLoading === 'test-storage' ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <HardDrive className="mr-1 h-4 w-4" />}
+            测试存储
+          </Button>
+          <Button variant="brand" size="sm" onClick={openCreate}>
+            <Plus className="mr-1 h-4 w-4" />
+            新建配置
+          </Button>
+        </div>
       </div>
+
+      {testResult && (
+        <div className="rounded-lg border border-border bg-surface-hover/30 p-3 text-sm text-foreground">
+          {testResult}
+        </div>
+      )}
 
       {loading && items.length === 0 ? (
         <div className="flex items-center justify-center py-12">
@@ -224,7 +341,7 @@ export default function SystemConfigTab() {
                 <tr key={item.id} className="border-b border-border last:border-0 hover:bg-surface-hover/50">
                   <td className="p-3 font-mono text-xs text-foreground">{item.key}</td>
                   <td className="p-3">
-                    <Badge variant="default">{CATEGORY_LABELS[item.category] ?? item.category}</Badge>
+                    <Badge variant="default">{SETTING_CATEGORY_LABELS[item.category] ?? item.category}</Badge>
                   </td>
                   <td className="p-3 max-w-xs truncate font-mono text-xs text-muted-foreground">
                     {JSON.stringify(item.value)}
@@ -304,13 +421,12 @@ export default function SystemConfigTab() {
                 <select
                   id="cfg-category"
                   value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value as SettingCategory })}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
                   className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <option value="homepage">首页</option>
-                  <option value="seo">SEO</option>
-                  <option value="feature">功能</option>
-                  <option value="general">通用</option>
+                  {CATEGORY_OPTIONS.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-2">
@@ -342,6 +458,33 @@ export default function SystemConfigTab() {
             >
               {submitLoading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
               {editingKey ? '保存' : '创建'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email Test Dialog */}
+      <Dialog open={emailTestOpen} onOpenChange={setEmailTestOpen}>
+        <DialogContent showCloseButton>
+          <DialogHeader>
+            <DialogTitle>测试邮件连通性</DialogTitle>
+            <DialogDescription>发送一封测试邮件验证 SMTP 配置</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor="test-email-addr">收件邮箱</Label>
+            <Input
+              id="test-email-addr"
+              type="email"
+              value={testEmailAddr}
+              onChange={(e) => setTestEmailAddr(e.target.value)}
+              placeholder="admin@vibeai.com"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailTestOpen(false)}>取消</Button>
+            <Button variant="brand" onClick={handleTestEmail} disabled={emailTestLoading || !testEmailAddr.trim()}>
+              {emailTestLoading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              发送测试邮件
             </Button>
           </DialogFooter>
         </DialogContent>
