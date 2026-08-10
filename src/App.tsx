@@ -18,6 +18,8 @@ const StoragePage = lazy(() => import('./pages/StoragePage'));
 const BillingPage = lazy(() => import('./pages/BillingPage'));
 const ToolPage = lazy(() => import('./pages/ToolPage'));
 const GalleryPage = lazy(() => import('./pages/GalleryPage'));
+const GalleryDetailPage = lazy(() => import('./pages/GalleryDetailPage'));
+const PublicHomePage = lazy(() => import('./pages/PublicHomePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const OrdersPage = lazy(() => import('./pages/OrdersPage'));
@@ -51,6 +53,16 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
+        <Route path="/gallery" element={<Suspense fallback={null}><GalleryPage /></Suspense>} />
+        <Route path="/gallery/:id" element={<Suspense fallback={null}><GalleryDetailPage /></Suspense>} />
+        <Route
+          path="/home"
+          element={
+            <Suspense fallback={null}>
+              <PublicHomeRoute />
+            </Suspense>
+          }
+        />
 
         {/* Protected Routes */}
         <Route
@@ -71,14 +83,19 @@ export default function App() {
           <Route path="tools/scene-composition" element={<Suspense fallback={null}><ToolPage toolSlug="scene-composition" /></Suspense>} />
           <Route path="tools/model-dressing" element={<Suspense fallback={null}><ToolPage toolSlug="model-dressing" /></Suspense>} />
           <Route path="tools/detail-page" element={<Suspense fallback={null}><ToolPage toolSlug="detail-page" /></Suspense>} />
-          <Route path="gallery" element={<Suspense fallback={null}><GalleryPage /></Suspense>} />
           <Route path="settings" element={<Suspense fallback={null}><SettingsPage /></Suspense>} />
           <Route path="admin" element={<Suspense fallback={null}><AdminPage /></Suspense>} />
           <Route path="orders" element={<Suspense fallback={null}><OrdersPage /></Suspense>} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </div>
   );
+}
+
+function PublicHomeRoute() {
+  const { user } = useAuth();
+  if (user) return <Navigate to="/dashboard" replace />;
+  return <PublicHomePage />;
 }

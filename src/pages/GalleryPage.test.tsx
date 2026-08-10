@@ -24,7 +24,6 @@ describe('GalleryPage', () => {
     renderGalleryPage();
     expect(await screen.findByText('热门')).toBeInTheDocument();
     expect(screen.getByText('最新')).toBeInTheDocument();
-    expect(screen.getByText('关注')).toBeInTheDocument();
   });
 
   it('应该默认选中热门标签', async () => {

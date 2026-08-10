@@ -123,6 +123,7 @@ export default function WorkspacePage() {
   const [uploadedFile, setUploadedFile] = useState<{ fileId: string; previewUrl: string; name: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const publishedIdsRef = useRef<Set<string>>(new Set());
 
   const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -413,6 +414,8 @@ export default function WorkspacePage() {
         }),
       });
       if (res.ok) {
+        publishedIdsRef.current.add(create.id);
+        setCreates((prev) => prev.map((c) => (c.id === create.id ? { ...c } : c)));
         showToast('success', '已发布到画廊');
       } else {
         showToast('error', '发布失败');
@@ -570,13 +573,27 @@ export default function WorkspacePage() {
                     </p>
                     {create.status === 'completed' && (
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handlePublish(create)}
-                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-                        >
-                          <Share2 className="h-3 w-3" />
-                          发布
-                        </button>
+                        {publishedIdsRef.current.has(create.id) ? (
+                          <>
+                            <span className="rounded-md bg-brand/10 px-2 py-1 text-xs text-brand">
+                              ✓ 已发布
+                            </span>
+                            <button
+                              onClick={() => window.open('/gallery', '_blank')}
+                              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                            >
+                              查看画廊
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => handlePublish(create)}
+                            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                          >
+                            <Share2 className="h-3 w-3" />
+                            发布
+                          </button>
+                        )}
                         <button
                           onClick={() => handleModify(create)}
                           className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"

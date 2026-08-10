@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Image as ImageIcon,
   Heart,
   MessageCircle,
   Eye,
-  User,
   TrendingUp,
   Clock,
   Flame,
@@ -20,48 +20,64 @@ interface GalleryItem {
   imageUrl: string;
   authorName: string;
   likes: number;
-  comments: number;
   views: number;
   type: string;
   createdAt: string;
 }
 
+type SortKey = 'popular' | 'latest';
+type TypeFilter = 'all' | 'image' | 'video';
+
 export default function GalleryPage() {
-  const [activeTab, setActiveTab] = useState<'trending' | 'latest' | 'following'>('trending');
+  const [sort, setSort] = useState<SortKey>('popular');
+  const [type, setType] = useState<TypeFilter>('all');
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [featured, setFeatured] = useState<GalleryItem[]>([]);
 
-  const tabs = [
-    { key: 'trending', label: '热门', icon: Flame },
-    { key: 'latest', label: '最新', icon: Clock },
-    { key: 'following', label: '关注', icon: User },
+  const sortTabs = [
+    { key: 'popular' as const, label: '热门', icon: Flame },
+    { key: 'latest' as const, label: '最新', icon: Clock },
   ];
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/gallery/works?sort=${activeTab}`)
+    const params = new URLSearchParams({ sort });
+    if (type !== 'all') params.set('type', type);
+    fetch(`/api/gallery/works?${params}`)
       .then((r) => r.json())
       .then((res) => {
         if (res.success) {
-          setItems((res.data ?? []).map((w: { id: string; title?: string; imageUrl?: string; authorName?: string; likes?: number; comments?: number; views?: number; type?: string; createdAt: string }) => ({
-            id: w.id,
-            title: w.title || '未命名作品',
-            imageUrl: w.imageUrl || '',
-            authorName: w.authorName || '匿名',
-            likes: w.likes ?? 0,
-            comments: w.comments ?? 0,
-            views: w.views ?? 0,
-            type: w.type || 'image',
-            createdAt: w.createdAt,
-          })));
+          setItems(
+            (res.data ?? []).map((w: {
+              id: string;
+              title?: string;
+              imageUrl?: string;
+              authorName?: string;
+              likes?: number;
+              comments?: number;
+              views?: number;
+              type?: string;
+              createdAt: string;
+            }) => ({
+              id: w.id,
+              title: w.title || '未命名作品',
+              imageUrl: w.imageUrl || '',
+              authorName: w.authorName || '匿名',
+              likes: w.likes ?? 0,
+              comments: 0,
+              views: w.views ?? 0,
+              type: w.type || 'image',
+              createdAt: w.createdAt,
+            })),
+          );
         } else {
           setItems([]);
         }
       })
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, [activeTab]);
+  }, [sort, type]);
 
   useEffect(() => {
     fetch('/api/gallery/featured?limit=8')
@@ -69,17 +85,19 @@ export default function GalleryPage() {
       .then((res) => {
         const data = res.data ?? res;
         if (Array.isArray(data)) {
-          setFeatured(data.map((w: Record<string, unknown>) => ({
-            id: String(w.id ?? ''),
-            title: String(w.title ?? '未命名作品'),
-            imageUrl: String(w.imageUrl ?? ''),
-            authorName: String(w.authorName ?? '匿名'),
-            likes: Number(w.likes ?? 0),
-            comments: Number(w.comments ?? 0),
-            views: Number(w.views ?? 0),
-            type: String(w.type ?? 'image'),
-            createdAt: String(w.createdAt ?? new Date().toISOString()),
-          })));
+          setFeatured(
+            data.map((w: Record<string, unknown>) => ({
+              id: String(w.id ?? ''),
+              title: String(w.title ?? '未命名作品'),
+              imageUrl: String(w.imageUrl ?? ''),
+              authorName: String(w.authorName ?? '匿名'),
+              likes: Number(w.likes ?? 0),
+              comments: 0,
+              views: Number(w.views ?? 0),
+              type: String(w.type ?? 'image'),
+              createdAt: String(w.createdAt ?? new Date().toISOString()),
+            })),
+          );
         }
       })
       .catch(() => {});
@@ -104,8 +122,9 @@ export default function GalleryPage() {
           </div>
           <div className="flex gap-4 overflow-x-auto pb-2">
             {featured.map((work) => (
-              <div
+              <Link
                 key={work.id}
+                to={`/gallery/${work.id}`}
                 className="group relative h-40 w-64 shrink-0 cursor-pointer overflow-hidden rounded-xl border border-border bg-card"
               >
                 {work.imageUrl ? (
@@ -133,31 +152,45 @@ export default function GalleryPage() {
                     </span>
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-border">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key as typeof activeTab)}
-              className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-                activeTab === tab.key
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              {tab.label}
-            </button>
-          );
-        })}
+      {/* Sort Tabs + Type Filter */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border">
+        <div className="flex items-center gap-1">
+          {sortTabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setSort(tab.key)}
+                className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  sort === tab.key
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2 pb-2">
+          <label className="text-sm text-muted-foreground">类型</label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as TypeFilter)}
+            className="rounded-lg border border-input bg-transparent px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="all">全部</option>
+            <option value="image">图像</option>
+            <option value="video">视频</option>
+          </select>
+        </div>
       </div>
 
       {/* Loading */}
@@ -183,8 +216,9 @@ export default function GalleryPage() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {items.map((item) => (
-            <div
+            <Link
               key={item.id}
+              to={`/gallery/${item.id}`}
               className="group cursor-pointer rounded-xl border border-border bg-card overflow-hidden transition-colors hover:border-primary/30"
             >
               <div className="aspect-square bg-background">
@@ -210,16 +244,12 @@ export default function GalleryPage() {
                     {item.likes}
                   </span>
                   <span className="flex items-center gap-1">
-                    <MessageCircle className="h-3 w-3" aria-hidden="true" />
-                    {item.comments}
-                  </span>
-                  <span className="flex items-center gap-1">
                     <Eye className="h-3 w-3" aria-hidden="true" />
                     {item.views}
                   </span>
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}

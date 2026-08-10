@@ -22,12 +22,14 @@ export class GalleryService {
     page?: number;
     limit?: number;
     userId?: string;
+    capabilitySlug?: string;
   }) {
-    const { type, sort = 'latest', page = 1, limit = 20, userId } = params;
+    const { type, capabilitySlug, sort = 'latest', page = 1, limit = 20, userId } = params;
     const offset = (page - 1) * limit;
 
     const conditions = [eq(galleryWorks.isPublished, true)];
     if (type) conditions.push(eq(galleryWorks.type, type));
+    if (capabilitySlug) conditions.push(eq(galleryWorks.capabilitySlug, capabilitySlug));
     if (userId) conditions.push(eq(galleryWorks.userId, userId));
 
     const orderBy = sort === 'popular'

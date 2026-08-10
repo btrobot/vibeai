@@ -17,10 +17,47 @@ import { config } from 'dotenv';
 import path from 'path';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { eq } from 'drizzle-orm';
 import { aiModels, modelProviders } from '../db/schema/gateway';
 import { subscriptionPlans } from '../db/schema/billing';
+import { systemSettings } from '../db/schema/content';
 import { SEED_MODELS, SEED_MODEL_PROVIDERS } from '../modules/gateway/seeds/model-seeds';
+
+// ===== System Settings Seed (homepage + seo defaults) =====
+const SEED_SYSTEM_SETTINGS: Array<{
+  key: string;
+  value: Record<string, unknown>;
+  category: 'homepage' | 'seo';
+  description: string;
+}> = [
+  {
+    key: 'homepage.hero',
+    value: {
+      title: 'AI 驱动的内容创作',
+      subtitle: '图片、视频、文案一站式生成',
+      ctaText: '开始创作',
+      ctaLink: '/register',
+    },
+    category: 'homepage',
+    description: '首页 Hero 区块',
+  },
+  {
+    key: 'homepage.featuredLimit',
+    value: { count: 8 },
+    category: 'homepage',
+    description: '首页推荐作品数量',
+  },
+  {
+    key: 'seo.default',
+    value: {
+      title: 'VibeAI - AI 内容创作平台',
+      description: '用 AI 生成图片、视频和文案，电商创作一站式平台',
+      keywords: 'AI生成,图片生成,视频生成,内容创作',
+      ogImage: '/og-default.png',
+    },
+    category: 'seo',
+    description: '默认 SEO 配置',
+  },
+];
 
 // Load .env.local > .env
 config({ path: path.resolve(__dirname, '..', '.env.local'), override: false });
@@ -160,6 +197,19 @@ async function main(): Promise<void> {
       }
       console.log(`[seed] Inserted ${SEED_PLANS.length} subscription plans`);
     }
+
+    // ===== Seed System Settings (homepage + seo) =====
+    console.log('[seed] Upserting system settings...');
+    for (const setting of SEED_SYSTEM_SETTINGS) {
+      await db
+        .insert(systemSettings)
+        .values(setting)
+        .onConflictDoUpdate({
+          target: systemSettings.key,
+          set: { value: setting.value, updatedAt: new Date() },
+        });
+    }
+    console.log(`[seed] Upserted ${SEED_SYSTEM_SETTINGS.length} system settings`);
 
     console.log('[seed] Done!');
   } catch (err) {
