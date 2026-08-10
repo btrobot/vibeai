@@ -44,7 +44,7 @@ async function bootstrap() {
 
   // Stripe webhook needs raw body — register before other middleware
   // Only applies to the webhook endpoint
-  app.use('/api/billing/webhook', (req: any, res: any, next: any) => {
+  app.use('/api/payments/webhook', (req: any, res: any, next: any) => {
     // NestJS by default parses JSON. For webhook, we need the raw body.
     // We store it on req.rawBody if available from the body parser.
     if (req.rawBody) {
@@ -116,6 +116,8 @@ async function bootstrap() {
     )
     .addTag('auth', '认证与用户管理')
     .addTag('billing', '计费与订阅')
+    .addTag('payments', '支付与订单')
+    .addTag('orders', '订单管理')
     .addTag('gateway', 'AI 能力与生成')
     .addTag('storage', '文件存储')
     .addTag('gallery', '画廊与社区')

@@ -19,6 +19,8 @@ import { CreateModule } from './modules/create/create.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { GalleryModule } from './modules/gallery/gallery.module';
+import { PaymentModule } from './modules/payment/payment.module';
+import { OrderModule } from './modules/order/order.module';
 import { DrizzleModule } from './common/drizzle.module';
 
 @Module({
@@ -73,6 +75,8 @@ import { DrizzleModule } from './common/drizzle.module';
     BillingModule,
     AdminModule,
     GalleryModule,
+    PaymentModule,
+    OrderModule,
   ],
   providers: [
     HealthService,

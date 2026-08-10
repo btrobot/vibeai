@@ -7,7 +7,8 @@ import { users } from '../../db/schema';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 
-interface JwtPayload {
+export interface JwtPayload {
+  id: string;  // User ID (same as sub)
   sub: string;
   email: string;
   role: string;
@@ -36,6 +37,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('用户不存在或已被禁用');
     }
 
-    return { userId: user.id, email: user.email, role: user.role };
+    return { id: user.id, email: user.email, role: user.role };
   }
 }

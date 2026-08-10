@@ -1,16 +1,19 @@
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
-import { 
-  AdminUserQueryService, 
-  AdminUserMutationService, 
+import { AdminOrderController } from './admin-order.controller';
+import {
+  AdminUserQueryService,
+  AdminUserMutationService,
   AdminExportService,
-  AdminNotificationService 
+  AdminNotificationService,
+  AdminOrderService,
 } from './services';
 import { DrizzleModule } from '../../common/drizzle.module';
+import { OrderModule } from '../order/order.module';
 
 @Module({
-  imports: [DrizzleModule],
-  controllers: [AdminController],
+  imports: [DrizzleModule, OrderModule],
+  controllers: [AdminController, AdminOrderController],
   providers: [
     {
       provide: 'ADMIN_USER_QUERY_SERVICE',
@@ -28,6 +31,7 @@ import { DrizzleModule } from '../../common/drizzle.module';
       provide: 'ADMIN_NOTIFICATION_SERVICE',
       useClass: AdminNotificationService,
     },
+    AdminOrderService,
   ],
   exports: [
     {
@@ -46,6 +50,7 @@ import { DrizzleModule } from '../../common/drizzle.module';
       provide: 'ADMIN_NOTIFICATION_SERVICE',
       useClass: AdminNotificationService,
     },
+    AdminOrderService,
   ],
 })
 export class AdminModule {}

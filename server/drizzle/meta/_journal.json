@@ -43,6 +43,13 @@
       "when": 1785930000000,
       "tag": "0005_model_providers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1723267200000,
+      "tag": "0006_payments_and_orders",
+      "breakpoints": true
     }
   ]
 }
