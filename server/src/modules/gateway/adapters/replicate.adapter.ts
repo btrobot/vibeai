@@ -184,6 +184,7 @@ export class ReplicateAdapter implements ProtocolAdapter {
     const maxAttempts = Math.ceil((maxWaitTime * 1000) / pollIntervalMs);
     const startTime = Date.now();
 
+    const maxRetryAttempts = 3;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(90, Math.round((elapsed / (maxWaitTime * 1000)) * 80) + 10);
@@ -201,6 +202,15 @@ export class ReplicateAdapter implements ProtocolAdapter {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error');
+        // Transient errors (5xx): retry with backoff; permanent errors (4xx): throw immediately
+        if (response.status >= 500 && attempt + 1 < maxRetryAttempts) {
+          const backoffMs = 1000 * (attempt + 1);
+          this.logger.warn(
+            `Replicate 轮询 transient error (HTTP ${response.status}), retrying in ${backoffMs}ms (attempt ${attempt + 1}/${maxRetryAttempts})`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          continue;
+        }
         throw new Error(
           `Replicate 轮询失败 (HTTP ${response.status}): ${errorText}`,
         );

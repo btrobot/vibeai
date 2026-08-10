@@ -353,6 +353,41 @@ const apiUrl = import.meta.env.VITE_API_URL;
 console.log(apiUrl); // https://api.example.com
 ```
 
+## AI Provider 测试
+
+平台支持两种 AI Provider：**Coze**（默认）和 **Replicate**（多渠道 fallback）。两种都支持 Mock 模式，未配置 token 时自动返回伪造结果，便于本地开发。
+
+### 配置真实 Token
+
+在 `server/.env` 中设置：
+
+```bash
+# Coze（默认使用 COZE_LOOP_BASE_URL=https://api.coze.cn）
+COZE_LOOP_API_TOKEN=your_coze_token
+
+# Replicate（可选，用于多渠道 fallback）
+REPLICATE_API_TOKEN=r8_your_replicate_token
+```
+
+### 验证 Provider 可达性
+
+**1. 通过深度健康检查**
+
+```bash
+curl http://localhost:3001/api/health/deep
+```
+
+返回 `services.aiProviders.coze.status` 为 `mock`（未配置）/ `up`（已配置）。
+
+**2. 通过冒烟脚本**
+
+```bash
+cd server
+pnpm test:ai-smoke
+```
+
+无 token 时直接跳过（exit 0）；有 token 时对每个已配置的 Provider 发起一次最小生成请求验证。
+
 ## 技术栈
 
 **前端：**

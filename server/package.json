@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "pnpm build && node scripts/test-integration.js"
+    "test:integration": "pnpm build && node scripts/test-integration.js",
+    "test:ai-smoke": "pnpm build && node scripts/test-ai-smoke.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

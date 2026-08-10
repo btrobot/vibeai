@@ -11,11 +11,23 @@ export interface HealthCheckResult {
   services: {
     database: ServiceHealth;
     storage: ServiceHealth;
+    aiProviders: AiProvidersHealth;
   };
 }
 
 interface ServiceHealth {
   status: 'up' | 'down';
+  latency?: number;
+  error?: string;
+}
+
+export interface AiProvidersHealth {
+  coze: ProviderHealth;
+  replicate: ProviderHealth;
+}
+
+interface ProviderHealth {
+  status: 'mock' | 'up' | 'down';
   latency?: number;
   error?: string;
 }
@@ -31,12 +43,16 @@ export class HealthService {
     const timestamp = new Date().toISOString();
     const uptime = Math.floor((Date.now() - this.startTime) / 1000);
 
-    const [dbHealth] = await Promise.all([this.checkDatabase()]);
+    const [dbHealth, aiProviders] = await Promise.all([
+      this.checkDatabase(),
+      Promise.resolve(this.checkAiProviders()),
+    ]);
 
     const storageHealth = this.checkStorage();
 
-    const allUp = dbHealth.status === 'up' && storageHealth.status === 'up';
-    const anyDown = dbHealth.status === 'down' || storageHealth.status === 'down';
+    const anyAiDown = aiProviders.coze.status === 'down' || aiProviders.replicate.status === 'down';
+    const allUp = dbHealth.status === 'up' && storageHealth.status === 'up' && !anyAiDown;
+    const anyDown = dbHealth.status === 'down' || storageHealth.status === 'down' || anyAiDown;
 
     return {
       status: anyDown ? 'down' : allUp ? 'ok' : 'degraded',
@@ -45,6 +61,7 @@ export class HealthService {
       services: {
         database: dbHealth,
         storage: storageHealth,
+        aiProviders,
       },
     };
   }
@@ -77,6 +94,35 @@ export class HealthService {
       return { status: 'down', error: 'S3 storage not configured (missing endpoint or bucket)' };
     }
 
+    return { status: 'up' };
+  }
+
+  private checkAiProviders(): AiProvidersHealth {
+    return {
+      coze: this.checkProvider({
+        tokenEnv: 'COZE_LOOP_API_TOKEN',
+        baseUrlEnv: 'COZE_LOOP_BASE_URL',
+        defaultBaseUrl: 'https://api.coze.cn',
+      }),
+      replicate: this.checkProvider({
+        tokenEnv: 'REPLICATE_API_TOKEN',
+        baseUrlEnv: 'REPLICATE_BASE_URL',
+        defaultBaseUrl: 'https://api.replicate.com',
+      }),
+    };
+  }
+
+  private checkProvider(opts: {
+    tokenEnv: string;
+    baseUrlEnv: string;
+    defaultBaseUrl: string;
+  }): ProviderHealth {
+    const token = process.env[opts.tokenEnv];
+    if (!token) {
+      return { status: 'mock' };
+    }
+    // Token present — report as up without blocking on a network ping.
+    // Deep ping is done by test-ai-smoke.js, not on every health check.
     return { status: 'up' };
   }
 }
