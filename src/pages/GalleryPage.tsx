@@ -8,6 +8,8 @@ import {
   TrendingUp,
   Clock,
   Flame,
+  Sparkles,
+  Star,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -28,6 +30,7 @@ export default function GalleryPage() {
   const [activeTab, setActiveTab] = useState<'trending' | 'latest' | 'following'>('trending');
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [featured, setFeatured] = useState<GalleryItem[]>([]);
 
   const tabs = [
     { key: 'trending', label: '热门', icon: Flame },
@@ -60,6 +63,28 @@ export default function GalleryPage() {
       .finally(() => setLoading(false));
   }, [activeTab]);
 
+  useEffect(() => {
+    fetch('/api/gallery/featured?limit=8')
+      .then((r) => r.json())
+      .then((res) => {
+        const data = res.data ?? res;
+        if (Array.isArray(data)) {
+          setFeatured(data.map((w: Record<string, unknown>) => ({
+            id: String(w.id ?? ''),
+            title: String(w.title ?? '未命名作品'),
+            imageUrl: String(w.imageUrl ?? ''),
+            authorName: String(w.authorName ?? '匿名'),
+            likes: Number(w.likes ?? 0),
+            comments: Number(w.comments ?? 0),
+            views: Number(w.views ?? 0),
+            type: String(w.type ?? 'image'),
+            createdAt: String(w.createdAt ?? new Date().toISOString()),
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -69,6 +94,50 @@ export default function GalleryPage() {
           <p className="text-sm text-muted-foreground mt-1">发现其他创作者的精彩作品</p>
         </div>
       </div>
+
+      {/* Featured Works */}
+      {featured.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-brand" />
+            <h2 className="text-lg font-semibold text-foreground">推荐作品</h2>
+          </div>
+          <div className="flex gap-4 overflow-x-auto pb-2">
+            {featured.map((work) => (
+              <div
+                key={work.id}
+                className="group relative h-40 w-64 shrink-0 cursor-pointer overflow-hidden rounded-xl border border-border bg-card"
+              >
+                {work.imageUrl ? (
+                  <img
+                    src={work.imageUrl}
+                    alt={work.title}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-muted">
+                    <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-3">
+                  <p className="truncate text-sm font-medium text-white">{work.title}</p>
+                  <div className="mt-1 flex items-center gap-3 text-xs text-white/80">
+                    <span className="flex items-center gap-1">
+                      <Star className="h-3 w-3" />
+                      {work.likes}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Eye className="h-3 w-3" />
+                      {work.views}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border">

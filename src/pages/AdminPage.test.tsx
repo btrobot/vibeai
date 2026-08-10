@@ -45,7 +45,7 @@ describe('AdminPage', () => {
     expect(screen.getByText('管理后台')).toBeInTheDocument();
   });
 
-  it('应该显示三个标签页', () => {
+  it('应该显示所有标签页', () => {
     render(
       <BrowserRouter>
         <AdminPage />
@@ -54,6 +54,11 @@ describe('AdminPage', () => {
     expect(screen.getByText('数据看板')).toBeInTheDocument();
     expect(screen.getByText('用户管理')).toBeInTheDocument();
     expect(screen.getByText('内容审核')).toBeInTheDocument();
+    expect(screen.getByText('公告管理')).toBeInTheDocument();
+    expect(screen.getByText('订单管理')).toBeInTheDocument();
+    expect(screen.getByText('商品管理')).toBeInTheDocument();
+    expect(screen.getByText('促销码')).toBeInTheDocument();
+    expect(screen.getByText('系统配置')).toBeInTheDocument();
   });
 
   it('应该加载并显示统计数据', async () => {

@@ -20,8 +20,11 @@ import {
   FileText,
   Film,
   MessageSquare,
+  ShoppingCart,
+  Receipt,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import AnnouncementBanner from '../AnnouncementBanner';
 
 const sidebarNav = [
   { to: '/dashboard', label: '仪表盘', icon: LayoutDashboard },
@@ -37,6 +40,7 @@ const sidebarNav = [
     ],
   },
   { to: '/gallery', label: '社区画廊', icon: Image },
+  { to: '/orders', label: '我的订单', icon: Receipt },
   { to: '/settings', label: '设置', icon: Settings },
   { to: '/admin', label: '管理后台', icon: Users },
 ];
@@ -221,6 +225,8 @@ export default function AppLayout() {
             <span className="text-xs text-muted-foreground">额度</span>
           </div>
         </header>
+
+        <AnnouncementBanner />
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto">

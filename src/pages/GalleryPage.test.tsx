@@ -43,4 +43,40 @@ describe('GalleryPage', () => {
     renderGalleryPage();
     expect(await screen.findByText('暂无作品')).toBeInTheDocument();
   });
+
+  it('应该显示推荐作品区域', async () => {
+    global.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes('/featured')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              {
+                id: 'work-1',
+                title: '推荐作品1',
+                imageUrl: 'https://example.com/img1.jpg',
+                authorName: '作者1',
+                likes: 10,
+                comments: 2,
+                views: 100,
+                type: 'image',
+                createdAt: '2026-08-01T00:00:00Z',
+              },
+            ],
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ success: true, data: [] }),
+      };
+    });
+
+    renderGalleryPage();
+    await waitFor(() => {
+      expect(screen.getByText('推荐作品')).toBeInTheDocument();
+      expect(screen.getByText('推荐作品1')).toBeInTheDocument();
+    });
+  });
 });

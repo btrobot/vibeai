@@ -20,16 +20,21 @@ import {
   Crown,
   Download,
   Send,
+  Megaphone,
+  ShoppingCart,
+  Package,
+  Ticket as TicketIcon,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '../hooks/useAuth';
-import { NotificationDialog } from '@/components/admin';
+import { NotificationDialog, AnnouncementTab, OrderTab, ProductTab, PromoCodeTab, SystemConfigTab } from '@/components/admin';
 import { downloadFromUrl, getDownloadTimestamp } from '@/lib/download';
 
-type Tab = 'dashboard' | 'users' | 'gallery';
+type Tab = 'dashboard' | 'users' | 'gallery' | 'announcements' | 'orders' | 'products' | 'promoCodes' | 'systemConfig';
 
 interface AdminStats {
   totalUsers: number;
@@ -90,6 +95,11 @@ const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
   { id: 'dashboard', label: '数据看板', icon: BarChart3 },
   { id: 'users', label: '用户管理', icon: Users },
   { id: 'gallery', label: '内容审核', icon: ImageIcon },
+  { id: 'announcements', label: '公告管理', icon: Megaphone },
+  { id: 'orders', label: '订单管理', icon: ShoppingCart },
+  { id: 'products', label: '商品管理', icon: Package },
+  { id: 'promoCodes', label: '促销码', icon: TicketIcon },
+  { id: 'systemConfig', label: '系统配置', icon: SettingsIcon },
 ];
 
 export default function AdminPage() {
@@ -246,6 +256,22 @@ export default function AdminPage() {
     try {
       await fetch(`/api/admin/gallery/${workId}/unpublish`, { method: 'PATCH', headers: { ...getAuthHeaders() } });
       setWorks((prev) => prev.map((w) => (w.id === workId ? { ...w, isPublished: false } : w)));
+    } catch {
+      // ignore
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handlePublishWork = async (workId: string) => {
+    setActionLoading(`pub-${workId}`);
+    try {
+      await fetch(`/api/gallery/works/${workId}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ isFeatured: false }),
+      });
+      setWorks((prev) => prev.map((w) => (w.id === workId ? { ...w, isPublished: true } : w)));
     } catch {
       // ignore
     } finally {
@@ -654,6 +680,21 @@ export default function AdminPage() {
                       <td className="p-3 text-muted-foreground">{formatDate(w.createdAt)}</td>
                       <td className="p-3">
                         <div className="flex items-center justify-end gap-1">
+                          {!w.isPublished && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handlePublishWork(w.id)}
+                              disabled={actionLoading === `pub-${w.id}`}
+                              title="发布到画廊"
+                            >
+                              {actionLoading === `pub-${w.id}` ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Send className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
                           {w.isPublished && (
                             <Button
                               variant="ghost"
@@ -718,6 +759,21 @@ export default function AdminPage() {
           )}
         </div>
       )}
+
+      {/* Announcement Tab */}
+      {activeTab === 'announcements' && <AnnouncementTab />}
+
+      {/* Orders Tab */}
+      {activeTab === 'orders' && <OrderTab />}
+
+      {/* Products Tab */}
+      {activeTab === 'products' && <ProductTab />}
+
+      {/* Promo Codes Tab */}
+      {activeTab === 'promoCodes' && <PromoCodeTab />}
+
+      {/* System Config Tab */}
+      {activeTab === 'systemConfig' && <SystemConfigTab />}
 
       {loading && activeTab === 'dashboard' && (
         <div className="flex items-center justify-center py-12">
