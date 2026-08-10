@@ -112,8 +112,12 @@ export class AdminOrderService {
     const pendingOrders = Number(pendingResult?.count || 0);
 
     // Calculate total revenue from completed/paid orders
-    // This is simplified - in production you'd sum actual payments
-    const totalRevenue = paidOrders * 10; // Placeholder calculation
+    const [revenueResult] = await this.db
+      .select({ total: sql<number>`COALESCE(SUM(CAST(${orders.amount} AS NUMERIC)), 0)` })
+      .from(orders)
+      .where(sql`${orders.status} IN ('paid', 'completed')`);
+
+    const totalRevenue = Number(revenueResult?.total || 0);
 
     return {
       totalOrders,
