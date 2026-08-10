@@ -1,0 +1,308 @@
+domain: order
+version: '1.0'
+last_updated: '2026-08-10'
+description: 订单域 - 用户购买套餐/信用包/商品的订单创建、查询与状态管理
+
+entities:
+  - name: Order
+    table: orders
+    description: 订单记录 - 用户购买的商品/套餐/信用包
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
+      - name: orderNumber
+        type: varchar(50)
+        notNull: true
+        unique: true
+        desc: 订单号 ORD-YYYYMMDD-XXXXXX
+      - name: type
+        type: varchar(50)
+        notNull: true
+        desc: credit_pack | subscription | product | service
+      - name: amount
+        type: decimal(10,2)
+        notNull: true
+        desc: 折扣后实付金额
+      - name: currency
+        type: varchar(3)
+        notNull: true
+        default: USD
+      - name: credits
+        type: integer
+        notNull: true
+        default: 0
+        desc: 购买积分数
+      - name: originalAmount
+        type: decimal(10,2)
+        nullable: true
+        desc: 折扣前金额
+      - name: discountAmount
+        type: decimal(10,2)
+        notNull: true
+        default: 0
+      - name: promoCodeId
+        type: uuid
+        nullable: true
+        desc: 关联 promo_codes.id（应用层校验）
+      - name: status
+        type: varchar(20)
+        notNull: true
+        default: pending
+        desc: pending | paid | processing | completed | expired | cancelled | failed
+      - name: paymentId
+        type: uuid
+        nullable: true
+        fk:
+          table: payments
+          field: id
+          onDelete: set null
+      - name: metadata
+        type: jsonb
+        default: '{}'
+      - name: expiresAt
+        type: timestamp
+        nullable: true
+      - name: completedAt
+        type: timestamp
+        nullable: true
+      - name: cancelledAt
+        type: timestamp
+        nullable: true
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: orders_user_id_idx
+        fields: [userId]
+      - name: orders_status_idx
+        fields: [status]
+      - name: orders_type_idx
+        fields: [type]
+      - name: orders_payment_id_idx
+        fields: [paymentId]
+      - name: orders_order_number_idx
+        fields: [orderNumber]
+    relations:
+      - type: hasMany
+        target: OrderItem
+        via: orderId
+      - type: belongsTo
+        target: Payment
+        via: paymentId
+
+  - name: OrderItem
+    table: order_items
+    description: 订单明细 - 一个订单可包含多个商品
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: orderId
+        type: uuid
+        notNull: true
+        fk:
+          table: orders
+          field: id
+          onDelete: cascade
+      - name: itemType
+        type: varchar(50)
+        notNull: true
+        desc: credit_pack | subscription_plan | product
+      - name: itemId
+        type: uuid
+        nullable: true
+      - name: name
+        type: varchar(200)
+        notNull: true
+      - name: description
+        type: text
+        nullable: true
+      - name: quantity
+        type: integer
+        notNull: true
+        default: 1
+      - name: unitPrice
+        type: decimal(10,2)
+        notNull: true
+      - name: totalPrice
+        type: decimal(10,2)
+        notNull: true
+      - name: credits
+        type: integer
+        notNull: true
+        default: 0
+      - name: metadata
+        type: jsonb
+        default: '{}'
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: order_items_order_id_idx
+        fields: [orderId]
+      - name: order_items_item_type_idx
+        fields: [itemType]
+    relations:
+      - type: belongsTo
+        target: Order
+        via: orderId
+
+operations:
+  - name: createOrder
+    summary: 创建订单
+    method: POST
+    path: /orders
+    auth: jwt
+    input:
+      type: { type: string, enum: [credit_pack, subscription, product, service] }
+      amount: { type: number, min: 0.01 }
+      currency: { type: string, default: USD }
+      credits: { type: integer, default: 0 }
+    pre:
+      - "用户已认证"
+      - "订单类型合法"
+    post:
+      - "生成唯一订单号 ORD-YYYYMMDD-XXXXXX"
+      - "订单状态为 pending"
+      - "设置 30 分钟过期时间"
+    effect:
+      - "插入 orders 表"
+      - "插入 order_items 表（如有明细）"
+    errors:
+      - status: 400
+        condition: "金额小于 0.01"
+        message: "订单金额必须大于 0"
+        test: should reject invalid promo code
+
+  - name: getOrder
+    summary: 查询订单详情
+    method: GET
+    path: /orders/:id
+    auth: jwt
+    pre:
+      - "用户已认证"
+      - "订单属于当前用户"
+    errors:
+      - status: 404
+        condition: "订单不存在"
+        message: "订单不存在"
+        test: should throw NotFoundException when order not found
+
+  - name: getOrderByNumber
+    summary: 按订单号查询
+    method: GET
+    path: /orders/number/:orderNumber
+    auth: jwt
+    pre:
+      - "用户已认证"
+      - "订单号格式正确"
+    errors:
+      - status: 404
+        condition: "订单号不存在"
+        message: "订单不存在"
+
+  - name: listOrders
+    summary: 订单列表（分页）
+    method: GET
+    path: /orders
+    auth: jwt
+    input:
+      page: { type: integer, default: 1 }
+      pageSize: { type: integer, default: 20, max: 100 }
+      status: { type: string, optional: true }
+    pre:
+      - "用户已认证"
+    post:
+      - "仅返回当前用户的订单"
+
+  - name: payOrder
+    summary: 为订单创建支付
+    method: POST
+    path: /orders/:id/pay
+    auth: jwt
+    pre:
+      - "订单状态为 pending"
+      - "订单未过期"
+    post:
+      - "创建 Payment Intent"
+      - "关联 paymentId 到订单"
+    errors:
+      - status: 400
+        condition: "订单已支付或已过期"
+        message: "订单状态不允许支付"
+
+  - name: expireOrders
+    summary: 过期订单自动关闭（定时任务）
+    method: POST
+    path: /orders/expire
+    auth: jwt
+    pre:
+      - "调用者已认证"
+    post:
+      - "超过 expiresAt 的 pending 订单标记为 expired"
+
+rules:
+  - id: ORD-001
+    description: "订单号必须唯一且格式为 ORD-YYYYMMDD-XXXXXX"
+    severity: error
+    enforcement: "orderNumber 唯一约束，生成时使用日期+序号"
+    test: should apply promo code discount to order
+  - id: ORD-002
+    description: "订单金额必须大于 0.01"
+    severity: error
+    enforcement: "amount 字段 notNull 且应用层校验 min 0.01"
+    test: should reject invalid promo code
+  - id: ORD-003
+    description: "pending 订单超过 30 分钟自动过期"
+    severity: warning
+    enforcement: "expireOrders 方法检查 expiresAt 字段"
+
+state_machines:
+  - entity: Order
+    field: status
+    states:
+      pending: "待支付"
+      paid: "已支付"
+      processing: "处理中"
+      completed: "已完成"
+      expired: "已过期"
+      cancelled: "已取消"
+      failed: "支付失败"
+    transitions:
+      - from: pending
+        to: [paid, expired, cancelled, failed]
+        desc: "待支付可转为已支付/过期/取消/失败"
+      - from: paid
+        to: [processing, completed, cancelled]
+        desc: "已支付可转为处理中/完成/取消"
+      - from: processing
+        to: [completed, failed]
+        desc: "处理中可转为完成/失败"
+      - from: completed
+        to: []
+        desc: "终态"
+      - from: expired
+        to: []
+        desc: "终态"
+      - from: cancelled
+        to: []
+        desc: "终态"
+      - from: failed
+        to: [pending]
+        desc: "失败可重新发起"

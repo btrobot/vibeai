@@ -1,0 +1,304 @@
+domain: payment
+version: '1.0'
+last_updated: '2026-08-10'
+description: 支付域 - Stripe 支付意图创建、Webhook 处理、退款管理
+
+entities:
+  - name: Payment
+    table: payments
+    description: 支付记录 - 记录所有支付交易（无论成功与否）
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
+      - name: amount
+        type: decimal(10,2)
+        notNull: true
+      - name: currency
+        type: varchar(3)
+        notNull: true
+        default: USD
+      - name: status
+        type: varchar(20)
+        notNull: true
+        default: pending
+        desc: pending | completed | failed | refunded | partially_refunded
+      - name: provider
+        type: varchar(50)
+        notNull: true
+        default: stripe
+        desc: stripe | paypal | alipay | wechat
+      - name: providerPaymentId
+        type: varchar(255)
+        nullable: true
+        desc: Stripe Payment Intent ID
+      - name: metadata
+        type: jsonb
+        default: '{}'
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: completedAt
+        type: timestamp
+        nullable: true
+      - name: failedAt
+        type: timestamp
+        nullable: true
+      - name: refundedAt
+        type: timestamp
+        nullable: true
+    indexes:
+      - name: payments_user_id_idx
+        fields: [userId]
+      - name: payments_status_idx
+        fields: [status]
+      - name: payments_provider_idx
+        fields: [provider]
+      - name: payments_provider_payment_id_idx
+        fields: [providerPaymentId]
+      - name: payments_created_at_idx
+        fields: [createdAt]
+    relations:
+      - type: belongsTo
+        target: User
+        via: userId
+
+  - name: Refund
+    table: refunds
+    description: 退款记录 - 记录所有退款交易
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
+      - name: paymentId
+        type: uuid
+        notNull: true
+        fk:
+          table: payments
+          field: id
+          onDelete: cascade
+      - name: orderId
+        type: uuid
+        nullable: true
+        fk:
+          table: orders
+          field: id
+          onDelete: set null
+      - name: amount
+        type: decimal(10,2)
+        notNull: true
+      - name: currency
+        type: varchar(3)
+        notNull: true
+        default: USD
+      - name: reason
+        type: text
+        notNull: true
+      - name: status
+        type: varchar(20)
+        notNull: true
+        default: pending
+        desc: pending | processing | completed | failed | rejected
+      - name: providerRefundId
+        type: varchar(255)
+        nullable: true
+        desc: Stripe Refund ID
+      - name: refundedBy
+        type: uuid
+        nullable: true
+        fk:
+          table: users
+          field: id
+          onDelete: set null
+        desc: 操作管理员 ID
+      - name: metadata
+        type: jsonb
+        default: '{}'
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: completedAt
+        type: timestamp
+        nullable: true
+    indexes:
+      - name: refunds_user_id_idx
+        fields: [userId]
+      - name: refunds_payment_id_idx
+        fields: [paymentId]
+      - name: refunds_order_id_idx
+        fields: [orderId]
+      - name: refunds_status_idx
+        fields: [status]
+      - name: refunds_created_at_idx
+        fields: [createdAt]
+    relations:
+      - type: belongsTo
+        target: Payment
+        via: paymentId
+
+operations:
+  - name: createPayment
+    summary: 创建支付意图
+    method: POST
+    path: /payments
+    auth: jwt
+    input:
+      orderId: { type: string, format: uuid }
+      amount: { type: number, min: 0.01 }
+      currency: { type: string, default: USD }
+    pre:
+      - "用户已认证"
+      - "Stripe 已配置（STRIPE_SECRET_KEY）"
+    post:
+      - "创建 Stripe Payment Intent"
+      - "记录 payments 表（status=pending）"
+      - "返回 clientSecret"
+    errors:
+      - status: 400
+        condition: "未启用支付"
+        message: "支付功能未启用"
+        test: 未启用支付时抛出异常
+      - status: 400
+        condition: "免费套餐"
+        message: "免费套餐无需支付"
+        test: 免费套餐应拒绝支付
+
+  - name: getPayment
+    summary: 查询支付状态
+    method: GET
+    path: /payments/:id
+    auth: jwt
+    pre:
+      - "用户已认证"
+      - "支付记录属于当前用户"
+    errors:
+      - status: 404
+        condition: "支付记录不存在"
+        message: "支付记录不存在"
+
+  - name: listPayments
+    summary: 支付列表（分页）
+    method: GET
+    path: /payments
+    auth: jwt
+    input:
+      page: { type: integer, default: 1 }
+      pageSize: { type: integer, default: 20, max: 100 }
+      status: { type: string, optional: true }
+    pre:
+      - "用户已认证"
+    post:
+      - "仅返回当前用户的支付记录"
+
+  - name: handleWebhook
+    summary: Stripe Webhook 回调处理
+    method: POST
+    path: /payments/webhook
+    auth: none
+    pre:
+      - "STRIPE_WEBHOOK_SECRET 已配置"
+      - "Webhook 签名验证通过"
+    post:
+      - "payment_intent.succeeded -> 更新 status=completed"
+      - "payment_intent.payment_failed -> 更新 status=failed"
+      - "charge.refunded -> 更新 status=refunded"
+      - "charge.refund.updated -> 同步退款状态"
+    errors:
+      - status: 400
+        condition: "Webhook 签名验证失败"
+        message: "Webhook 签名验证失败"
+        test: 未配置 webhook secret 时抛出异常
+
+rules:
+  - id: PAY-001
+    description: "创建支付意图前必须验证 STRIPE_SECRET_KEY 已配置"
+    severity: error
+    enforcement: "isPaymentEnabled 检查 STRIPE_SECRET_KEY 环境变量"
+    test: 未配置 STRIPE_SECRET_KEY 时返回 false
+  - id: PAY-002
+    description: "Webhook 回调必须验证签名"
+    severity: error
+    enforcement: "handleWebhook 使用 STRIPE_WEBHOOK_SECRET 验证签名"
+    test: 未配置 webhook secret 时抛出异常
+  - id: PAY-003
+    description: "退款成功后必须回收用户积分"
+    severity: error
+    enforcement: "退款完成时事务内扣除 credits 并记录 credit_usage"
+    test: should successfully refund order without Stripe
+  - id: PAY-004
+    description: "免费套餐不允许创建支付"
+    severity: error
+    enforcement: "创建支付前检查套餐价格是否为 0"
+    test: 免费套餐应拒绝支付
+  - id: PAY-005
+    description: "支付金额与订单金额必须一致"
+    severity: warning
+    enforcement: "创建支付意图时比对 order.amount 与 payment.amount"
+
+state_machines:
+  - entity: Payment
+    field: status
+    states:
+      pending: "待支付"
+      completed: "已完成"
+      failed: "支付失败"
+      refunded: "已全额退款"
+      partially_refunded: "已部分退款"
+    transitions:
+      - from: pending
+        to: [completed, failed]
+        desc: "待支付可转为完成或失败"
+      - from: completed
+        to: [refunded, partially_refunded]
+        desc: "已完成可转为退款"
+      - from: failed
+        to: [pending]
+        desc: "失败可重试"
+      - from: refunded
+        to: []
+        desc: "终态"
+      - from: partially_refunded
+        to: [refunded]
+        desc: "部分退款可转为全额退款"
+  - entity: Refund
+    field: status
+    states:
+      pending: "退款处理中"
+      processing: "正在处理"
+      completed: "退款完成"
+      failed: "退款失败"
+      rejected: "退款拒绝"
+    transitions:
+      - from: pending
+        to: [processing, completed, failed, rejected]
+        desc: "待处理可转为处理中/完成/失败/拒绝"
+      - from: processing
+        to: [completed, failed]
+        desc: "处理中可转为完成/失败"
+      - from: completed
+        to: []
+        desc: "终态"
+      - from: failed
+        to: [pending]
+        desc: "失败可重试"
+      - from: rejected
+        to: []
+        desc: "终态"

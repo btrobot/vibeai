@@ -152,3 +152,19 @@ assets/
 .omx/
 .codex/
 .artifacts/
+
+# Tool artifacts (OMX/Codex)
+.codex-bak/
+.omc/
+.omj/
+.omx-bak/
+server/.omc/
+server/.omj/
+server/server/
+
+# Backup files
+*.backup
+*.bak
+
+# Superpowers tool
+docs/superpowers/

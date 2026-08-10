@@ -1,0 +1,301 @@
+domain: commerce
+version: '1.0'
+last_updated: '2026-08-10'
+description: 电商域 - 商品分类、商品管理、促销码管理与验证
+
+entities:
+  - name: ProductCategory
+    table: product_categories
+    description: 商品分类表 - 支持多级分类与属性管理
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: name
+        type: varchar(100)
+        notNull: true
+      - name: parentId
+        type: uuid
+        nullable: true
+        desc: 父分类 ID（支持多级分类）
+      - name: slug
+        type: varchar(100)
+        notNull: true
+        unique: true
+      - name: icon
+        type: varchar(255)
+        nullable: true
+      - name: attributes
+        type: jsonb
+        default: '{}'
+        desc: '分类属性定义 { size, color, material }'
+      - name: sortOrder
+        type: integer
+        notNull: true
+        default: 0
+      - name: isActive
+        type: boolean
+        notNull: true
+        default: true
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: product_categories_parent_id_idx
+        fields: [parentId]
+      - name: product_categories_slug_idx
+        fields: [slug]
+      - name: product_categories_is_active_idx
+        fields: [isActive]
+    relations:
+      - type: hasMany
+        target: Product
+        via: categoryId
+      - type: hasMany
+        target: ProductCategory
+        via: parentId
+
+  - name: Product
+    table: products
+    description: 商品表 - 用户发布的商品
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
+      - name: name
+        type: varchar(200)
+        notNull: true
+      - name: description
+        type: text
+        nullable: true
+      - name: categoryId
+        type: uuid
+        nullable: true
+        fk:
+          table: product_categories
+          field: id
+          onDelete: set null
+      - name: images
+        type: jsonb
+        default: '[]'
+        desc: 图片 file ID 或 URL 数组
+      - name: status
+        type: varchar(20)
+        notNull: true
+        default: draft
+        desc: draft | active | archived
+      - name: metadata
+        type: jsonb
+        default: '{}'
+        desc: 自定义字段、规格等
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: products_user_id_idx
+        fields: [userId]
+      - name: products_category_id_idx
+        fields: [categoryId]
+      - name: products_status_idx
+        fields: [status]
+      - name: products_created_at_idx
+        fields: [createdAt]
+    relations:
+      - type: belongsTo
+        target: User
+        via: userId
+      - type: belongsTo
+        target: ProductCategory
+        via: categoryId
+
+  - name: PromoCode
+    table: promo_codes
+    description: 促销码表 - 支持固定折扣和百分比折扣
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: code
+        type: varchar(50)
+        notNull: true
+        unique: true
+        desc: 促销码（大写存储）
+      - name: type
+        type: varchar(20)
+        notNull: true
+        desc: fixed | percentage
+      - name: value
+        type: decimal(10,2)
+        notNull: true
+        desc: 固定金额或百分比
+      - name: maxUses
+        type: integer
+        nullable: true
+        desc: null=不限次数
+      - name: usedCount
+        type: integer
+        notNull: true
+        default: 0
+      - name: validFrom
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: validUntil
+        type: timestamp
+        nullable: true
+      - name: minAmount
+        type: decimal(10,2)
+        nullable: true
+        desc: 最低订单金额
+      - name: isActive
+        type: boolean
+        notNull: true
+        default: true
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: promo_codes_code_idx
+        fields: [code]
+      - name: promo_codes_is_active_idx
+        fields: [isActive]
+      - name: promo_codes_valid_from_idx
+        fields: [validFrom]
+      - name: promo_codes_valid_until_idx
+        fields: [validUntil]
+    relations:
+      - type: hasMany
+        target: UserPromoUse
+        via: promoCodeId
+
+  - name: UserPromoUse
+    table: user_promo_uses
+    description: 用户促销码使用记录
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
+      - name: promoCodeId
+        type: uuid
+        notNull: true
+        fk:
+          table: promo_codes
+          field: id
+          onDelete: cascade
+      - name: orderId
+        type: uuid
+        nullable: true
+        fk:
+          table: orders
+          field: id
+          onDelete: set null
+      - name: usedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: user_promo_uses_user_id_idx
+        fields: [userId]
+      - name: user_promo_uses_promo_code_id_idx
+        fields: [promoCodeId]
+      - name: user_promo_uses_order_id_idx
+        fields: [orderId]
+      - name: user_promo_uses_used_at_idx
+        fields: [usedAt]
+    relations:
+      - type: belongsTo
+        target: User
+        via: userId
+      - type: belongsTo
+        target: PromoCode
+        via: promoCodeId
+
+operations: []
+
+rules:
+  - id: COMM-001
+    description: "促销码 code 必须唯一且转换为大写存储"
+    severity: error
+    enforcement: "创建时 code 转大写并检查唯一性"
+    test: should convert code to uppercase
+  - id: COMM-002
+    description: "百分比折扣值必须在 0-100 之间"
+    severity: error
+    enforcement: "type=percentage 时 value 校验 0-100 范围"
+    test: should throw error for invalid percentage
+  - id: COMM-003
+    description: "固定折扣值必须大于 0"
+    severity: error
+    enforcement: "type=fixed 时 value 校验大于 0"
+    test: should throw error for invalid fixed amount
+  - id: COMM-004
+    description: "促销码使用次数不能超过 maxUses"
+    severity: error
+    enforcement: "validate 时检查 usedCount < maxUses"
+    test: should validate valid fixed promo code
+  - id: COMM-005
+    description: "商品至少需要一张图片"
+    severity: error
+    enforcement: "创建商品时校验 images 非空"
+    test: should throw error if no images provided
+  - id: COMM-006
+    description: "分类 slug 必须唯一"
+    severity: error
+    enforcement: "创建分类时检查 slug 唯一性"
+    test: should throw conflict error if slug exists
+  - id: COMM-007
+    description: "删除分类时如果有子分类应阻止"
+    severity: warning
+    enforcement: "删除前检查 parentId 引用"
+    test: should prevent deletion if has children
+
+state_machines:
+  - entity: Product
+    field: status
+    states:
+      draft: "草稿"
+      active: "上架"
+      archived: "归档"
+    transitions:
+      - from: draft
+        to: [active, archived]
+        desc: "草稿可上架或归档"
+      - from: active
+        to: [archived]
+        desc: "上架可归档"
+      - from: archived
+        to: [active]
+        desc: "归档可重新上架"
