@@ -141,6 +141,40 @@ export class GatewayService {
     return model ? this.modelDefToAdapterModel(model) : null;
   }
 
+  async toggleModelActive(slug: string): Promise<{ slug: string; isActive: boolean } | null> {
+    try {
+      const [row] = await this.db.select().from(aiModels).where(eq(aiModels.slug, slug)).limit(1);
+      if (!row) return null;
+      const next = !row.isActive;
+      await this.db
+        .update(aiModels)
+        .set({ isActive: next, updatedAt: new Date() })
+        .where(eq(aiModels.slug, slug));
+      this.logger.warn(`Admin toggled model "${slug}" → isActive=${next}`);
+      return { slug, isActive: next };
+    } catch (e) {
+      this.logger.error(`toggleModelActive failed for "${slug}": ${(e as Error).message}`);
+      return null;
+    }
+  }
+
+  async toggleProviderActive(id: string): Promise<{ id: string; isActive: boolean } | null> {
+    try {
+      const [row] = await this.db.select().from(modelProviders).where(eq(modelProviders.id, id)).limit(1);
+      if (!row) return null;
+      const next = !row.isActive;
+      await this.db
+        .update(modelProviders)
+        .set({ isActive: next, updatedAt: new Date() })
+        .where(eq(modelProviders.id, id));
+      this.logger.warn(`Admin toggled provider "${id}" → isActive=${next}`);
+      return { id, isActive: next };
+    } catch (e) {
+      this.logger.error(`toggleProviderActive failed for "${id}": ${(e as Error).message}`);
+      return null;
+    }
+  }
+
   async getDefaultModel(capabilitySlug: string): Promise<AdapterModel | null> {
     const models = await this.listModels(capabilitySlug);
     return models[0] ?? null;

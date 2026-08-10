@@ -20,6 +20,7 @@ import { GatewayService } from './gateway.service';
 import { AdapterRegistry } from './adapters/adapter-registry';
 import { BillingService } from '../billing/billing.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminGuard } from '../../common/guards/admin.guard';
 import { GenerateSchema, ChatSchema, QuickCreateSchema } from './dto/index';
 import type { GenerateInput, ChatInput, QuickCreateInput } from './dto/index';
 
@@ -158,5 +159,29 @@ export class GatewayController {
     } finally {
       res.end();
     }
+  }
+
+  // ===== Admin: Model & Provider lifecycle =====
+
+  @Post('admin/models/:slug/toggle')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  async toggleModel(@Param('slug') slug: string) {
+    const updated = await this.gatewayService.toggleModelActive(slug);
+    if (!updated) {
+      throw new NotFoundException(`模型 "${slug}" 不存在`);
+    }
+    return { success: true, data: updated };
+  }
+
+  @Post('admin/providers/:id/toggle')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  async toggleProvider(@Param('id') id: string) {
+    const updated = await this.gatewayService.toggleProviderActive(id);
+    if (!updated) {
+      throw new NotFoundException(`Provider "${id}" 不存在`);
+    }
+    return { success: true, data: updated };
   }
 }

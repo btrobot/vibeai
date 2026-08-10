@@ -441,6 +441,38 @@ operations:
     effect:
       - 返回所有预设快捷创作方案（按 sortOrder 排序）
     test: true
+  - name: toggleModel
+    method: POST
+    path: /gateway/admin/models/:slug/toggle
+    description: 启用/禁用 AI 模型
+    auth: jwt
+    pre:
+      - 用户已登录
+      - 当前用户为管理员
+    effect:
+      - 翻转 AIModel.isActive
+      - 记录审计日志
+    errors:
+      - status: 404
+        condition: 模型不存在
+        message: 模型不存在
+    test: true
+  - name: toggleProvider
+    method: POST
+    path: /gateway/admin/providers/:id/toggle
+    description: 启用/禁用 Provider
+    auth: jwt
+    pre:
+      - 用户已登录
+      - 当前用户为管理员
+    effect:
+      - 翻转 modelProviders.isActive
+      - 记录审计日志
+    errors:
+      - status: 404
+        condition: Provider 不存在
+        message: Provider 不存在
+    test: true
 rules:
   - name: capability_slug_unique
     id: GTW-001

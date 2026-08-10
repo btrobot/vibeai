@@ -261,8 +261,11 @@ async function main() {
   });
 
   await runTest('should have task completed after mock execution (2s wait)', async () => {
-    // Wait for async mock execution to complete
-    await new Promise(resolve => setTimeout(resolve, 2500));
+    // Wait for async mock execution to complete.
+    // Mock image generation: adapter delay (~800ms) + downloadAndStore of the
+    // external picsum image (~1.6s+) + local upload + credits settle easily
+    // exceed the old 2.5s wait, so give it a generous margin.
+    await new Promise(resolve => setTimeout(resolve, 8000));
     const res = await request
       .get(`/api/tasks/${imageTaskId}`)
       .set('Authorization', `Bearer ${gwToken}`);
@@ -445,6 +448,105 @@ async function main() {
       .post('/api/auth/reset-password')
       .send({ token: 'invalid-token', newPassword: 'NewPass456!' });
     assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  // ============================================================
+  // Gateway Admin Integration Tests
+  // ============================================================
+  console.log('\n📋 Gateway Admin Integration Tests\n');
+
+  let adminToken = '';
+  let nonAdminToken = '';
+  let gwModelSlug = '';
+
+  await runTest('should login as admin', async () => {
+    const res = await request
+      .post('/api/auth/login')
+      .send({ email: 'admin@vibeai.com', password: 'admin123456' });
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    adminToken = res.body.data.tokens.accessToken;
+    assert(adminToken, 'Expected accessToken');
+  });
+
+  await runTest('should register non-admin user', async () => {
+    const email = `gwadmin-${Date.now()}@example.com`;
+    const res = await request
+      .post('/api/auth/register')
+      .send({ email, password: 'TestPass123!', name: 'GwAdmin' });
+    assert(res.status === 201, `Expected 201, got ${res.status}`);
+    const loginRes = await request
+      .post('/api/auth/login')
+      .send({ email, password: 'TestPass123!' });
+    assert(loginRes.status === 200, `Login expected 200, got ${loginRes.status}`);
+    nonAdminToken = loginRes.body.data.tokens.accessToken;
+    assert(nonAdminToken, 'Expected non-admin accessToken');
+  });
+
+  await runTest('should fetch a model slug for toggle tests', async () => {
+    const res = await request
+      .get('/api/gateway/models')
+      .set('Authorization', `Bearer ${adminToken}`);
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    assert(Array.isArray(res.body.data) && res.body.data.length > 0, 'Expected at least 1 model');
+    gwModelSlug = res.body.data[0].slug;
+  });
+
+  console.log('\n  AdminGuard enforcement');
+
+  await runTest('should reject toggle without auth (401)', async () => {
+    const res = await request
+      .post(`/api/gateway/admin/models/${gwModelSlug}/toggle`);
+    assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  await runTest('should reject toggle by non-admin (403)', async () => {
+    const res = await request
+      .post(`/api/gateway/admin/models/${gwModelSlug}/toggle`)
+      .set('Authorization', `Bearer ${nonAdminToken}`);
+    assert(res.status === 403, `Expected 403, got ${res.status}`);
+  });
+
+  console.log('\n  Model toggle');
+
+  await runTest('should toggle model off by admin', async () => {
+    const res = await request
+      .post(`/api/gateway/admin/models/${gwModelSlug}/toggle`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    assert(res.status === 200, `Expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(res.body.success === true, 'Expected success=true');
+    assert(res.body.data.slug === gwModelSlug, 'Expected matching slug');
+    assert(res.body.data.isActive === false, `Expected isActive=false after first toggle, got ${res.body.data.isActive}`);
+  });
+
+  await runTest('should toggle model back on by admin', async () => {
+    const res = await request
+      .post(`/api/gateway/admin/models/${gwModelSlug}/toggle`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    assert(res.body.data.isActive === true, `Expected isActive=true after second toggle, got ${res.body.data.isActive}`);
+  });
+
+  await runTest('should return 404 for non-existent model', async () => {
+    const res = await request
+      .post('/api/gateway/admin/models/non-existent-model-xyz/toggle')
+      .set('Authorization', `Bearer ${adminToken}`);
+    assert(res.status === 404, `Expected 404, got ${res.status}`);
+  });
+
+  console.log('\n  Provider toggle');
+
+  await runTest('should return 404 for non-existent provider', async () => {
+    const res = await request
+      .post('/api/gateway/admin/providers/00000000-0000-0000-0000-000000000000/toggle')
+      .set('Authorization', `Bearer ${adminToken}`);
+    assert(res.status === 404, `Expected 404, got ${res.status}`);
+  });
+
+  await runTest('should reject provider toggle by non-admin (403)', async () => {
+    const res = await request
+      .post('/api/gateway/admin/providers/00000000-0000-0000-0000-000000000000/toggle')
+      .set('Authorization', `Bearer ${nonAdminToken}`);
+    assert(res.status === 403, `Expected 403, got ${res.status}`);
   });
 
   console.log(`\n\n📊 Final Results: ${passed} passed, ${failed} failed, ${passed + failed} total`);
