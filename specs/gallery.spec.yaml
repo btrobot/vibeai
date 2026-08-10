@@ -1,17 +1,10 @@
-# ============================================================
-# VibeAI — 画廊域规格 (Gallery Domain)
-# ============================================================
 domain: gallery
-version: "1.0"
-last_updated: "2025-04-06"
-
-# ============================================================
-# 实体定义
-# ============================================================
+version: '1.0'
+last_updated: '2025-04-06'
 entities:
   - name: GalleryWork
     table: gallery_works
-    description: "画廊作品"
+    description: 画廊作品
     fields:
       - name: id
         type: uuid
@@ -20,29 +13,38 @@ entities:
       - name: userId
         type: uuid
         notNull: true
-        fk: { table: "users", field: "id", onDelete: "cascade" }
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
       - name: title
         type: varchar(255)
         notNull: true
-        default: ""
+        default: ''
       - name: imageUrl
         type: text
         nullable: true
-        description: "Legacy URL (backward compat, deprecated in favor of imageFileId)"
+        description: Legacy URL (backward compat, deprecated in favor of imageFileId)
       - name: videoUrl
         type: text
         nullable: true
-        description: "Legacy URL (backward compat, deprecated in favor of videoFileId)"
+        description: Legacy URL (backward compat, deprecated in favor of videoFileId)
       - name: imageFileId
         type: uuid
         nullable: true
-        fk: { table: "files", field: "id", onDelete: "set null" }
-        description: "Unified file reference for image output"
+        fk:
+          table: files
+          field: id
+          onDelete: set null
+        description: Unified file reference for image output
       - name: videoFileId
         type: uuid
         nullable: true
-        fk: { table: "files", field: "id", onDelete: "set null" }
-        description: "Unified file reference for video output"
+        fk:
+          table: files
+          field: id
+          onDelete: set null
+        description: Unified file reference for video output
       - name: type
         type: varchar(20)
         notNull: true
@@ -81,20 +83,24 @@ entities:
         default: now()
     indexes:
       - name: gallery_works_user_id_idx
-        fields: [userId]
+        fields:
+          - userId
       - name: gallery_works_type_idx
-        fields: [type]
+        fields:
+          - type
       - name: gallery_works_is_published_idx
-        fields: [isPublished]
+        fields:
+          - isPublished
       - name: gallery_works_created_at_idx
-        fields: [createdAt]
+        fields:
+          - createdAt
       - name: gallery_works_likes_idx
-        fields: [likes]
+        fields:
+          - likes
     timestamps: true
-
   - name: GalleryLike
     table: gallery_likes
-    description: "作品点赞"
+    description: 作品点赞
     fields:
       - name: id
         type: uuid
@@ -103,158 +109,242 @@ entities:
       - name: workId
         type: uuid
         notNull: true
-        fk: { table: "gallery_works", field: "id", onDelete: "cascade" }
+        fk:
+          table: gallery_works
+          field: id
+          onDelete: cascade
       - name: userId
         type: uuid
         notNull: true
-        fk: { table: "users", field: "id", onDelete: "cascade" }
+        fk:
+          table: users
+          field: id
+          onDelete: cascade
       - name: createdAt
         type: timestamp
         notNull: true
         default: now()
     indexes:
       - name: gallery_likes_work_id_idx
-        fields: [workId]
+        fields:
+          - workId
       - name: gallery_likes_user_id_idx
-        fields: [userId]
+        fields:
+          - userId
       - name: gallery_likes_work_user_unique_idx
         unique: true
-        fields: [workId, userId]
+        fields:
+          - workId
+          - userId
     timestamps: false
-
-# ============================================================
-# 操作定义
-# ============================================================
+  - name: GalleryPublication
+    table: gallery_publications
+    description: Gallery 公开投影表 - 精细化的发布控制
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: workId
+        type: uuid
+        notNull: true
+        fk:
+          table: gallery_works
+          field: id
+          onDelete: cascade
+      - name: publishedAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: expiresAt
+        type: timestamp
+        nullable: true
+      - name: isFeatured
+        type: boolean
+        notNull: true
+        default: false
+      - name: featuredOrder
+        type: integer
+        notNull: true
+        default: 0
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: gallery_publications_work_id_idx
+        fields:
+          - workId
+      - name: gallery_publications_is_featured_idx
+        fields:
+          - isFeatured
+      - name: gallery_publications_published_at_idx
+        fields:
+          - publishedAt
+    relations:
+      - type: belongsTo
+        target: GalleryWork
+        via: workId
 operations:
   - name: listWorks
     method: GET
     path: /gallery/works
-    description: "获取作品列表（公开）"
+    description: 获取作品列表（公开）
     auth: none
     post:
-      - "返回公开作品列表（分页，支持按标签/类型筛选）"
+      - 返回公开作品列表（分页，支持按标签/类型筛选）
     test: true
-
   - name: getWork
     method: GET
     path: /gallery/works/:id
-    description: "获取作品详情"
+    description: 获取作品详情
     auth: none
     pre:
-      - "作品存在且已发布"
+      - 作品存在且已发布
     errors:
       - status: 404
-        condition: "作品不存在或未发布"
-        message: "作品不存在"
+        condition: 作品不存在或未发布
+        message: 作品不存在
     test: true
-
   - name: publishWork
     method: POST
     path: /gallery/works
-    description: "发布作品到画廊"
+    description: 发布作品到画廊
     auth: jwt
     pre:
-      - "用户已登录"
+      - 用户已登录
     effect:
-      - "创建 GalleryWork 记录"
+      - 创建 GalleryWork 记录
     test: true
-
   - name: likeWork
     method: POST
     path: /gallery/works/:id/like
-    description: "点赞/取消点赞作品"
+    description: 点赞/取消点赞作品
     auth: jwt
     pre:
-      - "用户已登录"
-      - "作品存在且已发布"
+      - 用户已登录
+      - 作品存在且已发布
     effect:
-      - "若已点赞则删除 GalleryLike"
-      - "若未点赞则创建 GalleryLike"
-      - "更新 GalleryWork.likes 计数"
+      - 若已点赞则删除 GalleryLike
+      - 若未点赞则创建 GalleryLike
+      - 更新 GalleryWork.likes 计数
     test: true
-
   - name: getLikeStatus
     method: GET
     path: /gallery/works/:id/like
-    description: "查看当前用户是否已点赞"
+    description: 查看当前用户是否已点赞
     auth: jwt
     pre:
-      - "用户已登录"
+      - 用户已登录
     test: true
-
   - name: deleteWork
     method: DELETE
     path: /gallery/works/:id
-    description: "删除作品"
+    description: 删除作品
     auth: jwt
     pre:
-      - "用户已登录"
-      - "作品存在且属于当前用户"
+      - 用户已登录
+      - 作品存在且属于当前用户
     effect:
-      - "删除 GalleryWork 及关联的点赞"
+      - 删除 GalleryWork 及关联的点赞
     errors:
       - status: 404
-        condition: "作品不存在"
-        message: "作品不存在"
+        condition: 作品不存在
+        message: 作品不存在
     test: true
-
   - name: listMyWorks
     method: GET
     path: /gallery/my-works
-    description: "获取当前用户的作品列表"
+    description: 获取当前用户的作品列表
     auth: jwt
     pre:
-      - "用户已登录"
+      - 用户已登录
     test: true
-
-# ============================================================
-# 业务规则
-# ============================================================
+  - name: publishWorkToGallery
+    summary: 管理员发布作品到公开画廊
+    method: POST
+    path: /gallery/works/:id/publish
+    auth: jwt
+    pre:
+      - 管理员权限
+      - 作品存在
+    post:
+      - 创建 gallery_publications 记录
+      - 设置 work.isPublished = true
+  - name: unpublishFromGallery
+    summary: 管理员从公开画廊下架作品
+    method: DELETE
+    path: /gallery/works/:id/publish
+    auth: jwt
+    pre:
+      - 管理员权限
+    post:
+      - 删除 gallery_publications 记录
+      - 设置 work.isPublished = false
+  - name: listFeaturedWorks
+    summary: 获取推荐作品
+    method: GET
+    path: /gallery/featured
+    auth: none
+    post:
+      - 返回 isFeatured=true 且未过期的推荐作品
+      - 按 featuredOrder 排序
 rules:
   - name: work_owner_only
     id: GAL-001
     severity: error
     level: error
-    description: "只有作品所有者可删除作品"
-    enforcement: "删除时检查 userId = jwt.userId"
-    test: "用户应能成功发布作品"
-
+    description: 只有作品所有者可删除作品
+    enforcement: 删除时检查 userId = jwt.userId
+    test: 用户应能成功发布作品
   - name: one_like_per_user
     id: GAL-002
     severity: error
     level: error
-    description: "每个用户对同一作品只能点赞一次"
-    enforcement: "unique index on (workId, userId)"
-    test: "用户可以对作品点赞"
-
+    description: 每个用户对同一作品只能点赞一次
+    enforcement: unique index on (workId, userId)
+    test: 用户可以对作品点赞
   - name: like_self_deny
     id: GAL-003
     severity: error
     level: error
-    description: "用户不能给自己的作品点赞"
-    enforcement: "点赞前检查 userId != work.userId"
-    test: "已经点赞的作品应返回 true"
-
+    description: 用户不能给自己的作品点赞
+    enforcement: 点赞前检查 userId != work.userId
+    test: 已经点赞的作品应返回 true
   - name: published_only_visible
     id: GAL-004
     severity: error
     level: error
-    description: "未发布作品不在公开列表中显示"
-    enforcement: "listWorks 只返回 isPublished=true"
-    test: "公开画廊只显示已发布作品"
-
+    description: 未发布作品不在公开列表中显示
+    enforcement: listWorks 只返回 isPublished=true
+    test: 公开画廊只显示已发布作品
   - name: like_count_sync
     id: GAL-005
     severity: error
     level: error
-    description: "GalleryWork.likes 必须与 GalleryLike 记录数一致"
-    enforcement: "点赞/取消点赞时同步更新 likes 计数"
-    test: "已登录用户可以查看自己的作品"
-
+    description: GalleryWork.likes 必须与 GalleryLike 记录数一致
+    enforcement: 点赞/取消点赞时同步更新 likes 计数
+    test: 已登录用户可以查看自己的作品
   - name: file_id_preferred
     id: GAL-006
     severity: warning
     level: warn
-    description: "作品应优先使用 fileId 引用媒体文件，legacy URL 作为回退"
-    enforcement: "publishWork 时从 create.output 提取 fileId 存入 imageFileId/videoFileId；listWorks/getWork 时通过 storageService.resolveUrls 解析为 URL"
-    test: "imageFileId 应通过 storageService 解析为 URL"
+    description: 作品应优先使用 fileId 引用媒体文件，legacy URL 作为回退
+    enforcement: >-
+      publishWork 时从 create.output 提取 fileId 存入 imageFileId/videoFileId；listWorks/getWork 时通过 storageService.resolveUrls
+      解析为 URL
+    test: imageFileId 应通过 storageService 解析为 URL
+  - name: publication_controlled
+    id: GAL-007
+    severity: error
+    level: error
+    description: 作品公开需通过 publication 记录控制
+    enforcement: publishWorkToGallery 创建 publication 记录，unpublishFromGallery 删除
+    test: 用户应能成功发布作品
+  - name: featured_expiry
+    id: GAL-008
+    severity: error
+    level: error
+    description: 推荐作品过期后不在推荐列表显示
+    enforcement: listFeaturedWorks 查询条件包含 expiresAt IS NULL OR expiresAt > now
+    test: 公开画廊只显示已发布作品

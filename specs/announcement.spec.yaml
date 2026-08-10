@@ -1,0 +1,177 @@
+domain: announcement
+version: '1.0'
+last_updated: '2026-08-10'
+description: 公告域 - 平台公告 CRUD、定时发布、公开/管理双视角
+
+entities:
+  - name: Announcement
+    table: announcements
+    description: 公告记录 - 平台级公告管理
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: title
+        type: varchar(200)
+        notNull: true
+      - name: content
+        type: text
+        notNull: true
+      - name: type
+        type: varchar(20)
+        notNull: true
+        default: info
+        desc: info | warning | maintenance
+      - name: isActive
+        type: boolean
+        notNull: true
+        default: true
+      - name: isPinned
+        type: boolean
+        notNull: true
+        default: false
+      - name: scheduledAt
+        type: timestamp
+        nullable: true
+        desc: 定时发布时间（null=立即发布）
+      - name: expiresAt
+        type: timestamp
+        nullable: true
+        desc: 过期时间（null=永不过期）
+      - name: createdBy
+        type: uuid
+        nullable: true
+        fk:
+          table: users
+          field: id
+          onDelete: set null
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: announcements_is_active_idx
+        fields: [isActive]
+      - name: announcements_type_idx
+        fields: [type]
+      - name: announcements_scheduled_at_idx
+        fields: [scheduledAt]
+      - name: announcements_created_at_idx
+        fields: [createdAt]
+
+operations:
+  - name: listActiveAnnouncements
+    summary: 获取当前生效的公告（公开）
+    method: GET
+    path: /announcements/active
+    auth: none
+    pre:
+      - "无需认证"
+    post:
+      - "仅返回 isActive=true 且 scheduledAt<=now 且 expiresAt>now 的公告"
+      - "置顶公告排在前面"
+  - name: getAnnouncement
+    summary: 获取公告详情
+    method: GET
+    path: /announcements/:id
+    auth: none
+    errors:
+      - status: 404
+        condition: "公告不存在"
+        message: "公告不存在"
+        test: should throw NotFoundException when not found
+  - name: listAnnouncementsAdmin
+    summary: 管理员获取公告列表
+    method: GET
+    path: /announcements
+    auth: jwt
+    pre:
+      - "管理员权限"
+    post:
+      - "含未发布和已下架公告"
+      - "支持按类型筛选和分页"
+  - name: createAnnouncement
+    summary: 管理员创建公告
+    method: POST
+    path: /announcements
+    auth: jwt
+    input:
+      title: { type: string, minLength: 1, maxLength: 200 }
+      content: { type: string, minLength: 1 }
+      type: { type: string, enum: [info, warning, maintenance] }
+    post:
+      - "创建公告记录"
+      - "支持定时发布（scheduledAt）"
+    errors:
+      - status: 403
+        condition: "非管理员"
+        message: "无权限访问"
+  - name: updateAnnouncement
+    summary: 管理员更新公告
+    method: PATCH
+    path: /announcements/:id
+    auth: jwt
+    errors:
+      - status: 404
+        condition: "公告不存在"
+        message: "公告不存在"
+        test: should throw NotFoundException when announcement does not exist
+  - name: deleteAnnouncement
+    summary: 管理员删除公告
+    method: DELETE
+    path: /announcements/:id
+    auth: jwt
+    errors:
+      - status: 404
+        condition: "公告不存在"
+        message: "公告不存在"
+        test: should throw NotFoundException when announcement does not exist
+
+rules:
+  - id: ANN-001
+    description: "公告标题不能为空，长度 1-200 字符"
+    severity: error
+    enforcement: "title 字段 notNull 且应用层校验 minLength 1 maxLength 200"
+    test: should create an announcement successfully
+  - id: ANN-002
+    description: "公告类型只能是 info/warning/maintenance"
+    severity: error
+    enforcement: "type 字段使用 IsEnum 校验"
+    test: should create an announcement successfully
+  - id: ANN-003
+    description: "定时发布时间到达前公告不显示在公开列表"
+    severity: error
+    enforcement: "listActive 查询条件包含 scheduledAt IS NULL OR scheduledAt <= now"
+    test: should return active and non-expired announcements
+  - id: ANN-004
+    description: "过期公告不显示在公开列表"
+    severity: error
+    enforcement: "listActive 查询条件包含 expiresAt IS NULL OR expiresAt > now"
+    test: should return active and non-expired announcements
+  - id: ANN-005
+    description: "非管理员不能创建/更新/删除公告"
+    severity: warning
+    enforcement: "控制器 checkAdmin 校验 role"
+
+state_machines:
+  - entity: Announcement
+    field: type
+    states:
+      info: "信息公告"
+      warning: "警告公告"
+      maintenance: "维护公告"
+    transitions:
+      - from: info
+        to: [warning, maintenance]
+        desc: "信息可转为警告/维护"
+      - from: warning
+        to: [info, maintenance]
+        desc: "警告可转为信息/维护"
+      - from: maintenance
+        to: [info, warning]
+        desc: "维护可转为信息/警告"

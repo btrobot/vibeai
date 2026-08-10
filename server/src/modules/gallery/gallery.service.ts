@@ -4,8 +4,9 @@ import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { galleryWorks, galleryLikes } from '../../db/schema/gallery';
+import { galleryPublications } from '../../db/schema/content';
 import { creates } from '../../db/schema/task-engine';
-import { eq, and, desc, asc, sql, count } from 'drizzle-orm';
+import { eq, and, desc, asc, sql, count, or, isNull, gt, inArray } from 'drizzle-orm';
 import type { StorageService } from '../storage/storage.service';
 
 @Injectable()
@@ -234,5 +235,113 @@ export class GalleryService {
 
     await this.db.delete(galleryWorks).where(eq(galleryWorks.id, workId));
     return { success: true, message: '已删除' };
+  }
+  // ===== Gallery Publication Management =====
+
+  /**
+   * 发布作品到公开画廊（创建 publication 记录）
+   */
+  async publishWorkToGallery(workId: string, options?: { isFeatured?: boolean; featuredOrder?: number; expiresAt?: string }) {
+    const [work] = await this.db.select().from(galleryWorks)
+      .where(eq(galleryWorks.id, workId)).limit(1);
+    if (!work) return { success: false, message: '作品不存在' };
+
+    // 确保 work 已标记为 published
+    if (!work.isPublished) {
+      await this.db.update(galleryWorks)
+        .set({ isPublished: true })
+        .where(eq(galleryWorks.id, workId));
+    }
+
+    // upsert publication
+    const [existingPub] = await this.db.select().from(galleryPublications)
+      .where(eq(galleryPublications.workId, workId)).limit(1);
+
+    if (existingPub) {
+      const [updated] = await this.db.update(galleryPublications)
+        .set({
+          isFeatured: options?.isFeatured ?? existingPub.isFeatured,
+          featuredOrder: options?.featuredOrder ?? existingPub.featuredOrder,
+          expiresAt: options?.expiresAt ? new Date(options.expiresAt) : existingPub.expiresAt,
+        })
+        .where(eq(galleryPublications.workId, workId))
+        .returning();
+      return { success: true, data: updated };
+    }
+
+    const [created] = await this.db.insert(galleryPublications).values({
+      workId,
+      isFeatured: options?.isFeatured ?? false,
+      featuredOrder: options?.featuredOrder ?? 0,
+      expiresAt: options?.expiresAt ? new Date(options.expiresAt) : null,
+    }).returning();
+
+    return { success: true, data: created };
+  }
+
+  /**
+   * 从公开画廊下架作品（删除 publication 记录）
+   */
+  async unpublishFromGallery(workId: string) {
+    const [work] = await this.db.select().from(galleryWorks)
+      .where(eq(galleryWorks.id, workId)).limit(1);
+    if (!work) return { success: false, message: '作品不存在' };
+
+    await this.db.update(galleryWorks)
+      .set({ isPublished: false })
+      .where(eq(galleryWorks.id, workId));
+
+    await this.db.delete(galleryPublications)
+      .where(eq(galleryPublications.workId, workId));
+
+    return { success: true, message: '已下架' };
+  }
+
+  /**
+   * 获取推荐作品列表
+   */
+  async listFeaturedWorks(limit = 10) {
+    const now = new Date();
+    const publications = await this.db.select().from(galleryPublications)
+      .where(and(
+        eq(galleryPublications.isFeatured, true),
+        or(isNull(galleryPublications.expiresAt), gt(galleryPublications.expiresAt, now)),
+      ))
+      .orderBy(asc(galleryPublications.featuredOrder), desc(galleryPublications.publishedAt))
+      .limit(limit);
+
+    if (publications.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    const workIds = publications.map(p => p.workId);
+    const works = await this.db.select().from(galleryWorks)
+      .where(inArray(galleryWorks.id, workIds));
+
+    const resolvedWorks = await this.resolveWorksUrls(works);
+    return { success: true, data: resolvedWorks };
+  }
+
+  /**
+   * 检查访问权限
+   */
+  async canAccessWork(workId: string, userId?: string): Promise<boolean> {
+    const [pub] = await this.db.select().from(galleryPublications)
+      .where(eq(galleryPublications.workId, workId)).limit(1);
+
+    if (pub) {
+      if (!pub.expiresAt || pub.expiresAt > new Date()) {
+        return true;
+      }
+    }
+
+    if (userId) {
+      const [work] = await this.db.select().from(galleryWorks)
+        .where(and(eq(galleryWorks.id, workId), eq(galleryWorks.userId, userId)))
+        .limit(1);
+      return !!work;
+    }
+
+    return false;
   }
 }

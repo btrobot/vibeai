@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Delete, Body, Param, Query, Req, UseGuards, HttpCode, HttpStatus, Patch, Inject } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { GalleryService } from './gallery.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Request } from 'express';
@@ -64,5 +64,35 @@ export class GalleryController {
   async myWorks(@Req() req: Request) {
     const userId = (req as any).user.userId;
     return this.gallery.listWorks({ userId });
+  }
+  // ===== Gallery Publication (Admin) =====
+
+  @UseGuards(JwtAuthGuard)
+  @Post('works/:id/publish')
+  @ApiOperation({ summary: '管理员：发布作品到公开画廊' })
+  async publishToGallery(@Param('id') id: string, @Body() body: { isFeatured?: boolean; featuredOrder?: number; expiresAt?: string }, @Req() req: Request) {
+    this.checkAdmin(req);
+    return this.gallery.publishWorkToGallery(id, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('works/:id/publish')
+  @ApiOperation({ summary: '管理员：从公开画廊下架作品' })
+  async unpublishFromGallery(@Param('id') id: string, @Req() req: Request) {
+    this.checkAdmin(req);
+    return this.gallery.unpublishFromGallery(id);
+  }
+
+  @Get('featured')
+  @ApiOperation({ summary: '获取推荐作品' })
+  async listFeatured(@Query('limit') limit?: string) {
+    return this.gallery.listFeaturedWorks(limit ? parseInt(limit) : undefined);
+  }
+
+  private checkAdmin(req: Request) {
+    const user = (req as any).user;
+    if (user?.role !== 'admin') {
+      throw new Error('无权限访问');
+    }
   }
 }

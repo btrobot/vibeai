@@ -50,6 +50,13 @@
       "when": 1723267200000,
       "tag": "0006_payments_and_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786000000000,
+      "tag": "0007_content_management",
+      "breakpoints": true
     }
   ]
 }

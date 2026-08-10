@@ -22,6 +22,8 @@ import { GalleryModule } from './modules/gallery/gallery.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { OrderModule } from './modules/order/order.module';
 import { CommerceModule } from './modules/commerce/commerce.module';
+import { AnnouncementModule } from './modules/announcement/announcement.module';
+import { SystemConfigModule } from './modules/system-config/system-config.module';
 import { DrizzleModule } from './common/drizzle.module';
 
 @Module({
@@ -79,6 +81,8 @@ import { DrizzleModule } from './common/drizzle.module';
     PaymentModule,
     OrderModule,
     CommerceModule,
+    AnnouncementModule,
+    SystemConfigModule,
   ],
   providers: [
     HealthService,

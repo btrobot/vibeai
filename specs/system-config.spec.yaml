@@ -1,0 +1,126 @@
+domain: system-config
+version: '1.0'
+last_updated: '2026-08-10'
+description: 系统配置域 - 键值对配置存储，支持首页轮播、推荐作品、SEO 等配置
+
+entities:
+  - name: SystemSetting
+    table: system_settings
+    description: 系统配置 - 键值对存储
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: key
+        type: varchar(100)
+        notNull: true
+        unique: true
+        desc: 配置键 如 homepage.carousel, seo.title
+      - name: value
+        type: jsonb
+        notNull: true
+        default: '{}'
+        desc: JSON 配置值
+      - name: category
+        type: varchar(50)
+        notNull: true
+        default: general
+        desc: homepage | seo | feature | general
+      - name: description
+        type: text
+        nullable: true
+      - name: isPublic
+        type: boolean
+        notNull: true
+        default: true
+        desc: 是否允许未登录用户读取
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: system_settings_key_idx
+        fields: [key]
+      - name: system_settings_category_idx
+        fields: [category]
+      - name: system_settings_is_public_idx
+        fields: [isPublic]
+
+operations:
+  - name: listPublicSettings
+    summary: 获取公开配置列表（公开）
+    method: GET
+    path: /system-config/public
+    auth: none
+    pre:
+      - "无需认证"
+    post:
+      - "仅返回 isPublic=true 的配置"
+      - "支持按 category 筛选"
+  - name: getPublicSetting
+    summary: 获取单个公开配置
+    method: GET
+    path: /system-config/public/:key
+    auth: none
+    errors:
+      - status: 404
+        condition: "配置不存在"
+        message: "配置不存在"
+        test: should throw NotFoundException when key does not exist
+  - name: listSettingsAdmin
+    summary: 管理员获取所有配置
+    method: GET
+    path: /system-config
+    auth: jwt
+    pre:
+      - "管理员权限"
+    post:
+      - "返回所有配置（含非公开）"
+      - "支持按 category 筛选"
+  - name: upsertSetting
+    summary: 管理员创建或更新配置
+    method: POST
+    path: /system-config
+    auth: jwt
+    input:
+      key: { type: string, minLength: 1, maxLength: 100 }
+      value: { type: object }
+      category: { type: string, enum: [homepage, seo, feature, general] }
+    post:
+      - "key 已存在则更新，不存在则创建"
+    errors:
+      - status: 403
+        condition: "非管理员"
+        message: "无权限访问"
+  - name: deleteSetting
+    summary: 管理员删除配置
+    method: DELETE
+    path: /system-config/:key
+    auth: jwt
+    errors:
+      - status: 404
+        condition: "配置不存在"
+        message: "配置不存在"
+        test: should throw NotFoundException when key does not exist
+
+rules:
+  - id: CONF-001
+    description: "配置键必须唯一"
+    severity: error
+    enforcement: "key 字段 unique 约束"
+    test: should create new setting when key does not exist
+  - id: CONF-002
+    description: "非公开配置不允许未登录用户访问"
+    severity: error
+    enforcement: "listPublic 查询条件包含 isPublic = true"
+    test: should return only public settings
+  - id: CONF-003
+    description: "upsert 操作：key 已存在则更新，不存在则创建"
+    severity: error
+    enforcement: "upsert 方法先查询再决定 insert 或 update"
+    test: should update existing setting when key exists
+  - id: CONF-004
+    description: "配置分类只能是 homepage/seo/feature/general"
+    severity: warning
+    enforcement: "category 字段使用 IsEnum 校验"
