@@ -231,17 +231,19 @@ operations:
     post:
       - "仅返回当前用户的订单"
 
-  - name: payOrder
-    summary: 为订单创建支付
+  - name: checkoutOrder
+    summary: 为订单创建 Stripe Checkout Session
     method: POST
-    path: /orders/:id/pay
+    path: /orders/:id/checkout
     auth: jwt
     pre:
       - "订单状态为 pending"
       - "订单未过期"
+      - "Stripe 已配置"
     post:
-      - "创建 Payment Intent"
-      - "关联 paymentId 到订单"
+      - "创建 Stripe Checkout Session (mode=payment)"
+      - "关联 metadata.orderId / userId / credits"
+      - "返回 checkout URL（前端重定向）"
     errors:
       - status: 400
         condition: "订单已支付或已过期"

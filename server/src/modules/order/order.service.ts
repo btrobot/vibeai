@@ -3,7 +3,7 @@ import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { orders, orderItems, payments } from '../../db/schema/payments';
-import { eq, and, desc, count } from 'drizzle-orm';
+import { eq, and, desc, count, lt } from 'drizzle-orm';
 import { PromoCodeService } from '../commerce/services/promo-code.service';
 import type {
   OrderResponse,
@@ -288,9 +288,9 @@ export class OrderService {
       .from(orders)
       .where(and(
         eq(orders.status, 'pending'),
-        // @ts-ignore - Prisma/Drizzle type limitation
-        eq(orders.expiresAt, now)
-      ));
+        lt(orders.expiresAt, now),
+      ))
+      .limit(100);
 
     let expiredCount = 0;
 

@@ -20,7 +20,6 @@ import { CreateModule } from './modules/create/create.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { GalleryModule } from './modules/gallery/gallery.module';
-import { PaymentModule } from './modules/payment/payment.module';
 import { OrderModule } from './modules/order/order.module';
 import { CommerceModule } from './modules/commerce/commerce.module';
 import { AnnouncementModule } from './modules/announcement/announcement.module';
@@ -79,7 +78,6 @@ import { DrizzleModule } from './common/drizzle.module';
     BillingModule,
     AdminModule,
     GalleryModule,
-    PaymentModule,
     OrderModule,
     CommerceModule,
     AnnouncementModule,

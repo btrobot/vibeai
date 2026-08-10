@@ -77,20 +77,15 @@ export default function OrdersPage() {
   const handlePay = async (order: Order) => {
     setPaying(order.id);
     try {
-      const res = await fetch(`/api/orders/${order.id}/pay`, {
+      const res = await fetch(`/api/orders/${order.id}/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       });
       if (res.ok) {
-        const result = await res.json();
-        const data = result.data ?? result;
-        if (data.clientSecret || data.paymentUrl) {
-          // Redirect to payment if URL provided
-          if (data.paymentUrl) {
-            window.location.href = data.paymentUrl;
-          }
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
         }
-        fetchList(page);
       }
     } catch {
       // ignore

@@ -155,72 +155,40 @@ entities:
         via: paymentId
 
 operations:
-  - name: createPayment
-    summary: 创建支付意图
+  - name: checkoutOrder
+    summary: 为订单创建 Stripe Checkout Session（一次性付款）
     method: POST
-    path: /payments
+    path: /orders/:id/checkout
     auth: jwt
-    input:
-      orderId: { type: string, format: uuid }
-      amount: { type: number, min: 0.01 }
-      currency: { type: string, default: USD }
     pre:
-      - "用户已认证"
+      - "订单状态为 pending"
+      - "订单未过期"
       - "Stripe 已配置（STRIPE_SECRET_KEY）"
     post:
-      - "创建 Stripe Payment Intent"
-      - "记录 payments 表（status=pending）"
-      - "返回 clientSecret"
+      - "创建 Stripe Checkout Session (mode=payment)"
+      - "关联 metadata.userId / orderId / credits"
+      - "返回 checkout URL"
     errors:
       - status: 400
         condition: "未启用支付"
         message: "支付功能未启用"
-        test: 未启用支付时抛出异常
-      - status: 400
-        condition: "免费套餐"
-        message: "免费套餐无需支付"
-        test: 免费套餐应拒绝支付
-
-  - name: getPayment
-    summary: 查询支付状态
-    method: GET
-    path: /payments/:id
-    auth: jwt
-    pre:
-      - "用户已认证"
-      - "支付记录属于当前用户"
-    errors:
       - status: 404
-        condition: "支付记录不存在"
-        message: "支付记录不存在"
-
-  - name: listPayments
-    summary: 支付列表（分页）
-    method: GET
-    path: /payments
-    auth: jwt
-    input:
-      page: { type: integer, default: 1 }
-      pageSize: { type: integer, default: 20, max: 100 }
-      status: { type: string, optional: true }
-    pre:
-      - "用户已认证"
-    post:
-      - "仅返回当前用户的支付记录"
+        condition: "订单不存在"
+        message: "订单不存在"
 
   - name: handleWebhook
-    summary: Stripe Webhook 回调处理
+    summary: Stripe Webhook 回调处理（统一入口）
     method: POST
-    path: /payments/webhook
+    path: /billing/webhook
     auth: none
     pre:
       - "STRIPE_WEBHOOK_SECRET 已配置"
       - "Webhook 签名验证通过"
     post:
-      - "payment_intent.succeeded -> 更新 status=completed"
-      - "payment_intent.payment_failed -> 更新 status=failed"
-      - "charge.refunded -> 更新 status=refunded"
-      - "charge.refund.updated -> 同步退款状态"
+      - "checkout.session.completed (mode=payment) -> 创建 payment 记录 + 发放 credits + order→completed"
+      - "checkout.session.completed (mode=subscription) -> 激活订阅 + 发放 credits"
+      - "invoice.paid -> 续费订阅 + 重置 credits"
+      - "charge.refunded -> 同步退款状态"
     errors:
       - status: 400
         condition: "Webhook 签名验证失败"

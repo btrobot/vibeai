@@ -37,6 +37,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('用户不存在或已被禁用');
     }
 
-    return { id: user.id, email: user.email, role: user.role };
+    return { id: user.id, userId: user.id, email: user.email, role: user.role };
   }
 }

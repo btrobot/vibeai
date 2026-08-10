@@ -4,7 +4,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { subscriptionPlans, subscriptions, invoices, creditUsage } from '../../db/schema/billing';
 import { users } from '../../db/schema';
-import { payments, refunds as refundsTable } from '../../db/schema/payments';
+import { payments, refunds as refundsTable, orders } from '../../db/schema/payments';
 import { eq, and, sql } from 'drizzle-orm';
 import type Stripe from 'stripe';
 
@@ -34,6 +34,67 @@ export class PaymentService {
 
   isPaymentEnabled(): boolean {
     return !!this.stripeSecretKey;
+  }
+
+  /**
+   * 创建一次性付款 Checkout Session（积分包等）
+   */
+  async createOneTimeCheckoutSession(
+    userId: string,
+    orderId: string,
+    amount: number,
+    currency: string,
+    credits: number,
+  ): Promise<CheckoutSessionResult> {
+    if (!this.isPaymentEnabled()) {
+      throw new BadRequestException('支付功能未启用（未配置 STRIPE_SECRET_KEY）');
+    }
+
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!user) throw new NotFoundException('用户不存在');
+
+    const Stripe = (await import('stripe')).default;
+    const stripe = new Stripe(this.stripeSecretKey!);
+    const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000';
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      customer_email: user.email,
+      line_items: [
+        {
+          price_data: {
+            currency: (currency || 'usd').toLowerCase(),
+            product_data: {
+              name: `${credits} Credits Pack`,
+              description: `Purchase ${credits} credits`,
+            },
+            unit_amount: Math.round(amount * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${domain}/orders?session_id={CHECKOUT_SESSION_ID}&status=success`,
+      cancel_url: `${domain}/orders?status=cancelled`,
+      metadata: {
+        userId,
+        orderId,
+        credits: String(credits),
+        mode: 'payment',
+      },
+    });
+
+    this.logger.log(`One-time checkout session created: ${session.id} for order ${orderId}`);
+
+    return {
+      sessionId: session.id,
+      url: session.url!,
+    };
   }
 
   /**
@@ -186,6 +247,13 @@ export class PaymentService {
   }
 
   private async handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<void> {
+    // Route by session mode: 'payment' = one-time (credit pack), 'subscription' = recurring
+    if (session.mode === 'payment') {
+      await this.handleOneTimePaymentCompleted(session);
+      return;
+    }
+
+    // Subscription flow (original logic)
     const ref = session.client_reference_id;
     if (!ref) {
       this.logger.error('Checkout session missing client_reference_id');
@@ -254,6 +322,72 @@ export class PaymentService {
     });
 
     this.logger.log(`Subscription activated: user=${userId}, plan=${planSlug}, sub=${sub.id}`);
+  }
+
+  /**
+   * 处理一次性付款完成（积分包购买）
+   * Stripe Checkout Session mode='payment' 完成后触发
+   */
+  private async handleOneTimePaymentCompleted(session: Stripe.Checkout.Session): Promise<void> {
+    const { userId, orderId, credits } = (session.metadata || {}) as Record<string, string>;
+
+    if (!userId || !orderId) {
+      this.logger.error('One-time payment session missing metadata', session.metadata);
+      return;
+    }
+
+    const creditsNum = Number(credits) || 0;
+
+    // Create payment record
+    const [payment] = await this.db
+      .insert(payments)
+      .values({
+        userId,
+        amount: String((session.amount_total || 0) / 100),
+        currency: session.currency || 'usd',
+        status: 'completed',
+        provider: 'stripe',
+        providerPaymentId: session.payment_intent as string || null,
+        metadata: { orderId, sessionId: session.id },
+        completedAt: new Date(),
+      })
+      .returning();
+
+    // Update order: link payment, mark completed
+    await this.db
+      .update(orders)
+      .set({
+        paymentId: payment.id,
+        status: 'completed',
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(orders.id, orderId));
+
+    // Grant credits to user
+    if (creditsNum > 0) {
+      await this.db.transaction(async (tx) => {
+        const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) return;
+
+        const newBalance = (user.credits || 0) + creditsNum;
+
+        await tx.update(users)
+          .set({ credits: newBalance, updatedAt: new Date() })
+          .where(eq(users.id, userId));
+
+        await tx.insert(creditUsage).values({
+          userId,
+          taskId: null,
+          credits: creditsNum,
+          action: 'credit_purchase',
+          description: `积分包购买：${creditsNum} 积分`,
+          balanceAfter: newBalance,
+        });
+      });
+    }
+
+    this.logger.log(`One-time payment completed: user=${userId}, order=${orderId}, credits=${creditsNum}`);
   }
 
   private async handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
