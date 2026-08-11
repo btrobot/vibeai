@@ -1,0 +1,126 @@
+domain: notification
+version: '1.0'
+last_updated: '2026-08-11'
+description: 通知域 - 用户侧通知查看、已读管理、与 Admin 群发对接
+
+entities:
+  - name: Notification
+    table: notifications
+    description: 单条用户通知记录（由 Admin 群发或个人事件触发）
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: userId
+        type: uuid
+        notNull: true
+        fk: users.id
+        cascade: delete
+      - name: type
+        type: string
+        notNull: true
+        default: 'in_app'
+        maxLength: 20
+      - name: title
+        type: string
+        notNull: true
+        maxLength: 200
+      - name: content
+        type: text
+        notNull: true
+      - name: link
+        type: text
+      - name: icon
+        type: text
+      - name: isRead
+        type: boolean
+        notNull: true
+        default: false
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: notifications_user_id_idx
+        fields: [userId]
+      - name: notifications_is_read_idx
+        fields: [isRead]
+      - name: notifications_created_at_idx
+        fields: [createdAt]
+
+operations:
+  - name: listMyNotifications
+    summary: 获取当前用户的通知列表
+    method: GET
+    path: /notifications
+    auth: jwt
+    pre:
+      - "用户已登录"
+    input:
+      limit: { type: integer, min: 1, max: 50, default: 20 }
+      offset: { type: integer, min: 0, default: 0 }
+      unreadOnly: { type: boolean, default: false }
+    post:
+      - "按 createdAt 倒序返回"
+      - "unreadOnly=true 时仅返回 isRead=false"
+      - "只返回当前用户的通知"
+    test: should list notifications for the current user
+
+  - name: getUnreadCount
+    summary: 获取未读通知数
+    method: GET
+    path: /notifications/unread-count
+    auth: jwt
+    pre:
+      - "用户已登录"
+    post:
+      - "返回当前用户未读通知总数"
+    test: should return unread notification count
+
+  - name: markNotificationRead
+    summary: 标记单条通知为已读
+    method: POST
+    path: /notifications/:id/read
+    auth: jwt
+    pre:
+      - "用户已登录"
+      - "通知属于当前用户"
+    post:
+      - "将该通知 isRead 置为 true"
+    errors:
+      - status: 404
+        condition: "通知不存在或不属于当前用户"
+        message: "通知不存在或无权访问"
+    test: should mark a notification as read
+
+  - name: markAllRead
+    summary: 标记当前用户全部未读通知为已读
+    method: POST
+    path: /notifications/read-all
+    auth: jwt
+    pre:
+      - "用户已登录"
+    post:
+      - "将该用户所有 isRead=false 通知置为 true"
+      - "返回受影响的记录数"
+    test: should mark all notifications as read
+
+rules:
+  - id: NOTI-001
+    description: "通知只能被其归属用户查看和操作"
+    severity: error
+    enforcement: "Service 在所有读写查询中按 userId 过滤"
+    test: markRead of another users notification returns 404
+
+  - id: NOTI-002
+    description: "已读标记是不可逆的（不回滚为未读）"
+    severity: warning
+    enforcement: "markRead/markAllRead 仅设置为 true，不提供反向操作"
+    test: markRead sets isRead=true only
+
+  - id: NOTI-003
+    description: "通知列表默认按时间倒序，最新在前"
+    severity: warning
+    enforcement: "listForUser 查询使用 ORDER BY createdAt DESC"
+    test: list returns items in newest-first order

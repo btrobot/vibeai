@@ -24,6 +24,7 @@ import { OrderModule } from './modules/order/order.module';
 import { CommerceModule } from './modules/commerce/commerce.module';
 import { AnnouncementModule } from './modules/announcement/announcement.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
+import { NotificationModule } from './modules/notification/notification.module';
 import { DrizzleModule } from './common/drizzle.module';
 
 @Module({
@@ -82,6 +83,7 @@ import { DrizzleModule } from './common/drizzle.module';
     CommerceModule,
     AnnouncementModule,
     SystemConfigModule,
+    NotificationModule,
   ],
   providers: [
     HealthService,

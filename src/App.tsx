@@ -23,6 +23,7 @@ const PublicHomePage = lazy(() => import('./pages/PublicHomePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const OrdersPage = lazy(() => import('./pages/OrdersPage'));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, initializing } = useAuth();
@@ -86,6 +87,7 @@ export default function App() {
           <Route path="settings" element={<Suspense fallback={null}><SettingsPage /></Suspense>} />
           <Route path="admin" element={<Suspense fallback={null}><AdminPage /></Suspense>} />
           <Route path="orders" element={<Suspense fallback={null}><OrdersPage /></Suspense>} />
+          <Route path="notifications" element={<Suspense fallback={null}><NotificationsPage /></Suspense>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

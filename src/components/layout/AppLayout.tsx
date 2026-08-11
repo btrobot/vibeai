@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import AnnouncementBanner from '../AnnouncementBanner';
+import NotificationBell from '../NotificationBell';
 
 const sidebarNav = [
   { to: '/dashboard', label: '仪表盘', icon: LayoutDashboard },
@@ -217,6 +218,8 @@ export default function AppLayout() {
           </button>
 
           <div className="flex-1" />
+
+          <NotificationBell />
 
           {/* Credits Badge */}
           <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5">
