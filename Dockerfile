@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=127.0.0.1:5000/foundation/bootstrap/dockerfile-frontend:latest
 # ============================================================
 # Dockerfile — VibeAI 内容创作平台
 # Vite SPA + NestJS API (monorepo, single image)
