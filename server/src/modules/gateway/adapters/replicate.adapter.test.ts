@@ -250,7 +250,7 @@ describe('ReplicateAdapter - Real 模式', () => {
     );
   });
 
-  it('create prediction HTTP 错误时应抛出错误', async () => {
+  it('create prediction HTTP 401 时应提示 Token 无效', async () => {
     adapter = new ReplicateAdapter();
     const model = createMockModel();
     const context = createMockContext();
@@ -260,7 +260,77 @@ describe('ReplicateAdapter - Real 模式', () => {
     ]);
 
     await expect(adapter.execute({ prompt: 'test' }, model, context)).rejects.toThrow(
-      'Replicate 创建 prediction 失败 (HTTP 401)',
+      'Replicate API Token 无效或已过期，请检查 REPLICATE_API_TOKEN 配置',
+    );
+  });
+
+  it('create prediction HTTP 402 时应提示余额不足', async () => {
+    adapter = new ReplicateAdapter();
+    const model = createMockModel();
+    const context = createMockContext();
+
+    mockFetch([
+      { status: 402, body: { detail: 'Payment required' } },
+    ]);
+
+    await expect(adapter.execute({ prompt: 'test' }, model, context)).rejects.toThrow(
+      'Replicate 账户余额不足，请到 Replicate 后台充值后重试',
+    );
+  });
+
+  it('create prediction HTTP 429 时应提示限流', async () => {
+    adapter = new ReplicateAdapter();
+    const model = createMockModel();
+    const context = createMockContext();
+
+    mockFetch([
+      { status: 429, body: { detail: 'Rate limit exceeded' } },
+    ]);
+
+    await expect(adapter.execute({ prompt: 'test' }, model, context)).rejects.toThrow(
+      'Replicate 请求过于频繁（触发限流），请稍后重试',
+    );
+  });
+
+  it('create prediction HTTP 404 时应提示模型不存在', async () => {
+    adapter = new ReplicateAdapter();
+    const model = createMockModel();
+    const context = createMockContext();
+
+    mockFetch([
+      { status: 404, body: { detail: 'Model not found' } },
+    ]);
+
+    await expect(adapter.execute({ prompt: 'test' }, model, context)).rejects.toThrow(
+      'Replicate 创建 prediction 失败：模型不存在（stability-ai/sdxl），请检查模型 ID 配置',
+    );
+  });
+
+  it('create prediction HTTP 422 时应透出参数校验详情', async () => {
+    adapter = new ReplicateAdapter();
+    const model = createMockModel();
+    const context = createMockContext();
+
+    mockFetch([
+      { status: 422, body: { detail: 'prompt is required' } },
+    ]);
+
+    await expect(adapter.execute({ prompt: 'test' }, model, context)).rejects.toThrow(
+      'Replicate 请求参数无效：prompt is required',
+    );
+  });
+
+  it('create prediction HTTP 500 时应提示服务不可用', async () => {
+    adapter = new ReplicateAdapter();
+    const model = createMockModel();
+    const context = createMockContext();
+
+    mockFetch([
+      { status: 500, body: { detail: 'Internal error' } },
+    ]);
+
+    await expect(adapter.execute({ prompt: 'test' }, model, context)).rejects.toThrow(
+      'Replicate 服务暂时不可用（HTTP 500），请稍后重试',
     );
   });
 

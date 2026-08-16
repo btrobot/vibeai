@@ -400,7 +400,7 @@ export const SEED_MODELS: ModelSeed[] = [
     inputModes: ['text'],
     outputType: 'image',
     modality: 'image',
-    sdkModelId: 'blackforestlabs/flux-schnell',
+    sdkModelId: 'black-forest-labs/flux-schnell',
     sdkClient: 'replicate',
     constraints: {},
     inputSchema: {
@@ -451,7 +451,7 @@ export const SEED_MODEL_PROVIDERS: ProviderSeed[] = [
   {
     modelSlug: 'flux-schnell',
     providerName: 'replicate',
-    sdkModelId: 'blackforestlabs/flux-schnell',
+    sdkModelId: 'black-forest-labs/flux-schnell',
     sdkClient: 'replicate',
     priority: 1,
     costPerCall: '0.003',

@@ -168,7 +168,7 @@ export class ReplicateAdapter implements ProtocolAdapter {
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error');
       throw new Error(
-        `Replicate 创建 prediction 失败 (HTTP ${response.status}): ${errorText}`,
+        this.buildHttpErrorMessage(response.status, errorText, '创建 prediction', modelId),
       );
     }
 
@@ -212,7 +212,7 @@ export class ReplicateAdapter implements ProtocolAdapter {
           continue;
         }
         throw new Error(
-          `Replicate 轮询失败 (HTTP ${response.status}): ${errorText}`,
+          this.buildHttpErrorMessage(response.status, errorText, '轮询 prediction'),
         );
       }
 
@@ -242,6 +242,47 @@ export class ReplicateAdapter implements ProtocolAdapter {
     throw new Error(
       `Replicate prediction 超时 (${maxWaitTime}s): id=${predictionId}`,
     );
+  }
+
+  /**
+   * 将 Replicate HTTP 错误映射为友好、可行动的中文提示。
+   * 避免直接透出原始响应体（可能包含冗长 JSON 或内部信息）。
+   */
+  private buildHttpErrorMessage(
+    status: number,
+    errorText: string,
+    action: '创建 prediction' | '轮询 prediction',
+    modelId?: string,
+  ): string {
+    // 提取 Replicate 返回的 detail/error 字段作为补充信息（截断防冗长）
+    let detail = '';
+    try {
+      const parsed = JSON.parse(errorText) as { detail?: unknown; error?: unknown };
+      if (typeof parsed.detail === 'string') detail = parsed.detail;
+      else if (typeof parsed.error === 'string') detail = parsed.error;
+    } catch {
+      detail = errorText.slice(0, 200);
+    }
+
+    switch (status) {
+      case 401:
+        return 'Replicate API Token 无效或已过期，请检查 REPLICATE_API_TOKEN 配置';
+      case 402:
+        return 'Replicate 账户余额不足，请到 Replicate 后台充值后重试';
+      case 403:
+        return 'Replicate 权限不足，请检查 API Token 是否有效';
+      case 404:
+        return `Replicate ${action} 失败：模型不存在${modelId ? `（${modelId}）` : ''}，请检查模型 ID 配置`;
+      case 422:
+        return `Replicate 请求参数无效${detail ? `：${detail}` : ''}`;
+      case 429:
+        return 'Replicate 请求过于频繁（触发限流），请稍后重试';
+      default:
+        if (status >= 500) {
+          return `Replicate 服务暂时不可用（HTTP ${status}），请稍后重试`;
+        }
+        return `Replicate ${action} 失败 (HTTP ${status})${detail ? `: ${detail}` : ''}`;
+    }
   }
 
   private mapOutput(
