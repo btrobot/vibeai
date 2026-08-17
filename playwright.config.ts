@@ -9,7 +9,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { outputFolder: 'e2e-report' }]],
   timeout: 30000,
   use: {
-    baseURL: 'http://localhost:5000',
+    baseURL: process.env.E2E_BASE_URL || 'http://localhost:5000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

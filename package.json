@@ -62,6 +62,7 @@
     "husky": "^9.1.7",
     "js-yaml": "^5.2.3",
     "jsdom": "^26",
+    "jsonwebtoken": "^9.0.3",
     "lint-staged": "^17.3.0",
     "msw": "^2",
     "tailwindcss": "^4.3.3",
