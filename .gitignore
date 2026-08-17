@@ -168,3 +168,6 @@ server/server/
 
 # Superpowers tool
 docs/superpowers/
+
+# 数据库备份产物
+backups/
