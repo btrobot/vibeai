@@ -52,7 +52,7 @@ export class StorageController {
   @Post('upload')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: (Number(process.env.MAX_UPLOAD_SIZE_MB) || 20) * 1024 * 1024 } }))
-  @Throttle({ upload: { ttl: 60_000, limit: 20 } })
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: Record<string, string>,

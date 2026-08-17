@@ -46,26 +46,15 @@ import { DrizzleModule } from './common/drizzle.module';
     // Global rate limiting: 100 req/min per IP (default)
     // Stricter limits applied per-controller via @Throttle decorator
     // Test/integration mode is skipped via CustomThrottlerGuard
+    // 全局限流：default 100 req/min per IP（按路由隔离，@nestjs/throttler v6 的
+    // storage key 含路由路径）。更严格的业务限流（auth 防爆破 5/min、
+    // generation 10/min、upload 20/min）通过各路由 @Throttle({ default: { limit } })
+    // 覆盖实现 —— 避免无覆盖路由被所有命名限流器共同计数导致误伤 429。
     ThrottlerModule.forRoot([
       {
         name: 'default',
         ttl: 60_000,
         limit: 100,
-      },
-      {
-        name: 'auth',
-        ttl: 60_000,
-        limit: 5,
-      },
-      {
-        name: 'generation',
-        ttl: 60_000,
-        limit: 10,
-      },
-      {
-        name: 'upload',
-        ttl: 60_000,
-        limit: 20,
       },
     ]),
     DrizzleModule,
