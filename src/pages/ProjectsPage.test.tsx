@@ -103,6 +103,21 @@ describe('ProjectsPage', () => {
     expect(screen.getByText('共 2 个项目')).toBeInTheDocument();
   });
 
+  it('项目卡片显示创作计数并标注含义', async () => {
+    server.use(
+      http.get('/api/projects', () => HttpResponse.json(mockProjects)),
+    );
+
+    renderProjects();
+
+    await waitFor(() => {
+      expect(screen.getByText('测试项目A')).toBeInTheDocument();
+    });
+    // proj-1: completedCreates=2, totalCreates=3
+    expect(screen.getByText('2/3 创作')).toBeInTheDocument();
+    expect(screen.getByTitle('已完成 2 / 共 3 个创作')).toBeInTheDocument();
+  });
+
   it('应该显示空状态', async () => {
     server.use(
       http.get('/api/projects', () => HttpResponse.json({ items: [], total: 0 })),

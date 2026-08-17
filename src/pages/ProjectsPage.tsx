@@ -178,9 +178,12 @@ export default function ProjectsPage() {
             )}
 
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
+              <span
+                className="flex items-center gap-1"
+                title={`已完成 ${project.completedCreates} / 共 ${project.totalCreates} 个创作`}
+              >
                 <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                {project.completedCreates}/{project.totalCreates}
+                {project.completedCreates}/{project.totalCreates} 创作
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" aria-hidden="true" />

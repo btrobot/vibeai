@@ -6,6 +6,7 @@ import { creates, tasks } from '../../db/schema/task-engine';
 import { eq, and, desc, count, asc, sql } from 'drizzle-orm';
 import type { CreateResponse, CreateStatus, TaskStatus } from '../../shared-types';
 import { StorageService } from '../storage/storage.service';
+import { ProjectService } from '../project/project.service';
 
 @Injectable()
 export class CreateService {
@@ -14,6 +15,7 @@ export class CreateService {
   constructor(
     @Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>,
     @Inject('STORAGE_SERVICE') private readonly storageService: StorageService,
+    @Inject('PROJECT_SERVICE') private readonly projectService: ProjectService,
   ) {}
 
   /**
@@ -131,6 +133,10 @@ export class CreateService {
       .returning();
 
     this.logger.log(`Create record: ${created.id} (${params.capabilitySlug})`);
+
+    // 重算项目创作计数（totalTasks/completedTasks）
+    await this.projectService.updateCreateCounts(params.projectId);
+
     return { id: created.id };
   }
 
@@ -151,6 +157,15 @@ export class CreateService {
       .where(eq(creates.id, createId));
 
     this.logger.log(`Create ${createId} status → ${status}`);
+
+    // 状态流转后重算项目创作计数
+    const [c] = await this.db
+      .select({ projectId: creates.projectId })
+      .from(creates)
+      .where(eq(creates.id, createId));
+    if (c?.projectId) {
+      await this.projectService.updateCreateCounts(c.projectId);
+    }
   }
 
   /**

@@ -124,13 +124,18 @@ describe('CreateService', () => {
   let db: ReturnType<typeof createDrizzleMockForNestJS>;
   let storageService: { resolveUrls: ReturnType<typeof vi.fn>; resolveUrl: ReturnType<typeof vi.fn> };
 
+  let projectService: { updateCreateCounts: ReturnType<typeof vi.fn> };
+
   beforeEach(() => {
     db = createDrizzleMockForNestJS();
     storageService = {
       resolveUrls: vi.fn().mockResolvedValue(new Map<string, string>()),
       resolveUrl: vi.fn().mockResolvedValue(null),
     };
-    service = new CreateService(db as any, storageService as any);
+    projectService = {
+      updateCreateCounts: vi.fn().mockResolvedValue(undefined),
+    };
+    service = new CreateService(db as any, storageService as any, projectService as any);
   });
 
   // ============================================================
@@ -183,6 +188,20 @@ describe('CreateService', () => {
 
       expect(result.id).toBeDefined();
     });
+
+    it('创建后重算项目创作计数（updateCreateCounts）', async () => {
+      db._result = [buildCreateRecord({})];
+
+      const result = await service.createCreate({
+        projectId: 'proj-1',
+        userId: 'user-1',
+        capabilitySlug: 'text-generation',
+        prompt: 'hi',
+      });
+
+      expect(result.id).toBeTruthy();
+      expect(projectService.updateCreateCounts).toHaveBeenCalledWith('proj-1');
+    });
   });
 
   // ============================================================
@@ -210,6 +229,18 @@ describe('CreateService', () => {
 
       expect(db.update).toHaveBeenCalled();
       expect(db.set).toHaveBeenCalled();
+    });
+
+    it('状态更新后重算项目创作计数（updateCreateCounts）', async () => {
+      const seqDb = createSequentialDbMock([
+        [],                        // updateStatus: update then
+        [{ projectId: 'proj-9' }], // updateStatus: select projectId
+      ]);
+      const s = new CreateService(seqDb as any, storageService as any, projectService as any);
+
+      await s.updateStatus('create-1', 'completed');
+
+      expect(projectService.updateCreateCounts).toHaveBeenCalledWith('proj-9');
     });
   });
 
@@ -292,7 +323,7 @@ describe('CreateService', () => {
       const record = buildCreateRecord({ status: 'processing' });
       const task = buildTaskRecord({ status: 'submitting', progress: 50 });
       const seqDb = createSequentialDbMock([[record], [task]]);
-      const seqService = new CreateService(seqDb as any, storageService as any);
+      const seqService = new CreateService(seqDb as any, storageService as any, projectService as any);
 
       const result = await seqService.getCreate('create-1', 'user-1');
 
@@ -311,7 +342,7 @@ describe('CreateService', () => {
     it('无关联 task 时 taskStatus 为 null', async () => {
       const record = buildCreateRecord({ status: 'draft' });
       const seqDb = createSequentialDbMock([[record], []]);
-      const seqService = new CreateService(seqDb as any, storageService as any);
+      const seqService = new CreateService(seqDb as any, storageService as any, projectService as any);
 
       const result = await seqService.getCreate('create-1', 'user-1');
 
@@ -327,15 +358,16 @@ describe('CreateService', () => {
     it('failed 状态的 Create 可以重试', async () => {
       const failedRecord = buildCreateRecord({ status: 'failed', errorMessage: 'SDK timeout' });
       const processingRecord = buildCreateRecord({ status: 'processing' });
-      // retryCreate calls: getCreate(2 queries), updateStatus(1 then), getCreate(2 queries)
+      // retryCreate calls: getCreate(2 queries), updateStatus(update + select projectId), getCreate(2 queries)
       const seqDb = createSequentialDbMock([
-        [failedRecord],     // 1st getCreate: create query
-        [],                 // 1st getCreate: task query
-        [],                 // updateStatus: update then
-        [processingRecord], // 2nd getCreate: create query (after update)
-        [],                 // 2nd getCreate: task query
+        [failedRecord],            // 1st getCreate: create query
+        [],                        // 1st getCreate: task query
+        [],                        // updateStatus: update then
+        [{ projectId: 'proj-1' }], // updateStatus: select projectId（重算计数）
+        [processingRecord],        // 2nd getCreate: create query (after update)
+        [],                        // 2nd getCreate: task query
       ]);
-      const seqService = new CreateService(seqDb as any, storageService as any);
+      const seqService = new CreateService(seqDb as any, storageService as any, projectService as any);
 
       const result = await seqService.retryCreate('create-1', 'user-1');
 
@@ -347,7 +379,7 @@ describe('CreateService', () => {
       const record = buildCreateRecord({ status: 'completed' });
       // getCreate first call returns the record, second call (task) returns empty
       const seqDb = createSequentialDbMock([[record], []]);
-      const seqService = new CreateService(seqDb as any, storageService as any);
+      const seqService = new CreateService(seqDb as any, storageService as any, projectService as any);
 
       await expect(seqService.retryCreate('create-1', 'user-1'))
         .rejects.toThrow(BadRequestException);
@@ -376,7 +408,7 @@ describe('CreateService', () => {
         [],
         [],
       ]);
-      const seqService = new CreateService(seqDb as any, storageService as any);
+      const seqService = new CreateService(seqDb as any, storageService as any, projectService as any);
 
       const result = await seqService.listCreates('proj-1', 'user-1');
 
@@ -386,7 +418,7 @@ describe('CreateService', () => {
 
     it('无创作记录时返回空列表', async () => {
       const seqDb = createSequentialDbMock([[{ count: 0 }], []]);
-      const seqService = new CreateService(seqDb as any, storageService as any);
+      const seqService = new CreateService(seqDb as any, storageService as any, projectService as any);
 
       const result = await seqService.listCreates('proj-1', 'user-1');
 
@@ -401,7 +433,7 @@ describe('CreateService', () => {
         [record],
         [],
       ]);
-      const seqService = new CreateService(seqDb as any, storageService as any);
+      const seqService = new CreateService(seqDb as any, storageService as any, projectService as any);
 
       const result = await seqService.listCreates('proj-1', 'user-1', { status: 'completed' });
 
@@ -423,7 +455,7 @@ describe('CreateService', () => {
       });
       const task = buildTaskRecord({ status: 'completed', progress: 100 });
       const seqDb = createSequentialDbMock([[record], [task]]);
-      const seqService = new CreateService(seqDb as any, storageService as any);
+      const seqService = new CreateService(seqDb as any, storageService as any, projectService as any);
 
       const result = await seqService.getCreate('create-99', 'user-1');
 
@@ -441,7 +473,7 @@ describe('CreateService', () => {
     it('sourceCreateId 非空时表示迭代链', async () => {
       const record = buildCreateRecord({ sourceCreateId: 'create-0' });
       const seqDb = createSequentialDbMock([[record], []]);
-      const seqService = new CreateService(seqDb as any, storageService as any);
+      const seqService = new CreateService(seqDb as any, storageService as any, projectService as any);
 
       const result = await seqService.getCreate('create-1', 'user-1');
 
