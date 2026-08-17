@@ -3,7 +3,8 @@ import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 import { CustomThrottlerGuard } from './common/throttler.guard';
 import { AuditInterceptor } from './common/audit.interceptor';
 import { LoggerModule } from './common/logger.module';
@@ -87,6 +88,10 @@ import { DrizzleModule } from './common/drizzle.module';
   ],
   providers: [
     HealthService,
+    {
+      provide: APP_FILTER,
+      useClass: MulterExceptionFilter,
+    },
     {
       provide: APP_GUARD,
       useClass: CustomThrottlerGuard,

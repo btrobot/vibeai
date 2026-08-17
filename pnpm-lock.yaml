@@ -201,6 +201,9 @@ importers:
       express:
         specifier: ^5.2.1
         version: 5.2.1
+      multer:
+        specifier: 2.2.0
+        version: 2.2.0
       nodemailer:
         specifier: ^9.0.5
         version: 9.0.5
