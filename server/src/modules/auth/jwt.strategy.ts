@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException, Inject } from '@nestjs/common';
+import { getJwtSecret } from '../../common/jwt-secret';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { eq } from 'drizzle-orm';
@@ -22,7 +23,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'vibeai-dev-jwt-secret-key-2026',
+      secretOrKey: getJwtSecret(),
     });
   }
 

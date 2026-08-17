@@ -1,3 +1,4 @@
+import { getJwtSecret } from '../common/jwt-secret';
 import { config } from 'dotenv';
 import path from 'path';
 
@@ -11,7 +12,7 @@ export default () => ({
     url: process.env.PGDATABASE_URL || process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/vibeai',
   },
   jwt: {
-    secret: process.env.JWT_SECRET || 'vibeai-dev-secret-key-change-in-production',
+    secret: getJwtSecret(),
     accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },

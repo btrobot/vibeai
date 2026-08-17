@@ -42,8 +42,7 @@ fi
 
 # JWT secret: use a fixed default if not set (in production, set via env var)
 if [ -z "${JWT_SECRET:-}" ]; then
-  export JWT_SECRET="vibeai-production-jwt-secret-change-me"
-  echo "Using default JWT_SECRET (set JWT_SECRET env var for production)"
+  echo "[warn] JWT_SECRET 未设置。应用将在生产模式拒绝启动（fail-fast），开发模式使用内部兜底密钥。"
 fi
 
 # ── Database migrations ──

@@ -15,12 +15,16 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { AppModule } from './app.module';
+import { assertJwtSecretConfigured } from './common/jwt-secret';
+import { resolveCorsOrigin } from './common/cors.config';
 import { HealthService } from './common/health.service';
 import { WsService } from './modules/ws/ws.service';
 // WsService token is 'WS_SERVICE'
 
 
 async function bootstrap() {
+  // 安全校验：生产环境 JWT_SECRET 缺失或为弱密钥时 fail-fast
+  assertJwtSecretConfigured();
   // Run database migrations before starting the app
   try {
     const databaseUrl = process.env.PGDATABASE_URL || process.env.DATABASE_URL;
@@ -66,7 +70,7 @@ async function bootstrap() {
     }
   });
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || true,
+    origin: resolveCorsOrigin(),
     credentials: true,
   });
 

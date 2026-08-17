@@ -7,6 +7,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { getJwtSecret } from '../../common/jwt-secret';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
@@ -421,7 +422,7 @@ export class AuthService {
     const resetToken = await this.jwtService.signAsync(
       { sub: user.id, email: user.email, purpose: 'password-reset' },
       {
-        secret: process.env.JWT_SECRET || 'vibeai-jwt-secret-key-2024',
+        secret: getJwtSecret(),
         expiresIn: '15m' as `${number}${'s' | 'm' | 'h' | 'd'}`,
       },
     );
@@ -455,7 +456,7 @@ export class AuthService {
 
     try {
       payload = await this.jwtService.verifyAsync(dto.token, {
-        secret: process.env.JWT_SECRET || 'vibeai-jwt-secret-key-2024',
+        secret: getJwtSecret(),
       });
     } catch {
       throw new UnauthorizedException('重置链接已失效，请重新申请');
@@ -503,7 +504,7 @@ export class AuthService {
 
     const accessToken = await this.jwtService.signAsync(payload);
     const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.JWT_SECRET || 'vibeai-dev-jwt-secret-key-2026',
+      secret: getJwtSecret(),
       expiresIn: this.refreshExpiresIn as `${number}${'s' | 'm' | 'h' | 'd'}`,
     });
 
