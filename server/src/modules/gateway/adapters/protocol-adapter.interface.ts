@@ -49,6 +49,8 @@ export interface ExecutionContext {
   userId: string;
   customHeaders?: Record<string, string>;
   onProgress?: (progress: number, message: string) => void;
+  /** 任务取消信号：用户取消时触发 abort，适配器应尽力中断在途请求 */
+  signal?: AbortSignal;
 }
 
 export interface ExecutionResult {

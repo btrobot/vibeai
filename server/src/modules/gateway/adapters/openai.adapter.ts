@@ -27,6 +27,16 @@ interface OpenAIChatResponse {
   error?: { message?: string; type?: string };
 }
 
+/** 外部取消信号联动内部超时 controller：任一触发即 abort */
+function linkExternalSignal(controller: AbortController, external?: AbortSignal): void {
+  if (!external) return;
+  if (external.aborted) {
+    controller.abort();
+  } else {
+    external.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+}
+
 @Injectable()
 export class OpenAIAdapter implements ProtocolAdapter {
   readonly protocolKind = 'SYNC_REQUEST_RESPONSE' as const;
@@ -68,6 +78,7 @@ export class OpenAIAdapter implements ProtocolAdapter {
     context.onProgress?.(10, '正在提交到 OpenAI 兼容网关...');
 
     const controller = new AbortController();
+    linkExternalSignal(controller, context.signal);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
@@ -159,6 +170,7 @@ export class OpenAIAdapter implements ProtocolAdapter {
     context.onProgress?.(5, '正在连接 OpenAI 兼容网关...');
 
     const controller = new AbortController();
+    linkExternalSignal(controller, context.signal);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
@@ -202,6 +214,9 @@ export class OpenAIAdapter implements ProtocolAdapter {
       let done = false;
 
       while (!done) {
+        if (context.signal?.aborted) {
+          throw new Error('任务已取消');
+        }
         const { done: readerDone, value } = await reader.read();
         if (readerDone) break;
         buffer += decoder.decode(value, { stream: true });

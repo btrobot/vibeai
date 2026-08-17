@@ -96,6 +96,7 @@ export class CreateService {
       modelSlug: c.modelSlug,
       taskCount: c.taskCount,
       errorMessage: c.errorMessage,
+      taskId: latestTask ? (latestTask.id as string) : null,
       taskStatus: latestTask ? (latestTask.status as TaskStatus) : null,
       taskProgress: latestTask?.progress ?? 0,
       createdAt: c.createdAt.toISOString(),

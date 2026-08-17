@@ -82,6 +82,10 @@ export class LlmAdapter implements ProtocolAdapter {
     let fullContent = '';
     try {
       for await (const chunk of stream) {
+        // 取消检查：用户取消后立即中止流式输出（SDK 内部轮询尽力而为）
+        if (context.signal?.aborted) {
+          throw new Error('任务已取消');
+        }
         const text = chunk.content?.toString() ?? '';
         if (text) {
           fullContent += text;

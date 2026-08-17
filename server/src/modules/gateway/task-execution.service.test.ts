@@ -13,7 +13,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaskExecutionService } from './task-execution.service';
-import { createDrizzleMockForNestJS } from '../../test/drizzle-mock';
+import { createDrizzleMockForNestJS, mockSingle } from '../../test/drizzle-mock';
 import type { AdapterModel } from './adapters/protocol-adapter.interface';
 
 // ===== Mock Services =====
@@ -641,6 +641,57 @@ describe('TaskExecutionService', () => {
         ([, msg]) => typeof msg.type === 'string' && msg.type.startsWith('create:'),
       );
       expect(createEvents).toHaveLength(0);
+    });
+  });
+
+  // ===== 取消流程 =====
+
+  describe('executeTask - 取消流程', () => {
+    it('入队后执行前已被取消 → 不执行适配器，退款，不发 submitting', async () => {
+      mockSingle(db, { id: 'task-1', createId: 'create-1', status: 'cancelled' });
+
+      await service.executeTask('task-1', 'user-1', 'text-generation', { prompt: 'hi' }, mockModel);
+
+      expect(mockAdapter.execute).not.toHaveBeenCalled();
+      expect(db.update).not.toHaveBeenCalled(); // 不写 submitting
+      expect(mockBillingService.refundCredits).toHaveBeenCalledWith('user-1', 'task-1', mockModel.costCredits, '任务取消退款');
+      expect(mockWsService.sendToUser).not.toHaveBeenCalled();
+    });
+
+    it('适配器返回后任务已被取消 → 丢弃结果，退款，不发 completed', async () => {
+      mockAdapter.execute.mockResolvedValue({ output: { content: 'ok' }, modelUsed: 'm' });
+      mockSingle(db, { id: 'task-1', createId: 'create-1', status: 'submitting' }); // 顶部 select
+      mockSingle(db, { id: 'task-1', createId: 'create-1', status: 'submitting' }); // 循环前检查 → 未取消
+      mockSingle(db, { id: 'task-1', createId: 'create-1', status: 'cancelled' });  // 适配器后检查 → 已取消
+
+      await service.executeTask('task-1', 'user-1', 'text-generation', { prompt: 'hi' }, mockModel);
+
+      // 不落 completed（仅 submitting 一次 update）
+      expect(db.update).toHaveBeenCalledTimes(1);
+      expect(mockBillingService.refundCredits).toHaveBeenCalledWith('user-1', 'task-1', mockModel.costCredits, '任务取消退款');
+      expect(mockBillingService.settleCredits).not.toHaveBeenCalled();
+      // 推送取消事件而非 completed
+      const types = mockWsService.sendToUser.mock.calls.map(([, m]) => m.type);
+      expect(types).toContain('task:cancelled');
+      expect(types).not.toContain('task:completed');
+      // Create 状态同步为 cancelled
+      expect(mockCreateService.syncCreateStatus).toHaveBeenCalledWith('create-1', 'cancelled');
+    });
+
+    it('适配器抛出中止错误且任务已取消 → 走取消分支，不标记 failed', async () => {
+      mockAdapter.execute.mockRejectedValue(new Error('任务已取消'));
+      mockSingle(db, { id: 'task-1', createId: 'create-1', status: 'submitting' }); // 顶部
+      mockSingle(db, { id: 'task-1', createId: 'create-1', status: 'submitting' }); // 循环前 → 未取消
+      mockSingle(db, { id: 'task-1', createId: 'create-1', status: 'cancelled' });  // catch 中 isTaskCancelled → 已取消
+
+      await service.executeTask('task-1', 'user-1', 'text-generation', { prompt: 'hi' }, mockModel);
+
+      expect(db.update).toHaveBeenCalledTimes(1); // 仅 submitting，不写 failed
+      expect(mockBillingService.refundCredits).toHaveBeenCalledWith('user-1', 'task-1', mockModel.costCredits, '任务取消退款');
+      const types = mockWsService.sendToUser.mock.calls.map(([, m]) => m.type);
+      expect(types).toContain('task:cancelled');
+      expect(types).not.toContain('task:failed');
+      expect(mockCreateService.syncCreateStatus).toHaveBeenCalledWith('create-1', 'cancelled');
     });
   });
 });

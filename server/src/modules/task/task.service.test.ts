@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TaskService } from './task.service';
+import { TaskExecutionService } from '../gateway/task-execution.service';
 import { createDrizzleMockForNestJS, mockSingle, mockMany, mockEmpty } from '../../test/drizzle-mock';
 import type { DrizzleMock } from '../../test/drizzle-mock';
 
@@ -273,6 +274,7 @@ describe('TaskService', () => {
 
   describe('cancelTask', () => {
     it('should cancel a queued task', async () => {
+      const abortSpy = vi.spyOn(TaskExecutionService, 'cancelTaskInFlight').mockReturnValue(true);
       // cancelTask calls getTask (SELECT) then UPDATE returning
       mockSingle(db, taskRecord);
       mockSingle(db, { ...taskRecord, status: 'cancelled' });
@@ -280,6 +282,9 @@ describe('TaskService', () => {
       const result = await service.cancelTask('task-1', 'user-1');
 
       expect(result.status).toBe('cancelled'); // service updates status to cancelled
+      // 取消后应中止在途执行的适配器网络请求
+      expect(abortSpy).toHaveBeenCalledWith('task-1');
+      abortSpy.mockRestore();
     });
 
     it('should cancel a submitting task', async () => {

@@ -6,6 +6,7 @@ import { tasks, executionStates } from '../../db/schema/task-engine';
 import { eq, and, desc, count, asc } from 'drizzle-orm';
 import type { TaskResponse, ExecutionStateResponse } from '../../shared-types';
 import { BillingService } from '../billing/billing.service';
+import { TaskExecutionService } from '../gateway/task-execution.service';
 
 @Injectable()
 export class TaskService {
@@ -179,6 +180,9 @@ export class TaskService {
       .set({ status: 'cancelled', updatedAt: new Date(), completedAt: new Date() })
       .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
       .returning();
+
+    // 中断在途执行的适配器网络请求（若任务正在执行）
+    TaskExecutionService.cancelTaskInFlight(taskId);
 
     this.logger.log(`Task cancelled: ${taskId}`);
     return this.toTaskResponse(updated);

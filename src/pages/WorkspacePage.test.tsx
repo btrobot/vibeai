@@ -34,7 +34,7 @@ const mockProject = {
 
 const mockCreates = [
   { id: 'create-1', capabilitySlug: 'text-generation', prompt: 'test', sourceCreateId: null, status: 'completed', output: { text: 'ok' }, modelSlug: 'kimi-k2-5', taskCount: 1, errorMessage: null, taskStatus: 'completed', taskProgress: 100, createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:01:00Z' },
-  { id: 'create-2', capabilitySlug: 'image-generation', prompt: 'test2', sourceCreateId: null, status: 'processing', output: null, modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskStatus: 'submitting', taskProgress: 45, createdAt: '2026-01-15T11:00:00Z', updatedAt: '2026-01-15T11:00:30Z' },
+  { id: 'create-2', capabilitySlug: 'image-generation', prompt: 'test2', sourceCreateId: null, status: 'processing', output: null, modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskId: 'task-2', taskStatus: 'submitting', taskProgress: 45, createdAt: '2026-01-15T11:00:00Z', updatedAt: '2026-01-15T11:00:30Z' },
 ];
 
 const mockModels = [
@@ -250,4 +250,31 @@ describe('WorkspacePage', () => {
     expect(await screen.findByText('模型加载失败')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
   });
+
+  it('生成中的创作可以取消（调用 cancel 接口）', async () => {
+    let cancelCalled = false;
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({ total: 2, items: mockCreates })),
+      http.post('/api/tasks/task-2/cancel', () => {
+        cancelCalled = true;
+        return HttpResponse.json({ success: true, data: { id: 'task-2', status: 'cancelled' } });
+      }),
+    );
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(screen.getByText('生成中...')).toBeInTheDocument();
+    });
+
+    // 生成中的卡片显示取消按钮
+    const cancelBtn = screen.getByRole('button', { name: /取消/ });
+    await userEvent.click(cancelBtn);
+
+    await waitFor(() => {
+      expect(cancelCalled).toBe(true);
+    });
+  });
+
 });

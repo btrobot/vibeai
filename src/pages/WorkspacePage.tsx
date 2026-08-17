@@ -22,6 +22,8 @@ import {
   Clapperboard,
   Paperclip,
   X,
+  PanelRightClose,
+  PanelRightOpen,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -30,6 +32,7 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useCreateWebSocket, type CreateWsEvent } from '@/hooks/useCreateWebSocket';
+import { apiFetch } from '@/lib/apiClient';
 
 // Map backend icon strings to Lucide components
 const iconMap: Record<string, LucideIcon> = {
@@ -101,6 +104,7 @@ interface Create {
   modelSlug: string | null;
   taskCount: number;
   errorMessage: string | null;
+  taskId: string | null;
   taskStatus: string | null;
   taskProgress: number;
   createdAt: string;
@@ -135,6 +139,7 @@ export default function WorkspacePage() {
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [uploadedFile, setUploadedFile] = useState<{ fileId: string; previewUrl: string; name: string } | null>(null);
+  const [infoCollapsed, setInfoCollapsed] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const publishedIdsRef = useRef<Set<string>>(new Set());
@@ -195,23 +200,16 @@ export default function WorkspacePage() {
     enabled: !loading,
   });
 
-  const getAuthHeaders = (): Record<string, string> => {
-    const stored = localStorage.getItem('auth_tokens');
-    if (!stored) return {};
-    const { accessToken } = JSON.parse(stored);
-    return { Authorization: `Bearer ${accessToken}` };
-  };
-
   const fetchProject = async () => {
     try {
       // Fetch project + creates in parallel (capabilities is non-blocking)
       const [projectRes, createsRes] = await Promise.all([
-        fetch(`/api/projects/${projectId}`, { headers: { ...getAuthHeaders() } }),
-        fetch(`/api/projects/${projectId}/creates?pageSize=50`, { headers: { ...getAuthHeaders() } }),
+        apiFetch(`/api/projects/${projectId}`),
+        apiFetch(`/api/projects/${projectId}/creates?pageSize=50`),
       ]);
 
       // Fetch capabilities separately (non-blocking, uses fallback on failure)
-      fetch('/api/gateway/capabilities', { headers: { ...getAuthHeaders() } })
+      apiFetch('/api/gateway/capabilities')
         .then((res) => res.ok ? res.json() : null)
         .then((capData) => {
           const caps = capData?.data ?? capData;
@@ -248,8 +246,7 @@ export default function WorkspacePage() {
     setModelLoading(true);
     setModelError(null);
 
-    fetch(`/api/gateway/models?capability=${encodeURIComponent(activeCapability)}`, {
-      headers: { ...getAuthHeaders() },
+    apiFetch(`/api/gateway/models?capability=${encodeURIComponent(activeCapability)}`, {
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -290,11 +287,10 @@ export default function WorkspacePage() {
         input.referenceImage = { fileId: uploadedFile.fileId };
       }
 
-      const res = await fetch('/api/gateway/generate', {
+      const res = await apiFetch('/api/gateway/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           projectId,
@@ -327,6 +323,7 @@ export default function WorkspacePage() {
             modelSlug: data.data.modelSlug ?? selectedModelSlug,
             taskCount: 0,
             errorMessage: null,
+            taskId: data.data.taskId ?? null,
             taskStatus: 'queued',
             taskProgress: 0,
             createdAt: new Date().toISOString(),
@@ -348,9 +345,8 @@ export default function WorkspacePage() {
 
   const handleRetry = async (createId: string) => {
     try {
-      const res = await fetch(`/api/creates/${createId}/retry`, {
+      const res = await apiFetch(`/api/creates/${createId}/retry`, {
         method: 'POST',
-        headers: { ...getAuthHeaders() },
       });
       if (res.ok) {
         showToast('info', '正在重试...');
@@ -360,6 +356,23 @@ export default function WorkspacePage() {
       }
     } catch {
       showToast('error', '网络错误');
+    }
+  };
+
+  const handleCancelTask = async (create: Create) => {
+    if (!create.taskId) return;
+    try {
+      const res = await apiFetch(`/api/tasks/${create.taskId}/cancel`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        showToast('info', '正在取消...');
+        fetchProject();
+      } else {
+        showToast('error', '取消失败，任务可能已完成');
+      }
+    } catch {
+      showToast('error', '取消失败');
     }
   };
 
@@ -401,9 +414,8 @@ export default function WorkspacePage() {
       formData.append('file', file);
       formData.append('category', 'temp');
 
-      const uploadRes = await fetch('/api/storage/upload', {
+      const uploadRes = await apiFetch('/api/storage/upload', {
         method: 'POST',
-        headers: { ...getAuthHeaders() },
         body: formData,
       });
 
@@ -448,11 +460,10 @@ export default function WorkspacePage() {
     const type = isVideo ? 'video' : 'image';
 
     try {
-      const res = await fetch('/api/gallery/works', {
+      const res = await apiFetch('/api/gallery/works', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           createId: create.id,
@@ -581,6 +592,15 @@ export default function WorkspacePage() {
                       >
                         <RotateCw className="h-3 w-3" />
                         重试
+                      </button>
+                    )}
+                    {(create.status === 'processing' || create.taskStatus === 'submitting' || create.taskStatus === 'queued') && create.taskId && (
+                      <button
+                        onClick={() => handleCancelTask(create)}
+                        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                        取消
                       </button>
                     )}
                   </div>
@@ -772,8 +792,34 @@ export default function WorkspacePage() {
       </div>
 
       {/* Right: Info Panel */}
+      {infoCollapsed ? (
+        <div className="hidden w-11 shrink-0 border-l border-border lg:flex items-center justify-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setInfoCollapsed(false)}
+            aria-label="展开创作信息"
+            title="展开创作信息"
+          >
+            <PanelRightOpen className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : (
       <div className="hidden w-72 shrink-0 border-l border-border p-4 lg:block">
-        <h3 className="text-sm font-semibold text-foreground mb-3">创作信息</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-foreground">创作信息</h3>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setInfoCollapsed(true)}
+            aria-label="收起创作信息"
+            title="收起创作信息"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </Button>
+        </div>
         <div className="space-y-3 text-xs text-muted-foreground">
           <div>
             <span className="font-medium text-foreground">当前能力</span>
@@ -798,6 +844,7 @@ export default function WorkspacePage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Toast */}
       {toast && (

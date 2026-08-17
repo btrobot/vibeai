@@ -299,6 +299,7 @@ export interface CreateResponse {
   modelSlug: string | null;
   taskCount: number;
   errorMessage: string | null;
+  taskId: string | null;
   taskStatus: TaskStatus | null;
   taskProgress: number;
   createdAt: string;
