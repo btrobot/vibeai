@@ -21,6 +21,8 @@ const ENTITY_TYPE_MAP: Record<string, string> = {
   'admin/commerce/categories': 'category',
   'announcements': 'announcement',
   'system-config': 'config',
+  'gateway/admin/models': 'model',
+  'gateway/admin/providers': 'provider',
 };
 
 // Specific path patterns -> action mapping
@@ -31,6 +33,7 @@ function resolveAction(method: string, path: string): string {
   if (lower.includes('/role')) return 'update_role';
   if (lower.includes('/refund')) return 'refund';
   if (lower.includes('/export')) return 'export';
+  if (lower.includes('/toggle')) return 'toggle';
   if (lower.includes('/notify') || lower.includes('/broadcast')) return 'notify';
   if (method === 'POST') return 'create';
   if (method === 'PATCH' || method === 'PUT') return 'update';
@@ -77,7 +80,8 @@ export class AuditInterceptor implements NestInterceptor {
     const isAdminPath =
       path.includes('/api/admin/') ||
       path.includes('/api/announcements') ||
-      path.includes('/api/system-config');
+      path.includes('/api/system-config') ||
+      path.includes('/api/gateway/admin/');
 
     if (!isAdminPath) {
       return next.handle();

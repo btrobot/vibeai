@@ -270,7 +270,7 @@ describe('GatewayService', () => {
   });
 
   describe('规则测试', () => {
-    it('信用不足时返回 409 并拒绝创建', async () => {
+    it('信用不足时返回 400 并拒绝创建', async () => {
       // Mock reserveCredits to return false (insufficient credits)
       (service as any).billingService.reserveCredits = vi.fn().mockResolvedValue(false);
       await expect(

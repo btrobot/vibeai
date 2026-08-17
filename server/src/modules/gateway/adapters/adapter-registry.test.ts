@@ -19,6 +19,7 @@ describe('AdapterRegistry', () => {
   let imageAdapter: ProtocolAdapter;
   let videoAdapter: ProtocolAdapter;
   let replicateAdapter: ProtocolAdapter;
+  let openaiAdapter: ProtocolAdapter;
 
   beforeEach(() => {
     llmAdapter = createMockAdapter('llm', 'llm');
@@ -30,7 +31,13 @@ describe('AdapterRegistry', () => {
       protocolKind: 'ASYNC_TASK' as const,
       execute: vi.fn(),
     };
-    registry = new AdapterRegistry(llmAdapter, imageAdapter, videoAdapter, replicateAdapter);
+    openaiAdapter = {
+      modality: 'image',
+      sdkClient: 'openai',
+      protocolKind: 'SYNC_REQUEST_RESPONSE' as const,
+      execute: vi.fn(),
+    };
+    registry = new AdapterRegistry(llmAdapter, imageAdapter, videoAdapter, replicateAdapter, openaiAdapter);
   });
 
   describe('getAdapter', () => {
@@ -69,6 +76,11 @@ describe('AdapterRegistry', () => {
       expect(() => registry.getAdapter(undefined as unknown as string)).toThrow();
     });
   });
+    it('sdkClient=openai 时应返回 OpenAIAdapter', () => {
+      const adapter = registry.getAdapter('openai');
+      expect(adapter).toBe(openaiAdapter);
+      expect(adapter.sdkClient).toBe('openai');
+    });
 
   describe('协议属性一致性', () => {
     it('LLM 适配器应为 SYNC_STREAMING 协议', () => {

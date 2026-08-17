@@ -30,7 +30,7 @@ export class VideoAdapter implements ProtocolAdapter {
       const baseUrl = process.env.COZE_LOOP_BASE_URL || 'https://api.coze.cn';
 
       if (!apiKey) {
-        this.logger.warn('COZE_LOOP_API_TOKEN not set, Video adapter running in MOCK mode');
+        this.logger.warn('COZE_LOOP_API_TOKEN not set: Video 渠道未配置密钥，调用将直接失败（生产模式不 Mock）');
         return;
       }
 
@@ -49,25 +49,11 @@ export class VideoAdapter implements ProtocolAdapter {
   ): Promise<ExecutionResult> {
     const prompt = (input.prompt as string) || '';
 
-    // Mock mode: no API token configured
+    // 生产模式：渠道必须配置完整，未配置密钥直接报错（不再 Mock）
     if (!this.client) {
-      this.logger.warn(`[MOCK] Video generation: model=${model.sdkModelId}, prompt="${prompt.substring(0, 50)}", taskId=${context.taskId}`);
-      context.onProgress?.(10, '[Mock] 提交生成请求');
-      await this.delay(500);
-      context.onProgress?.(50, '[Mock] 视频渲染中...');
-      await this.delay(800);
-      context.onProgress?.(100, '[Mock] 视频生成完成');
-
-      return {
-        output: {
-          video: { url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4' },
-          modelUsed: model.slug,
-          mock: true,
-          duration: (input.duration as number) ?? 5,
-          resolution: (input.resolution as string) ?? '720p',
-        },
-        providerTaskId: 'mock-' + Date.now(),
-      };
+      throw new Error(
+        `视频生成渠道配置不完整：未设置 COZE_LOOP_API_TOKEN，无法调用模型 "${model.sdkModelId}"。请配置渠道密钥后重试`,
+      );
     }
 
     const content = this.buildContent(input, model);
@@ -124,9 +110,6 @@ export class VideoAdapter implements ProtocolAdapter {
     };
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
 
   /**
    * 构建视频生成的 content 数组

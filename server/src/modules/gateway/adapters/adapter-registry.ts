@@ -16,6 +16,7 @@ import { LlmAdapter } from './llm.adapter';
 import { ImageAdapter } from './image.adapter';
 import { VideoAdapter } from './video.adapter';
 import { ReplicateAdapter } from './replicate.adapter';
+import { OpenAIAdapter } from './openai.adapter';
 import type { ProtocolAdapter } from './protocol-adapter.interface';
 
 @Injectable()
@@ -27,12 +28,14 @@ export class AdapterRegistry {
     @Inject('IMAGE_ADAPTER') private readonly imageAdapter: ImageAdapter,
     @Inject('VIDEO_ADAPTER') private readonly videoAdapter: VideoAdapter,
     @Inject('REPLICATE_ADAPTER') private readonly replicateAdapter: ReplicateAdapter,
+    @Inject('OPENAI_ADAPTER') private readonly openaiAdapter: OpenAIAdapter,
   ) {
     this.adapters = new Map<string, ProtocolAdapter>([
       ['llm', llmAdapter],
       ['image', imageAdapter],
       ['video', videoAdapter],
       ['replicate', replicateAdapter],
+      ['openai', openaiAdapter],
     ]);
   }
 

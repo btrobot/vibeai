@@ -7,7 +7,7 @@
  * 2. GET /v1/predictions/{id} (轮询, 间隔 1s) → status: "processing" | "succeeded" | "failed"
  * 3. 提取 output，按 model.outputType 映射为统一 ExecutionResult
  *
- * Mock 模式：REPLICATE_API_TOKEN 未设置时自动进入 Mock，与现有适配器行为一致
+ * 生产模式：REPLICATE_API_TOKEN 未设置时显式报错（不 Mock）
  */
 
 import { Injectable, Logger } from '@nestjs/common';
@@ -35,15 +35,15 @@ export class ReplicateAdapter implements ProtocolAdapter {
   private readonly logger = new Logger(ReplicateAdapter.name);
   private readonly apiToken: string | null;
   private readonly baseUrl: string;
-  private readonly isMockMode: boolean;
+  private readonly isConfigured: boolean;
 
   constructor() {
     this.apiToken = process.env.REPLICATE_API_TOKEN || null;
     this.baseUrl = process.env.REPLICATE_BASE_URL || 'https://api.replicate.com';
-    this.isMockMode = !this.apiToken;
+    this.isConfigured = !!this.apiToken;
 
-    if (this.isMockMode) {
-      this.logger.warn('REPLICATE_API_TOKEN not set, Replicate adapter running in MOCK mode');
+    if (!this.isConfigured) {
+      this.logger.warn('REPLICATE_API_TOKEN not set: Replicate 渠道未配置密钥，调用将直接失败');
     } else {
       this.logger.log('Replicate adapter initialized');
     }
@@ -56,9 +56,11 @@ export class ReplicateAdapter implements ProtocolAdapter {
   ): Promise<ExecutionResult> {
     const prompt = (input.prompt as string) || '';
 
-    // ===== Mock mode =====
-    if (this.isMockMode) {
-      return this.executeMock(prompt, model, context);
+    // 生产模式：渠道必须配置完整，未配置密钥直接报错（不再 Mock）
+    if (!this.isConfigured) {
+      throw new Error(
+        `Replicate 渠道配置不完整：未设置 REPLICATE_API_TOKEN，无法调用模型 "${model.sdkModelId}"。请配置渠道密钥后重试`,
+      );
     }
 
     // ===== Real mode =====
@@ -332,55 +334,6 @@ export class ReplicateAdapter implements ProtocolAdapter {
     return { content: JSON.stringify(output) };
   }
 
-  private async executeMock(
-    prompt: string,
-    model: AdapterModel,
-    context: ExecutionContext,
-  ): Promise<ExecutionResult> {
-    this.logger.warn(
-      `[MOCK] Replicate: model=${model.sdkModelId}, prompt="${prompt.substring(0, 50)}", taskId=${context.taskId}`,
-    );
-
-    context.onProgress?.(20, '[Mock] 提交到 Replicate...');
-    await this.delay(400);
-    context.onProgress?.(60, '[Mock] Replicate 处理中...');
-    await this.delay(400);
-    context.onProgress?.(100, '[Mock] Replicate 生成完成');
-
-    const mockUrl = `https://picsum.photos/seed/${encodeURIComponent(prompt.substring(0, 20))}/1024/1024`;
-
-    if (model.outputType === 'video') {
-      return {
-        output: {
-          video: { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' },
-          modelUsed: model.slug,
-          mock: true,
-        },
-        providerTaskId: `mock-replicate-${Date.now()}`,
-      };
-    }
-
-    if (model.outputType === 'text') {
-      return {
-        output: {
-          content: `[Mock Replicate] 这是模拟文本输出。Prompt: ${prompt}`,
-          modelUsed: model.slug,
-          mock: true,
-        },
-        providerTaskId: `mock-replicate-${Date.now()}`,
-      };
-    }
-
-    // Default: image
-    return {
-      output: {
-        images: [{ url: mockUrl }],
-        modelUsed: model.slug,
-        mock: true,
-      },
-      providerTaskId: `mock-replicate-${Date.now()}`,
-    };
-  }
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

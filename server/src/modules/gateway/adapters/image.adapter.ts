@@ -4,6 +4,7 @@
  * 协议: SYNC_REQUEST_RESPONSE
  * 使用 ImageGenerationClient.generate()
  * 参数从 model.constraints + model.defaultParams + input 合并
+ * 生产模式：未配置 COZE_LOOP_API_TOKEN 时抛错，不再 Mock
  */
 
 import { Injectable, Logger } from '@nestjs/common';
@@ -29,7 +30,7 @@ export class ImageAdapter implements ProtocolAdapter {
       const baseUrl = process.env.COZE_LOOP_BASE_URL || 'https://api.coze.cn';
 
       if (!apiKey) {
-        this.logger.warn('COZE_LOOP_API_TOKEN not set, Image adapter running in MOCK mode');
+        this.logger.warn('COZE_LOOP_API_TOKEN not set: Image 渠道未配置密钥，调用将直接失败（生产模式不 Mock）');
         return;
       }
 
@@ -48,20 +49,11 @@ export class ImageAdapter implements ProtocolAdapter {
   ): Promise<ExecutionResult> {
     const prompt = (input.prompt as string) || '';
 
-    // Mock mode: no API token configured
+    // 生产模式：渠道必须配置完整，未配置密钥直接报错（不再 Mock）
     if (!this.client) {
-      this.logger.warn(`[MOCK] Image generation: model=${model.sdkModelId}, prompt="${prompt.substring(0, 50)}", taskId=${context.taskId}`);
-      context.onProgress?.(50, '[Mock] 生成中...');
-      await this.delay(800);
-      context.onProgress?.(100, '[Mock] 生成完成');
-
-      return {
-        output: {
-          images: [{ url: 'https://picsum.photos/seed/' + encodeURIComponent(prompt.substring(0, 20)) + '/1024/1024' }],
-          modelUsed: model.slug,
-          mock: true,
-        },
-      };
+      throw new Error(
+        `图片生成渠道配置不完整：未设置 COZE_LOOP_API_TOKEN，无法调用模型 "${model.sdkModelId}"。请配置渠道密钥后重试`,
+      );
     }
 
     const size = (input.size as string) ?? (model.defaultParams.size as string) ?? '2K';
@@ -112,7 +104,4 @@ export class ImageAdapter implements ProtocolAdapter {
     };
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
 }

@@ -9,6 +9,7 @@ import { LlmAdapter } from './adapters/llm.adapter';
 import { ImageAdapter } from './adapters/image.adapter';
 import { VideoAdapter } from './adapters/video.adapter';
 import { ReplicateAdapter } from './adapters/replicate.adapter';
+import { OpenAIAdapter } from './adapters/openai.adapter';
 import { AdapterRegistry } from './adapters/adapter-registry';
 import { DrizzleModule } from '../../common/drizzle.module';
 import { StorageModule } from '../storage/storage.module';
@@ -28,6 +29,7 @@ import { CreateModule } from '../create/create.module';
     { provide: 'IMAGE_ADAPTER', useClass: ImageAdapter },
     { provide: 'VIDEO_ADAPTER', useClass: VideoAdapter },
     { provide: 'REPLICATE_ADAPTER', useClass: ReplicateAdapter },
+    { provide: 'OPENAI_ADAPTER', useClass: OpenAIAdapter },
     { provide: 'ADAPTER_REGISTRY', useClass: AdapterRegistry },
   ],
   exports: [

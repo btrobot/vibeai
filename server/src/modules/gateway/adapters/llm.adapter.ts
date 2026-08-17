@@ -29,7 +29,7 @@ export class LlmAdapter implements ProtocolAdapter {
       const baseUrl = process.env.COZE_LOOP_BASE_URL || 'https://api.coze.cn';
 
       if (!apiKey) {
-        this.logger.warn('COZE_LOOP_API_TOKEN not set, LLM adapter running in MOCK mode');
+        this.logger.warn('COZE_LOOP_API_TOKEN not set: LLM 渠道未配置密钥，调用将直接失败（生产模式不 Mock）');
         return;
       }
 
@@ -48,25 +48,11 @@ export class LlmAdapter implements ProtocolAdapter {
   ): Promise<ExecutionResult> {
     const prompt = (input.prompt as string) || '';
 
-    // Mock mode: no API token configured
+    // 生产模式：渠道必须配置完整，未配置密钥直接报错（不再 Mock）
     if (!this.client) {
-      this.logger.warn(`[MOCK] LLM streaming: model=${model.sdkModelId}, prompt="${prompt.substring(0, 50)}", taskId=${context.taskId}`);
-
-      const mockContent = this.generateMockText(prompt, model);
-      // Simulate streaming by sending chunks
-      const chunks = mockContent.match(/.{1,20}/g) || [mockContent];
-      for (const chunk of chunks) {
-        context.onProgress?.(0, chunk);
-        await this.delay(50);
-      }
-
-      return {
-        output: {
-          content: mockContent,
-          modelUsed: model.slug,
-          mock: true,
-        },
-      };
+      throw new Error(
+        `LLM 渠道配置不完整：未设置 COZE_LOOP_API_TOKEN，无法调用模型 "${model.sdkModelId}"。请配置渠道密钥后重试`,
+      );
     }
 
     const messages = this.buildMessages(input);
@@ -121,17 +107,7 @@ export class LlmAdapter implements ProtocolAdapter {
     };
   }
 
-  private generateMockText(prompt: string, model: AdapterModel): string {
-    return `[Mock LLM Response — ${model.name}]\n\n` +
-      `收到提示词: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"\n\n` +
-      `这是一条 Mock 模式返回的模拟响应。配置 COZE_LOOP_API_TOKEN 后将使用真实 AI 模型生成内容。\n\n` +
-      `模型信息:\n- Slug: ${model.slug}\n- SDK Model ID: ${model.sdkModelId}\n- 积分消耗: ${model.costCredits}\n\n` +
-      `生成时间: ${new Date().toISOString()}`;
-  }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
 
   /**
    * 构建 SDK 消息数组

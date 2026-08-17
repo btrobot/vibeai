@@ -7,6 +7,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 import { CustomThrottlerGuard } from './common/throttler.guard';
 import { AuditInterceptor } from './common/audit.interceptor';
+import { AdminAuditService } from './modules/admin/services/admin-audit.service';
 import { LoggerModule } from './common/logger.module';
 import { EmailModule } from './common/email.module';
 import { HealthService } from './common/health.service';
@@ -98,7 +99,8 @@ import { DrizzleModule } from './common/drizzle.module';
     },
     {
       provide: APP_INTERCEPTOR,
-      useClass: AuditInterceptor,
+      inject: [AdminAuditService],
+      useFactory: (auditService: AdminAuditService) => new AuditInterceptor(auditService),
     },
   ],
 })

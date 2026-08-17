@@ -2,9 +2,7 @@
  * ReplicateAdapter 单元测试
  *
  * 覆盖范围：
- * - Mock 模式（REPLICATE_API_TOKEN 未设置）
- * - Mock 图片/视频/文本输出
- * - Mock 进度推送
+ * - 未配置 REPLICATE_API_TOKEN 时渠道不完整 → 显式抛错（不 Mock）
  * - Real 模式（fetch mock）：create prediction / poll / extract output
  * - 错误处理：prediction failed / HTTP error / timeout
  * - output 映射：image / video / text
@@ -45,9 +43,9 @@ function createMockContext(): ExecutionContext & { progressCalls: Array<{ progre
   };
 }
 
-// ===== Mock Mode Tests (no REPLICATE_API_TOKEN) =====
+// ===== 未配置 Token Tests (no REPLICATE_API_TOKEN → 显式抛错) =====
 
-describe('ReplicateAdapter - Mock 模式', () => {
+describe('ReplicateAdapter - 未配置 token', () => {
   let adapter: ReplicateAdapter;
   let originalToken: string | undefined;
 
@@ -65,63 +63,54 @@ describe('ReplicateAdapter - Mock 模式', () => {
     }
   });
 
-  it('无 API token 时应进入 Mock 模式', () => {
-    expect((adapter as any).isMockMode).toBe(true);
+  it('无 API token 时标记为未配置', () => {
+    expect((adapter as any).isConfigured).toBe(false);
   });
 
-  it('Mock 图片生成应返回 picsum URL', async () => {
+  it('未配置 token 时图片生成直接抛错（不再 Mock）', async () => {
     const model = createMockModel();
     const context = createMockContext();
 
-    const result = await adapter.execute({ prompt: 'a cat' }, model, context);
-
-    expect(result.output.images).toBeDefined();
-    expect(result.output.images).toHaveLength(1);
-    expect(result.output.images[0].url).toContain('picsum.photos');
-    expect(result.output.mock).toBe(true);
-    expect(result.output.modelUsed).toBe('sdxl');
+    await expect(adapter.execute({ prompt: 'a cat' }, model, context)).rejects.toThrow(
+      /Replicate 渠道配置不完整：未设置 REPLICATE_API_TOKEN/,
+    );
   });
 
-  it('Mock 视频生成应返回 Big Buck Bunny URL', async () => {
+  it('未配置 token 时视频生成直接抛错（不再 Mock）', async () => {
     const model = createMockModel({ outputType: 'video' });
     const context = createMockContext();
 
-    const result = await adapter.execute({ prompt: 'sunset' }, model, context);
-
-    expect(result.output.video).toBeDefined();
-    expect(result.output.video.url).toContain('BigBuckBunny');
-    expect(result.output.mock).toBe(true);
+    await expect(adapter.execute({ prompt: 'sunset' }, model, context)).rejects.toThrow(
+      /Replicate 渠道配置不完整：未设置 REPLICATE_API_TOKEN/,
+    );
   });
 
-  it('Mock 文本生成应返回模拟文本', async () => {
+  it('未配置 token 时文本生成直接抛错（不再 Mock）', async () => {
     const model = createMockModel({ outputType: 'text' });
     const context = createMockContext();
 
-    const result = await adapter.execute({ prompt: 'hello' }, model, context);
-
-    expect(result.output.content).toBeDefined();
-    expect(typeof result.output.content).toBe('string');
-    expect(result.output.mock).toBe(true);
+    await expect(adapter.execute({ prompt: 'hello' }, model, context)).rejects.toThrow(
+      /Replicate 渠道配置不完整：未设置 REPLICATE_API_TOKEN/,
+    );
   });
 
-  it('Mock 模式应推送进度', async () => {
+  it('未配置 token 时不推送任何进度', async () => {
     const model = createMockModel();
     const context = createMockContext();
 
-    await adapter.execute({ prompt: 'test' }, model, context);
-
-    expect(context.progressCalls.length).toBeGreaterThan(0);
-    expect(context.progressCalls.some((c) => c.progress === 100)).toBe(true);
+    await expect(adapter.execute({ prompt: 'test' }, model, context)).rejects.toThrow(
+      /Replicate 渠道配置不完整/,
+    );
+    expect(context.progressCalls.length).toBe(0);
   });
 
-  it('Mock 模式应返回 providerTaskId', async () => {
+  it('未配置 token 时不产生 providerTaskId', async () => {
     const model = createMockModel();
     const context = createMockContext();
 
-    const result = await adapter.execute({ prompt: 'test' }, model, context);
-
-    expect(result.providerTaskId).toBeDefined();
-    expect(result.providerTaskId).toContain('mock-replicate-');
+    await expect(adapter.execute({ prompt: 'test' }, model, context)).rejects.toThrow(
+      /Replicate 渠道配置不完整/,
+    );
   });
 });
 
@@ -162,9 +151,9 @@ describe('ReplicateAdapter - Real 模式', () => {
     }) as typeof global.fetch;
   }
 
-  it('有 API token 时不应进入 Mock 模式', () => {
+  it('有 API token 时进入真实模式（未配置标记为 false）', () => {
     adapter = new ReplicateAdapter();
-    expect((adapter as any).isMockMode).toBe(false);
+    expect((adapter as any).isConfigured).toBe(true);
   });
 
   it('create prediction + poll succeeded → 图片 URL 输出', async () => {

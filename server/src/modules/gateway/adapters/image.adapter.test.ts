@@ -184,15 +184,14 @@ describe('ImageAdapter', () => {
       ).rejects.toThrow('图片生成失败');
     });
 
-    it('无 Token 时进入 Mock 模式返回伪造图片', async () => {
+    it('无 Token 时渠道配置不完整直接抛错（不再 Mock）', async () => {
       delete process.env.COZE_LOOP_API_TOKEN;
       delete process.env.COZE_WORKLOAD_API_TOKEN;
       const noTokenAdapter = new ImageAdapter();
 
-      const result = await noTokenAdapter.execute({ prompt: 'a cat' }, mockModel, mockContext);
-      expect(result.output.mock).toBe(true);
-      expect(result.output.images).toBeDefined();
-      expect((result.output.images as Array<{ url: string }>).length).toBeGreaterThan(0);
+      await expect(
+        noTokenAdapter.execute({ prompt: 'a cat' }, mockModel, mockContext),
+      ).rejects.toThrow(/图片生成渠道配置不完整：未设置 COZE_LOOP_API_TOKEN/);
     });
   });
 });

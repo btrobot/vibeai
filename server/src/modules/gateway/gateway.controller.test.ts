@@ -148,6 +148,33 @@ describe('GatewayController', () => {
     });
   });
 
+  // ===== 模型出口脱敏（模型级 key 不回显）=====
+
+  describe('模型出口脱敏', () => {
+    it('GET /gateway/models 移除 defaultParams 中的 apiKey/token', async () => {
+      mockGatewayService.listModels.mockResolvedValue([
+        { slug: 'gpt-4o', name: 'GPT-4o', defaultParams: { apiKey: 'sk-secret', temperature: 0.7 }, costCredits: 3 },
+      ]);
+
+      const result = await controller.listModels(createMockRequest());
+
+      expect(result.data[0].defaultParams.apiKey).toBeUndefined();
+      expect(result.data[0].defaultParams.temperature).toBe(0.7);
+    });
+
+    it('GET /gateway/models/:slug 移除 defaultParams 中的密钥', async () => {
+      mockGatewayService.getModel.mockResolvedValue({
+        slug: 'gpt-4o',
+        defaultParams: { baseUrl: 'https://cn.pptoken.cc/v1', apiKey: 'sk-secret' },
+      });
+
+      const result = await controller.getModel('gpt-4o');
+
+      expect(result.data.defaultParams.apiKey).toBeUndefined();
+      expect(result.data.defaultParams.baseUrl).toBe('https://cn.pptoken.cc/v1');
+    });
+  });
+
   // ===== listRecipes =====
 
   describe('GET /gateway/recipes', () => {
@@ -291,6 +318,36 @@ describe('GatewayController', () => {
       );
 
       // Verify response ended
+      expect(res.end).toHaveBeenCalled();
+    });
+
+    it('按模型的 sdkClient 选择适配器（openai 协议模型）', async () => {
+      const model = {
+        slug: 'gpt-4o',
+        name: 'GPT-4o (ppToken)',
+        costCredits: 3,
+        modality: 'llm' as const,
+        sdkModelId: 'gpt-4o',
+        sdkClient: 'openai',
+        constraints: {},
+        defaultParams: { baseUrl: 'https://cn.pptoken.cc/v1' },
+        sortOrder: 0,
+      };
+      mockGatewayService.getModel.mockResolvedValue(model);
+      const mockAdapter = {
+        execute: vi.fn().mockImplementation((_i, _m, c) => {
+          c.onProgress(0, 'ok');
+          return Promise.resolve({ output: { content: 'ok' } });
+        }),
+      };
+      mockAdapterRegistry.getAdapter.mockReturnValue(mockAdapter);
+      mockBillingService.deductCredits.mockResolvedValue(true);
+
+      const res = createMockResponse();
+      await controller.chat(createMockRequest(), { prompt: '你好', modelSlug: 'gpt-4o' }, res);
+
+      expect(mockAdapterRegistry.getAdapter).toHaveBeenCalledWith('openai');
+      expect(mockAdapter.execute).toHaveBeenCalledTimes(1);
       expect(res.end).toHaveBeenCalled();
     });
 

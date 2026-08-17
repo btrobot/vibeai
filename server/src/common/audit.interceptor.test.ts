@@ -150,4 +150,34 @@ describe('AuditInterceptor', () => {
       }),
     );
   });
+  it('should audit gateway model toggle (POST /api/gateway/admin/models/:slug/toggle)', async () => {
+    const ctx = createMockContext('POST', '/api/gateway/admin/models/doubao-seed-2-0-pro/toggle', { id: 'admin-1' });
+    const next = createMockHandler();
+
+    await interceptor.intercept(ctx, next).toPromise();
+
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminId: 'admin-1',
+        action: 'toggle',
+        entityType: 'model',
+        status: 'success',
+      }),
+    );
+  });
+
+  it('should audit gateway provider toggle (POST /api/gateway/admin/providers/:id/toggle)', async () => {
+    const ctx = createMockContext('POST', '/api/gateway/admin/providers/123e4567-e89b-12d3-a456-426614174000/toggle', { id: 'admin-1' });
+    const next = createMockHandler();
+
+    await interceptor.intercept(ctx, next).toPromise();
+
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'toggle',
+        entityType: 'provider',
+        status: 'success',
+      }),
+    );
+  });
 });

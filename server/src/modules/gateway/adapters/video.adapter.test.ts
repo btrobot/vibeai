@@ -323,15 +323,14 @@ describe('VideoAdapter', () => {
       ).rejects.toThrow('视频生成失败');
     });
 
-    it('无 Token 时进入 Mock 模式返回伪造视频', async () => {
+    it('无 Token 时渠道配置不完整直接抛错（不再 Mock）', async () => {
       delete process.env.COZE_LOOP_API_TOKEN;
       delete process.env.COZE_WORKLOAD_API_TOKEN;
       const noTokenAdapter = new VideoAdapter();
 
-      const result = await noTokenAdapter.execute({ prompt: 'a sunset' }, mockModel, mockContext);
-      expect(result.output.mock).toBe(true);
-      expect(result.output.video).toBeDefined();
-      expect((result.output.video as { url: string }).url).toContain('.mp4');
+      await expect(
+        noTokenAdapter.execute({ prompt: 'a sunset' }, mockModel, mockContext),
+      ).rejects.toThrow(/视频生成渠道配置不完整：未设置 COZE_LOOP_API_TOKEN/);
     });
   });
 });
