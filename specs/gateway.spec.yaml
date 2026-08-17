@@ -778,7 +778,7 @@ rules:
     id: GTW-007
     severity: error
     level: error
-    description: 按 sdkClient 选择对应 ProtocolAdapter（llm | image | video | replicate），支持多 provider 路由
+    description: 按 sdkClient 选择对应 ProtocolAdapter（llm | image | video | replicate | openai），支持多渠道路由与故障切换
     enforcement: TaskExecutionService 通过 ProviderService.getAvailableProviders 获取渠道列表，按 sdkClient 选择适配器
     test: 应根据 provider.sdkClient 获取适配器
   - name: llm_streaming
@@ -821,7 +821,7 @@ rules:
     severity: error
     level: error
     description: 模型执行必须至少存在一个启用的 model_channels 渠道
-    enforcement: ProviderService 仅返回 modelProviders 表中启用渠道，无隐式 fallback
+    enforcement: ProviderService 仅返回 model_channels 表中启用渠道（且平台启用），无隐式 fallback
     test: provider.service.test.ts 无启用渠道时返回空列表
   - name: model_capability_match
     id: GTW-014
@@ -844,9 +844,57 @@ rules:
     description: 逻辑模型 slug 创建后不可修改，模型下线使用 isActive
     enforcement: UpdateModelSchema 不包含 slug 且 ModelConfigService 不提供模型硬删除
     test: model-config.service.test.ts 更新模型时保持 slug 不变
+  - name: api_key_resolution_chain
+    id: GTW-017
+    severity: error
+    level: error
+    description: key 三级解析：模型 defaultParams.apiKey > 渠道 config.apiKey > 平台 apiKey；三级均未配置时适配器直接报错，不得 Mock
+    enforcement: TaskExecutionService 合并 provider.config（含平台默认+渠道覆盖）与模型 defaultParams 后传给适配器，OpenAIAdapter/ReplicateAdapter/Coze 适配器在未配置 apiKey 时抛「配置不完整」异常
+    test: 平台级 key 作为默认传给适配器
+  - name: channel_identity_unique
+    id: GTW-018
+    severity: error
+    level: error
+    description: 渠道组合标识（platformId × modelSlug × sdkModelId）全局唯一
+    enforcement: assertChannelIdentityAvailable 校验 platformId × modelSlug × sdkModelId 组合唯一且 model_channels_identity_uidx 唯一索引兜底
+    test: 拒绝重复渠道组合标识
+  - name: platform_name_unique
+    id: GTW-019
+    severity: error
+    level: error
+    description: 平台名称全局唯一
+    enforcement: assertPlatformNameAvailable 校验平台名称唯一且 ai_platforms_name_uidx 唯一索引兜底
+    test: 拒绝重复平台名称
+  - name: api_key_redaction
+    id: GTW-020
+    severity: error
+    level: error
+    description: 模型 defaultParams / 平台 apiKey / 渠道 config 中的密钥任何出口均不回显，仅暴露 apiKeyConfigured 标记
+    enforcement: sanitizePlatform/sanitizeChannel 与 gateway 出口脱敏（omitSensitiveConfig 递归移除敏感字段）
+    test: 读取配置时平台 apiKey 不回显
+  - name: platform_delete_cascade
+    id: GTW-021
+    severity: error
+    level: error
+    description: 删除平台必须级联删除其全部渠道，渠道不得脱离平台孤立存在
+    enforcement: deletePlatform 删除平台，FK ON DELETE CASCADE 级联清理 model_channels
+    test: 删除平台
 seed_data:
   # 权威来源：server/src/modules/gateway/seeds/model-seeds.ts
   # 生成方式：node --import tsx /tmp/dump-seeds.ts | node -e "js-yaml dump"
+  # 平台/渠道：SEED_PLATFORMS（按模型 providerName 去重）+ SEED_CHANNELS（每模型一个渠道，config 空继承平台）
+  # 平台 key/baseUrl 不在种子中硬编码，运行时在 Admin 后台配置（效率优先，明文存 DB）
+  platforms:
+    - name: doubao
+    - name: moonshot
+    - name: zhipu
+    - name: replicate
+  channels:
+    - platformName: doubao
+      modelSlug: doubao-seed-2-0-pro
+      sdkClient: llm
+      sdkModelId: doubao-seed-2-0-pro-260215
+      priority: 1
   models:
     - slug: doubao-seed-2-0-pro
       name: Doubao Seed 2.0 Pro

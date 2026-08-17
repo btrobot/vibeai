@@ -495,6 +495,25 @@ describe('TaskExecutionService', () => {
       expect(passedModel.defaultParams.apiKey).toBe('channel-key');
     });
 
+    it('平台级 key 作为默认传给适配器（ProviderService 已合并平台+渠道）', async () => {
+      // ProviderService 负责把平台 apiKey/baseUrl 合并进 config，这里模拟合并后的结果
+      const provider = {
+        platformName: 'pptoken', sdkModelId: 'gpt-image-2', sdkClient: 'openai',
+        priority: 1, costPerCall: 0.05,
+        config: { apiKey: 'platform-key', baseUrl: 'https://cn.pptoken.cc/v1' },
+      };
+      mockProviderService.getAvailableProviders.mockResolvedValue([provider]);
+
+      mockAdapter.execute.mockResolvedValue({ output: { images: [{ url: 'https://cdn.example.com/a.png' }] } });
+      mockStorageService.downloadAndStore.mockResolvedValue({ fileId: 'f1', url: 'https://s.com/a.png' });
+
+      await service.executeTask('task-1', 'user-1', 'image-generation', { prompt: 'test' }, mockModel);
+
+      const passedModel = mockAdapter.execute.mock.calls[0][1] as AdapterModel;
+      expect(passedModel.defaultParams.apiKey).toBe('platform-key');
+      expect(passedModel.defaultParams.baseUrl).toBe('https://cn.pptoken.cc/v1');
+    });
+
     it('provider 成功时应传递 provider 的 sdkModelId 给适配器', async () => {
       const provider = { platformName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc123', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: { width: 1024 } };
       mockProviderService.getAvailableProviders.mockResolvedValue([provider]);
