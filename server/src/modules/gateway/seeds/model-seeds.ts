@@ -255,6 +255,34 @@ export const SEED_MODELS: ModelSeed[] = [
     isFeatured: false,
     sortOrder: 11,
   },
+  // ===== pptoken OpenAI 协议模型（1 个）=====
+  {
+    slug: 'gpt-5.6-sol',
+    name: 'GPT-5.6 Sol',
+    providerName: 'pptoken',
+    description: 'GPT-5.6 Sol 旗舰推理模型（pptoken OpenAI 兼容网关，key 配置在平台/渠道）',
+    capabilities: ['text-generation', 'detail-page-generation'],
+    inputModes: ['text'],
+    outputType: 'text',
+    modality: 'llm',
+    sdkModelId: 'gpt-5.6-sol',
+    sdkClient: 'openai',
+    constraints: { supportsThinking: true, supportsCaching: false, maxTokens: 32768 },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: '用户输入' },
+        systemPrompt: { type: 'string', description: '系统提示词' },
+        temperature: { type: 'number', minimum: 0, maximum: 2, default: 0.7 },
+      },
+      required: ['prompt'],
+    },
+    defaultParams: { temperature: 0.7 },
+    costCredits: 10,
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 15,
+  },
 
   // ===== 视频生成模型（2 个）=====
   {
@@ -328,6 +356,7 @@ export const SEED_MODELS: ModelSeed[] = [
     isFeatured: false,
     sortOrder: 21,
   },
+
 
   // ===== Replicate 模型（3 个）=====
   {
@@ -440,6 +469,7 @@ export interface ChannelSeed {
 }
 
 const channelCostPerCall: Record<string, string> = {
+  'gpt-5.6-sol': '0.05',
   'gpt-image-2': '0.05',
   sdxl: '0.002',
   'flux-schnell': '0.003',
@@ -462,8 +492,9 @@ export const SEED_CHANNELS: ChannelSeed[] = SEED_MODELS.map((model) => ({
 type ModelRouteSeed = typeof capabilityModelRoutes.$inferInsert;
 
 export const SEED_MODEL_ROUTES: ModelRouteSeed[] = [
-  { capabilitySlug: 'text-generation', modelSlug: 'doubao-seed-2-0-pro', priority: 1, isActive: true },
-  { capabilitySlug: 'text-generation', modelSlug: 'doubao-seed-2-0-lite', priority: 2, isActive: true },
+  { capabilitySlug: 'text-generation', modelSlug: 'gpt-5.6-sol', priority: 1, isActive: true },
+  { capabilitySlug: 'text-generation', modelSlug: 'doubao-seed-2-0-pro', priority: 2, isActive: true },
+  { capabilitySlug: 'text-generation', modelSlug: 'doubao-seed-2-0-lite', priority: 3, isActive: true },
   { capabilitySlug: 'image-generation', modelSlug: 'doubao-seedream-5-0', priority: 1, isActive: true },
   { capabilitySlug: 'image-generation', modelSlug: 'doubao-seedream-4-5', priority: 2, isActive: true },
   { capabilitySlug: 'image-generation', modelSlug: 'gpt-image-2', priority: 3, isActive: true },

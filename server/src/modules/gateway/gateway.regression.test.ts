@@ -695,10 +695,11 @@ describe('AI Gateway 回归测试', () => {
   // 期望: llm ↔ 'llm', image ↔ 'image', video ↔ 'video' 一一对应
   // ============================================================
   describe('REG-012: 种子数据 invariant 一致性', () => {
-    it('LLM 模型 sdkClient 为 "llm"', () => {
+    it('LLM 模型 sdkClient 为 "llm" 或 "openai"', () => {
       const llmModels = SEED_MODELS.filter(m => m.modality === 'llm');
       llmModels.forEach(m => {
-        expect(m.sdkClient).toBe('llm');
+        // Coze 协议（llm）或 OpenAI 协议（openai，如 pptoken 网关）
+        expect(['llm', 'openai']).toContain(m.sdkClient);
       });
     });
 

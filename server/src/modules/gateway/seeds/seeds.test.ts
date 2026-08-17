@@ -21,8 +21,8 @@ describe('Seeds Data Integrity', () => {
   // ===== SEED_MODELS 完整性 =====
 
   describe('SEED_MODELS', () => {
-    it('包含 13 个模型', () => {
-      expect(SEED_MODELS).toHaveLength(13);
+    it('包含 14 个模型', () => {
+      expect(SEED_MODELS).toHaveLength(14);
     });
 
     it('每个模型有唯一 slug', () => {
@@ -35,9 +35,9 @@ describe('Seeds Data Integrity', () => {
       expect(new Set(ids).size).toBe(ids.length);
     });
 
-    it('包含 6 个 LLM 模型', () => {
+    it('包含 7 个 LLM 模型', () => {
       const llmModels = SEED_MODELS.filter((m) => m.modality === 'llm');
-      expect(llmModels).toHaveLength(6);
+      expect(llmModels).toHaveLength(7);
     });
 
     it('包含 5 个图片模型', () => {
@@ -63,11 +63,12 @@ describe('Seeds Data Integrity', () => {
           expect(m.providerName).toBe('replicate');
           continue;
         }
-        const expectedClient =
-          m.modality === 'llm' ? 'llm' :
-          m.modality === 'image' ? 'image' :
-          'video';
-        expect(m.sdkClient).toBe(expectedClient);
+        // LLM 可走 Coze 协议（llm）或 OpenAI 协议（openai，如 pptoken 网关）
+        const allowedClients =
+          m.modality === 'llm' ? ['llm', 'openai'] :
+          m.modality === 'image' ? ['image', 'openai', 'replicate'] :
+          ['video'];
+        expect(allowedClients).toContain(m.sdkClient);
       }
     });
 
