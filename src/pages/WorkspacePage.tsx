@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -24,6 +24,9 @@ import {
   X,
   PanelRightClose,
   PanelRightOpen,
+  ArrowDown,
+  ChevronDown,
+  Maximize2,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -121,6 +124,41 @@ const capabilities = [
   { slug: 'detail-page-generation', label: '详情页', icon: FileText, color: 'text-foreground' },
 ];
 
+
+interface DayGroup {
+  key: string;
+  label: string;
+  items: Create[];
+}
+
+// Group chat-flow creates (asc, newest at bottom) by calendar day.
+// Day order is ascending too: earliest day on top, latest day at bottom —
+// matching iMessage/WeChat style conversation grouping.
+function groupCreatesByDay(creates: Create[]): DayGroup[] {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfYesterday = startOfToday - 86400000;
+
+  const groups: DayGroup[] = [];
+  for (const c of creates) {
+    const d = new Date(c.createdAt);
+    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const key = dayStart === startOfToday ? 'today'
+      : dayStart === startOfYesterday ? 'yesterday'
+      : d.toISOString().slice(0, 10);
+    const label = dayStart === startOfToday ? '今天'
+      : dayStart === startOfYesterday ? '昨天'
+      : `${d.getMonth() + 1}月${d.getDate()}日`;
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) {
+      last.items.push(c);
+    } else {
+      groups.push({ key, label, items: [c] });
+    }
+  }
+  return groups;
+}
+
 export default function WorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -141,7 +179,13 @@ export default function WorkspacePage() {
   const [uploadedFile, setUploadedFile] = useState<{ fileId: string; previewUrl: string; name: string } | null>(null);
   const [infoCollapsed, setInfoCollapsed] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [collapsedDayGroups, setCollapsedDayGroups] = useState<Set<string>>(new Set());
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const didInitialScrollRef = useRef(false);
   const publishedIdsRef = useRef<Set<string>>(new Set());
 
   const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
@@ -149,6 +193,45 @@ export default function WorkspacePage() {
     setToast({ type, message });
     toastTimer.current = setTimeout(() => setToast(null), 4000);
   }, []);
+
+  const toggleExpanded = useCallback((id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const scrollToLatest = useCallback((smooth = true) => {
+    requestAnimationFrame(() => {
+      const el = listRef.current;
+      if (!el) return;
+      if (smooth && typeof el.scrollTo === 'function') {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      } else {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+  }, []);
+
+  const handleListScroll = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowJumpToLatest(distFromBottom > 300);
+  }, []);
+
+  const toggleDayGroup = useCallback((key: string) => {
+    setCollapsedDayGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const processingCount = creates.filter((c) => c.status === 'processing').length;
 
   // Extract userId from JWT token for WS auth
   const getUserId = (): string | undefined => {
@@ -226,7 +309,7 @@ export default function WorkspacePage() {
       if (createsRes.ok) {
         const createsData = await createsRes.json();
         const createsResult = createsData.data ?? createsData;
-        setCreates(createsResult.items ?? []);
+        setCreates(createsResult.items ? [...createsResult.items].reverse() : []);
       }
     } catch {
       // Silently fail
@@ -238,6 +321,14 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (projectId) fetchProject();
   }, [projectId]);
+
+  // Chat flow: land at the latest (bottom) once the first load finishes
+  useEffect(() => {
+    if (!loading && !didInitialScrollRef.current) {
+      didInitialScrollRef.current = true;
+      scrollToLatest(false);
+    }
+  }, [loading, scrollToLatest]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -310,7 +401,7 @@ export default function WorkspacePage() {
         // Add optimistic create to the list
         const capInfo = capabilities.find((c) => c.slug === activeCapability);
         if (data?.data?.createId) {
-          setCreates((prev) => [{
+          setCreates((prev) => [...prev, {
             id: data.data.createId,
             capabilitySlug: activeCapability,
             prompt: prompt.trim(),
@@ -328,10 +419,11 @@ export default function WorkspacePage() {
             taskProgress: 0,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-          }, ...prev]);
+          }]);
         }
         // Still fetch to get the full record
         fetchProject();
+        scrollToLatest();
       } else {
         const err = await res.json().catch(() => ({}));
         showToast('error', err.message || '提交失败，请重试');
@@ -380,6 +472,20 @@ export default function WorkspacePage() {
     setSourceCreateId(create.id);
     setPrompt(create.prompt);
     setActiveCapability(create.capabilitySlug);
+    // 恢复参考图（若原创作曾上传过），避免基于此修改时丢失参考图
+    const refImg = (create.input as { referenceImage?: { fileId?: string } } | null)?.referenceImage;
+    if (refImg?.fileId) {
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      apiFetch(`/api/storage/files/${refImg.fileId}`)
+        .then(async (res) => {
+          if (!res.ok) return;
+          const file = await res.json() as { id: string; url: string; originalName: string };
+          if (file.url) {
+            setUploadedFile({ fileId: file.id, previewUrl: file.url, name: file.originalName || '原参考图' });
+          }
+        })
+        .catch(() => { /* 预览失败不阻塞修改流程 */ });
+    }
   };
 
   // Capabilities that accept a reference image
@@ -555,8 +661,34 @@ export default function WorkspacePage() {
           })}
         </div>
 
+        {/* LiveBar: processing tasks always visible */}
+        {processingCount > 0 && (
+          <div className="flex items-center gap-2 border-b border-border bg-primary/5 px-4 py-1.5">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+            <span className="text-xs font-medium text-primary">{processingCount} 个任务生成中…</span>
+            <button
+              onClick={() => {
+                const processing = creates.find((c) => c.status === 'processing');
+                if (processing) {
+                  const el = document.querySelector(`[data-testid="create-card"][data-create-id="${processing.id}"]`);
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }}
+              className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+            >
+              查看
+            </button>
+          </div>
+        )}
+
         {/* Create List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="relative flex-1 overflow-hidden">
+          <div
+            ref={listRef}
+            onScroll={handleListScroll}
+            data-testid="create-list"
+            className="h-full overflow-y-auto p-4 space-y-3"
+          >
           {creates.length === 0 ? (
             <EmptyState
               icon={Sparkles}
@@ -565,13 +697,31 @@ export default function WorkspacePage() {
               className="py-16"
             />
           ) : (
-            creates.map((create) => {
+            (() => {
+        const groups = groupCreatesByDay(creates);
+        return groups.map((group) => {
+          const isCollapsed = collapsedDayGroups.has(group.key);
+          return (
+            <React.Fragment key={group.key}>
+              <div className="sticky top-0 z-10 -mx-4 mb-1 flex items-center gap-2 border-b border-border bg-card px-4 py-1.5">
+                <button
+                  onClick={() => toggleDayGroup(group.key)}
+                  className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                  {group.label}
+                  <span className="ml-1 text-muted-foreground/60">· {group.items.length} 条</span>
+                </button>
+              </div>
+              {!isCollapsed && group.items.map((create) => {
               const cfg = statusConfig[create.status] || statusConfig.draft;
               const Icon = cfg.icon;
               const capLabel = capabilities.find((c) => c.slug === create.capabilitySlug)?.name || create.capabilitySlug;
               return (
                 <div
                   key={create.id}
+                  data-testid="create-card"
+                  data-create-id={create.id}
                   className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/20"
                 >
                   <div className="flex items-start justify-between mb-2">
@@ -605,7 +755,9 @@ export default function WorkspacePage() {
                     )}
                   </div>
 
-                  <p className="text-sm text-foreground mb-1">{create.prompt}</p>
+                  <p className={`text-sm text-foreground mb-1 ${expandedIds.has(create.id) ? '' : 'line-clamp-2'}`}>
+                    {create.prompt}
+                  </p>
 
                   {create.status === 'processing' && (
                     <Progress value={create.taskProgress} size="slim" className="mt-2" />
@@ -618,18 +770,45 @@ export default function WorkspacePage() {
                   {create.status === 'completed' && create.output && (
                     <div className="mt-2 rounded-lg bg-background p-3">
                       {create.capabilitySlug === 'image-generation' || create.capabilitySlug === 'background-removal' || create.capabilitySlug === 'scene-composition' || create.capabilitySlug === 'model-dressing' || create.capabilitySlug === 'image-editing' ? (
-                        (create.output as { images?: Array<{ url: string }> | string[] }).images?.map((img, i: number) => {
+                        <div className="grid grid-cols-2 gap-2">
+                        {(create.output as { images?: Array<{ url: string }> | string[] }).images?.map((img, i: number) => {
                           const url = typeof img === 'string' ? img : img.url;
-                          return <img key={i} src={url} alt="" className="max-h-48 rounded object-contain" loading="lazy" />;
-                        })
+                          return (
+                            <button key={i} onClick={() => setLightboxUrl(url)} className="group relative overflow-hidden rounded-md">
+                              <img src={url} alt="" className="h-32 w-full rounded-md object-cover transition-transform group-hover:scale-105" loading="lazy" />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20">
+                                <Maximize2 className="h-5 w-5 text-white opacity-0 transition-opacity group-hover:opacity-100" />
+                              </div>
+                            </button>
+                          );
+                        })}
+                        </div>
                       ) : create.capabilitySlug === 'video-generation' || create.capabilitySlug === 'style-cloning' ? (
                         (create.output as { video?: { url: string } | string }).video ? (
                           <video src={typeof create.output.video === 'string' ? create.output.video : (create.output as { video: { url: string } }).video.url} controls className="max-h-48 rounded" />
                         ) : null
                       ) : (
-                        <p className="text-xs text-foreground whitespace-pre-wrap">
-                          {(create.output as { content?: string; text?: string }).content || (create.output as { text?: string }).text || JSON.stringify(create.output, null, 2)}
-                        </p>
+                        (() => {
+                          const textContent = (create.output as { content?: string; text?: string }).content
+                            || (create.output as { text?: string }).text
+                            || JSON.stringify(create.output, null, 2);
+                          const isExpanded = expandedIds.has(create.id);
+                          return (
+                            <>
+                              <p className={`text-xs text-foreground whitespace-pre-wrap ${isExpanded ? '' : 'line-clamp-5'}`}>
+                                {textContent}
+                              </p>
+                              {textContent.length > 200 && (
+                                <button
+                                  onClick={() => toggleExpanded(create.id)}
+                                  className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline"
+                                >
+                                  {isExpanded ? '收起' : '展开全文'}
+                                </button>
+                              )}
+                            </>
+                          );
+                        })()
                       )}
                     </div>
                   )}
@@ -673,7 +852,21 @@ export default function WorkspacePage() {
                   </div>
                 </div>
               );
-            })
+              })}
+            </React.Fragment>
+          );
+        });
+      })()
+          )}
+          </div>
+          {showJumpToLatest && creates.length > 0 && (
+            <button
+              onClick={() => scrollToLatest()}
+              className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-lg hover:bg-surface-hover hover:text-foreground"
+            >
+              <ArrowDown className="h-3 w-3" />
+              回到最新
+            </button>
           )}
         </div>
 
@@ -844,6 +1037,25 @@ export default function WorkspacePage() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div className="relative max-h-[90vh] max-w-[90vw]">
+            <img src={lightboxUrl} alt="放大查看" className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain" />
+            <button
+              onClick={() => setLightboxUrl(null)}
+              className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full bg-card shadow-lg text-muted-foreground hover:text-foreground"
+              aria-label="关闭"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Toast */}

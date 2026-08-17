@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
@@ -32,9 +32,10 @@ const mockProject = {
   completedCreates: 1,
 };
 
+// 模拟服务器真实返回（desc：最新在上）；客户端 reverse 后呈现 asc 会话流（最新在下）
 const mockCreates = [
-  { id: 'create-1', capabilitySlug: 'text-generation', prompt: 'test', sourceCreateId: null, status: 'completed', output: { text: 'ok' }, modelSlug: 'kimi-k2-5', taskCount: 1, errorMessage: null, taskStatus: 'completed', taskProgress: 100, createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:01:00Z' },
   { id: 'create-2', capabilitySlug: 'image-generation', prompt: 'test2', sourceCreateId: null, status: 'processing', output: null, modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskId: 'task-2', taskStatus: 'submitting', taskProgress: 45, createdAt: '2026-01-15T11:00:00Z', updatedAt: '2026-01-15T11:00:30Z' },
+  { id: 'create-1', capabilitySlug: 'text-generation', prompt: 'test', sourceCreateId: null, status: 'completed', output: { text: 'ok' }, modelSlug: 'kimi-k2-5', taskCount: 1, errorMessage: null, taskStatus: 'completed', taskProgress: 100, createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:01:00Z' },
 ];
 
 const mockModels = [
@@ -277,4 +278,257 @@ describe('WorkspacePage', () => {
     });
   });
 
+
+  it('创作列表按时间正序渲染（会话流：最早在上，最新在下）', async () => {
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({ total: 2, items: mockCreates })),
+    );
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('create-card').length).toBe(2);
+    });
+
+    const cards = screen.getAllByTestId('create-card');
+    // create-1 (10:00, completed) 在上，create-2 (11:00, processing) 在下
+    expect(cards[0].textContent).toContain('test');
+    expect(cards[0].textContent).toContain('已完成');
+    expect(cards[1].textContent).toContain('test2');
+    expect(cards[1].textContent).toContain('生成中...');
+  });
+
+  it('长文本输出显示展开全文按钮，点击后可展开/收起', async () => {
+    const longText = 'A'.repeat(300);
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({
+        total: 1,
+        items: [{
+          id: 'create-long', capabilitySlug: 'text-generation', prompt: '长文测试', sourceCreateId: null,
+          status: 'completed', output: { content: longText }, modelSlug: 'kimi-k2-5', taskCount: 1,
+          errorMessage: null, taskStatus: 'completed', taskProgress: 100,
+          createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:01:00Z',
+        }],
+      })),
+    );
+
+    renderWorkspace();
+
+    const expandBtn = await screen.findByRole('button', { name: '展开全文' });
+    // 默认截断（line-clamp-5 class 存在）
+    expect(expandBtn).toBeInTheDocument();
+
+    await fireEvent.click(expandBtn);
+    expect(await screen.findByRole('button', { name: '收起' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '展开全文' })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: '收起' }));
+    expect(await screen.findByRole('button', { name: '展开全文' })).toBeInTheDocument();
+  });
+
+  it('短文本不显示展开按钮', async () => {
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({ total: 2, items: mockCreates })),
+    );
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('create-card').length).toBe(2);
+    });
+
+    expect(screen.queryByRole('button', { name: '展开全文' })).not.toBeInTheDocument();
+  });
+
+  it('滚动离开底部时显示回到最新按钮，点击后回到底部', async () => {
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({ total: 2, items: mockCreates })),
+    );
+
+    renderWorkspace();
+
+    const listEl = await screen.findByTestId('create-list');
+    expect(screen.queryByRole('button', { name: /回到最新/ })).not.toBeInTheDocument();
+
+    // 模拟用户向上滚动：scrollHeight 远大于 clientHeight
+    Object.defineProperty(listEl, 'scrollHeight', { value: 2000, configurable: true });
+    Object.defineProperty(listEl, 'clientHeight', { value: 400, configurable: true });
+    Object.defineProperty(listEl, 'scrollTop', { value: 200, configurable: true });
+    fireEvent.scroll(listEl);
+
+    expect(screen.getByRole('button', { name: /回到最新/ })).toBeInTheDocument();
+
+    // 回到底部后按钮消失
+    Object.defineProperty(listEl, 'scrollTop', { value: 1600, configurable: true });
+    fireEvent.scroll(listEl);
+    expect(screen.queryByRole('button', { name: /回到最新/ })).not.toBeInTheDocument();
+  });
+
+
+  it('按天分组：今天在前，昨日在后的卡片顺序保持会话流', async () => {
+    const yesterday = new Date(Date.now() - 86400000).toISOString();
+    const today = new Date().toISOString();
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({
+        total: 2,
+        items: [
+          { id: 'c-today', capabilitySlug: 'text-generation', prompt: 'today-prompt', sourceCreateId: null, status: 'completed', output: { text: 'ok' }, modelSlug: 'kimi-k2-5', taskCount: 1, errorMessage: null, taskStatus: 'completed', taskProgress: 100, createdAt: today, updatedAt: today },
+          { id: 'c-yesterday', capabilitySlug: 'text-generation', prompt: 'yesterday-prompt', sourceCreateId: null, status: 'completed', output: { text: 'ok' }, modelSlug: 'kimi-k2-5', taskCount: 1, errorMessage: null, taskStatus: 'completed', taskProgress: 100, createdAt: yesterday, updatedAt: yesterday },
+        ],
+      })),
+    );
+
+    renderWorkspace();
+
+    const todayGroup = await screen.findByText('今天');
+    expect(todayGroup).toBeInTheDocument();
+    expect(screen.getByText('昨天')).toBeInTheDocument();
+    // 会话流：今天（最新）在下方 —— 昨天组在上
+    expect(screen.getByText('昨天').compareDocumentPosition(screen.getByText('今天')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('点击分组头折叠/展开该组卡片', async () => {
+    const today = new Date().toISOString();
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({
+        total: 2,
+        items: [
+          { id: 'c1', capabilitySlug: 'text-generation', prompt: 'a', sourceCreateId: null, status: 'completed', output: { text: 'ok' }, modelSlug: 'kimi-k2-5', taskCount: 1, errorMessage: null, taskStatus: 'completed', taskProgress: 100, createdAt: today, updatedAt: today },
+          { id: 'c2', capabilitySlug: 'image-generation', prompt: 'b', sourceCreateId: null, status: 'completed', output: null, modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskStatus: 'completed', taskProgress: 100, createdAt: new Date(Date.now() - 60000).toISOString(), updatedAt: today },
+        ],
+      })),
+    );
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('create-card').length).toBe(2);
+    });
+
+    // 点击"今天"分组头折叠
+    const todayBtn = screen.getByRole('button', { name: /今天/ });
+    await fireEvent.click(todayBtn);
+
+    // 卡片全部隐藏（组内）
+    expect(screen.queryAllByTestId('create-card').length).toBe(0);
+
+    // 再点恢复
+    await fireEvent.click(todayBtn);
+    expect(screen.getAllByTestId('create-card').length).toBe(2);
+  });
+
+  it('有生成中任务时显示 LiveBar，点击"查看"滚动到该卡片', async () => {
+    // mockCreates 含 create-2 processing
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({ total: 2, items: mockCreates })),
+    );
+
+    renderWorkspace();
+
+    const liveBar = await screen.findByText(/1 个任务生成中/);
+    expect(liveBar).toBeInTheDocument();
+
+    const viewBtn = screen.getByRole('button', { name: '查看' });
+    expect(viewBtn).toBeInTheDocument();
+  });
+
+  it('图片输出以缩略图网格渲染，点击打开灯箱并关闭', async () => {
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({
+        total: 1,
+        items: [{
+          id: 'c-img', capabilitySlug: 'image-generation', prompt: '图', sourceCreateId: null,
+          status: 'completed', output: { images: [{ url: 'https://example.com/a.png' }, { url: 'https://example.com/b.png' }] },
+          modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskStatus: 'completed',
+          taskProgress: 100, createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:01:00Z',
+        }],
+      })),
+    );
+
+    renderWorkspace();
+
+    const gridImgs = await screen.findAllByAltText('');
+    // 2 张缩略图
+    expect(gridImgs.length).toBe(2);
+
+    // 点击第一张进入灯箱
+    await fireEvent.click(gridImgs[0].closest('button') as HTMLElement);
+    const lightboxImg = await screen.findAllByAltText('放大查看');
+    expect(lightboxImg.length).toBe(1);
+
+    // 关闭
+    await fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    expect(screen.queryByAltText('放大查看')).not.toBeInTheDocument();
+  });
+
+
+  it('基于此修改时恢复参考图', async () => {
+    let storageCalled = false;
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({
+        total: 1,
+        items: [{
+          id: 'c-ref', capabilitySlug: 'image-generation', prompt: '测试图', sourceCreateId: null,
+          status: 'completed', output: { images: [{ url: 'https://example.com/a.png' }] },
+          input: { prompt: '测试图', referenceImage: { fileId: 'file-uuid-123' } },
+          modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskStatus: 'completed',
+          taskProgress: 100, createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:01:00Z',
+        }],
+      })),
+      http.get('/api/storage/files/file-uuid-123', () => {
+        storageCalled = true;
+        return HttpResponse.json({ id: 'file-uuid-123', url: 'https://example.com/ref.png', originalName: 'ref.png' });
+      }),
+    );
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(screen.getByText('测试图')).toBeInTheDocument();
+    });
+
+    const modifyBtn = screen.getByRole('button', { name: /基于此修改/ });
+    await fireEvent.click(modifyBtn);
+
+    await waitFor(() => {
+      expect(storageCalled).toBe(true);
+    });
+    // 上传文件预览应出现
+    expect(await screen.findByText('ref.png')).toBeInTheDocument();
+  });
+
+  it('基于此修改无参考图时不调用存储 API', async () => {
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({ total: 2, items: mockCreates })),
+    );
+
+    const storageSpy = vi.fn();
+    server.events.on('request:start', (req) => {
+      if (req.request.url.includes('/api/storage/files/')) storageSpy();
+    });
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('create-card').length).toBe(2);
+    });
+
+    // create-1 (completed, text-generation) — 无参考图
+    const modifyBtns = screen.getAllByRole('button', { name: /基于此修改/ });
+    await fireEvent.click(modifyBtns[0]);
+
+    // 等异步处理完成
+    await new Promise((r) => setTimeout(r, 100));
+    expect(storageSpy).not.toHaveBeenCalled();
+  });
 });
