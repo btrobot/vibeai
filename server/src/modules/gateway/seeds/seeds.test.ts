@@ -307,4 +307,52 @@ describe('Seeds Data Integrity', () => {
       }
     });
   });
+
+  // ===== pptoken OpenAI 协议集成（gpt-5.6-sol）=====
+
+  describe('pptoken OpenAI 协议集成', () => {
+    it('平台种子包含 pptoken', () => {
+      expect(SEED_PLATFORMS.some((p) => p.name === 'pptoken')).toBe(true);
+    });
+
+    it('gpt-5.6-sol 渠道指向 pptoken 且走 openai 协议', () => {
+      const channel = SEED_CHANNELS.find((c) => c.modelSlug === 'gpt-5.6-sol');
+      expect(channel).toBeDefined();
+      expect(channel!.platformName).toBe('pptoken');
+      expect(channel!.sdkClient).toBe('openai');
+      expect(channel!.sdkModelId).toBe('gpt-5.6-sol');
+      expect(channel!.priority).toBe(1);
+    });
+
+    it('text-generation 默认路由为 gpt-5.6-sol（priority 1）', () => {
+      const textRoutes = SEED_MODEL_ROUTES.filter((r) => r.capabilitySlug === 'text-generation')
+        .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+      expect(textRoutes[0].modelSlug).toBe('gpt-5.6-sol');
+    });
+
+    it('gpt-5.6-sol 模型定义为 LLM 且支持文本生成', () => {
+      const model = SEED_MODELS.find((m) => m.slug === 'gpt-5.6-sol');
+      expect(model).toBeDefined();
+      expect(model!.modality).toBe('llm');
+      expect(model!.outputType).toBe('text');
+      expect(model!.sdkClient).toBe('openai');
+      expect(model!.capabilities).toContain('text-generation');
+      expect(model!.capabilities).toContain('detail-page-generation');
+    });
+
+    it('密钥不硬编码进种子（defaultParams/config 无 apiKey/baseUrl）', () => {
+      const model = SEED_MODELS.find((m) => m.slug === 'gpt-5.6-sol');
+      const params = (model!.defaultParams ?? {}) as Record<string, unknown>;
+      expect(params.apiKey).toBeUndefined();
+      expect(params.baseUrl).toBeUndefined();
+
+      const channel = SEED_CHANNELS.find((c) => c.modelSlug === 'gpt-5.6-sol');
+      const config = (channel!.config ?? {}) as Record<string, unknown>;
+      expect(config.apiKey).toBeUndefined();
+      expect(config.baseUrl).toBeUndefined();
+
+      const platform = SEED_PLATFORMS.find((p) => p.name === 'pptoken');
+      expect(platform!.apiKey).toBeUndefined();
+    });
+  });
 });
