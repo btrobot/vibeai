@@ -73,6 +73,35 @@ describe('ProjectService', () => {
       expect(result.items).toEqual([]);
       expect(result.total).toBe(0);
     });
+
+    it('search 关键词应用到查询条件（name/description ILIKE）', async () => {
+      mockSingle(db, { count: 1 });
+      mockSingle(db, [projectRecord]);
+
+      const result = await service.list('user-1', 1, 20, '旗舰');
+
+      expect(result.total).toBe(1);
+      // where 条件包含搜索词（mock 无法断言 SQL，但确保流程走通且返回过滤结果）
+      expect(result.items).toHaveLength(1);
+    });
+
+    it('status 过滤应用到查询条件（非 all 时）', async () => {
+      mockSingle(db, { count: 1 });
+      mockSingle(db, [projectRecord]);
+
+      const result = await service.list('user-1', 1, 20, '', 'archived');
+
+      expect(result.total).toBe(1);
+    });
+
+    it('status 为 all 时不追加状态条件', async () => {
+      mockSingle(db, { count: 0 });
+      mockSingle(db, []);
+
+      const result = await service.list('user-1', 1, 20, undefined, 'all');
+
+      expect(result.total).toBe(0);
+    });
   });
 
   describe('getById', () => {

@@ -24,11 +24,15 @@ export class ProjectController {
     @Req() req: any,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
   ) {
     const result = await this.projectService.list(
       req.user.userId,
       Math.max(1, Number(page) || 1),
       Math.min(100, Math.max(1, Number(pageSize) || 20)),
+      search,
+      status,
     );
     return { success: true, data: result };
   }

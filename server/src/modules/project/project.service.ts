@@ -3,7 +3,7 @@ import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { projects, creates } from '../../db/schema/task-engine';
-import { eq, and, desc, count, sql } from 'drizzle-orm';
+import { eq, and, desc, count, ilike, or, sql } from 'drizzle-orm';
 import type { CreateProjectInput, UpdateProjectInput, ProjectResponse } from '../../shared-types';
 
 @Injectable()
@@ -44,18 +44,38 @@ export class ProjectService {
     return this.toResponse(p);
   }
 
-  async list(userId: string, page = 1, pageSize = 20): Promise<{ items: ProjectResponse[]; total: number }> {
+  async list(
+    userId: string,
+    page = 1,
+    pageSize = 20,
+    search?: string,
+    status?: string,
+  ): Promise<{ items: ProjectResponse[]; total: number }> {
     const offset = (page - 1) * pageSize;
+
+    const conditions = [eq(projects.userId, userId)];
+    const keyword = search?.trim();
+    if (keyword) {
+      const pattern = `%${keyword}%`;
+      conditions.push(or(
+        ilike(projects.name, pattern),
+        ilike(projects.description, pattern),
+      )!);
+    }
+    if (status && status !== 'all') {
+      conditions.push(eq(projects.status, status as typeof projects.$inferSelect.status));
+    }
+    const where = and(...conditions);
 
     const [totalResult] = await this.db
       .select({ count: count() })
       .from(projects)
-      .where(eq(projects.userId, userId));
+      .where(where);
 
     const items = await this.db
       .select()
       .from(projects)
-      .where(eq(projects.userId, userId))
+      .where(where)
       .orderBy(desc(projects.updatedAt))
       .limit(pageSize)
       .offset(offset);
