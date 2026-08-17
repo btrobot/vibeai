@@ -340,6 +340,16 @@ describe('Seeds Data Integrity', () => {
       expect(model!.capabilities).toContain('detail-page-generation');
     });
 
+    it('gpt-image-2 图片渠道优先走 pptoken（openai 协议，priority 1）', () => {
+      const imgChannels = SEED_CHANNELS.filter((c) => c.modelSlug === 'gpt-image-2')
+        .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+      expect(imgChannels[0].platformName).toBe('pptoken');
+      expect(imgChannels[0].sdkClient).toBe('openai');
+      expect(imgChannels[0].sdkModelId).toBe('gpt-image-2');
+      // replicate 渠道保留为备用
+      expect(imgChannels.some((c) => c.sdkClient === 'replicate')).toBe(true);
+    });
+
     it('密钥不硬编码进种子（defaultParams/config 无 apiKey/baseUrl）', () => {
       const model = SEED_MODELS.find((m) => m.slug === 'gpt-5.6-sol');
       const params = (model!.defaultParams ?? {}) as Record<string, unknown>;

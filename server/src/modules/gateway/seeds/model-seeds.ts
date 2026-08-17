@@ -479,15 +479,28 @@ export const SEED_PLATFORMS: PlatformSeed[] = Array.from(
   new Set(SEED_MODELS.map((model) => model.providerName as string)),
 ).map((name) => ({ name }));
 
-export const SEED_CHANNELS: ChannelSeed[] = SEED_MODELS.map((model) => ({
-  platformName: model.providerName as string,
-  modelSlug: model.slug as string,
-  sdkModelId: model.sdkModelId as string,
-  sdkClient: model.sdkClient as string,
-  priority: 1,
-  costPerCall: channelCostPerCall[model.slug as string] ?? null,
-  config: {},
-}));
+export const SEED_CHANNELS: ChannelSeed[] = [
+  ...SEED_MODELS.map((model) => ({
+    platformName: model.providerName as string,
+    modelSlug: model.slug as string,
+    sdkModelId: model.sdkModelId as string,
+    sdkClient: model.sdkClient as string,
+    // gpt-image-2 默认走 pptoken(openai)，replicate 渠道降级为备用
+    priority: model.slug === 'gpt-image-2' ? 2 : 1,
+    costPerCall: channelCostPerCall[model.slug as string] ?? null,
+    config: {},
+  })),
+  // 附加渠道：gpt-image-2 优先走 pptoken OpenAI 协议（key 配置在平台，seed 不硬编码）
+  {
+    platformName: 'pptoken',
+    modelSlug: 'gpt-image-2',
+    sdkModelId: 'gpt-image-2',
+    sdkClient: 'openai',
+    priority: 1,
+    costPerCall: null,
+    config: {},
+  },
+];
 
 type ModelRouteSeed = typeof capabilityModelRoutes.$inferInsert;
 
