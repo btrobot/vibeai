@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, Req, UseGuards, Logger, Res } from '@nestjs/common';
+import { Inject, Controller, Get, Post, Delete, Body, Param, Query, Req, UseGuards, Logger, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { SystemConfigService } from './system-config.service';
@@ -10,7 +10,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class SystemConfigController {
   private readonly logger = new Logger(SystemConfigController.name);
 
-  constructor(private readonly configService: SystemConfigService) {}
+  constructor(@Inject(SystemConfigService) private readonly configService: SystemConfigService) {}
 
   /**
    * 公开：获取公开配置列表

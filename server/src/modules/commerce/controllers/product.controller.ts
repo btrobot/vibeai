@@ -1,15 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Inject, Controller, Get, Post, Patch, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
 import { AdminGuard } from '../../../common/guards/admin.guard';
@@ -29,7 +18,7 @@ import type {
 @UseGuards(JwtAuthGuard, AdminGuard)
 @ApiBearerAuth()
 export class ProductController {
-  constructor(private readonly productService: ProductService) {}
+  constructor(@Inject(ProductService) private readonly productService: ProductService) {}
 
   /**
    * Create a new product

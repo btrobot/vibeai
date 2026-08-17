@@ -14,7 +14,7 @@ import { AuditLogQueryDto } from './dto/admin-audit.dto';
 @Controller('admin/audit-logs')
 @UseGuards(JwtAuthGuard)
 export class AdminAuditController {
-  constructor(private readonly auditService: AdminAuditService) {}
+  constructor(@Inject(AdminAuditService) private readonly auditService: AdminAuditService) {}
 
   @Get()
   @ApiOperation({ summary: '获取审计日志列表' })

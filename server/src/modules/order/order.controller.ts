@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, Logger, UseGuards, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Inject, Controller, Get, Post, Body, Param, Query, Logger, UseGuards, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -15,9 +15,8 @@ import { CreateOrderDto, OrderQueryDto, OrderIdParamDto } from './dto';
 export class OrderController {
   private readonly logger = new Logger(OrderController.name);
 
-  constructor(
-    private readonly orderService: OrderService,
-    private readonly paymentService: PaymentService,
+  constructor(@Inject(OrderService) private readonly orderService: OrderService,
+    @Inject(PaymentService) private readonly paymentService: PaymentService,
   ) {}
 
   @Post()

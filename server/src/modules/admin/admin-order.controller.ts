@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, Res, UseGuards } from '@nestjs/common';
+import { Inject, Controller, Get, Post, Patch, Body, Param, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
@@ -12,7 +12,7 @@ import { AdminOrderQueryDto, AdminOrderIdParamDto, AdminRefundOrderDto, AdminUpd
 @UseGuards(JwtAuthGuard, AdminGuard)
 @ApiBearerAuth()
 export class AdminOrderController {
-  constructor(private readonly adminOrderService: AdminOrderService) {}
+  constructor(@Inject(AdminOrderService) private readonly adminOrderService: AdminOrderService) {}
 
   /**
    * Get order statistics

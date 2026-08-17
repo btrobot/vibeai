@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Inject, Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
 import { AdminGuard } from '../../../common/guards/admin.guard';
@@ -29,7 +19,7 @@ import type {
 @UseGuards(JwtAuthGuard, AdminGuard)
 @ApiBearerAuth()
 export class PromoCodeController {
-  constructor(private readonly promoCodeService: PromoCodeService) {}
+  constructor(@Inject(PromoCodeService) private readonly promoCodeService: PromoCodeService) {}
 
   /**
    * Create a new promo code
@@ -125,7 +115,7 @@ export class PromoCodeController {
 @ApiTags('Commerce - Promo Codes')
 @Controller('api/commerce/promo-codes')
 export class PublicPromoCodeController {
-  constructor(private readonly promoCodeService: PromoCodeService) {}
+  constructor(@Inject(PromoCodeService) private readonly promoCodeService: PromoCodeService) {}
 
   /**
    * Validate a promo code (public endpoint)

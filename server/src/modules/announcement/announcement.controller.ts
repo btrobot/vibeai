@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Req, UseGuards, Logger } from '@nestjs/common';
+import { Inject, Controller, Get, Post, Patch, Delete, Body, Param, Query, Req, UseGuards, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AnnouncementService } from './announcement.service';
@@ -10,7 +10,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class AnnouncementController {
   private readonly logger = new Logger(AnnouncementController.name);
 
-  constructor(private readonly announcementService: AnnouncementService) {}
+  constructor(@Inject(AnnouncementService) private readonly announcementService: AnnouncementService) {}
 
   /**
    * 公开：获取当前生效的公告列表
