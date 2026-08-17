@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { ApiResponse, AuthResponse, UserResponse } from '@shared/index';
+import { apiFetch } from '@/lib/apiClient';
 
 interface AuthContextType {
   user: UserResponse | null;
@@ -140,41 +141,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${tokens.accessToken}`,
-        },
-      });
-
+      // 统一走 apiFetch：401 时经 apiClient 单例刷新并自动重试。
+      // 避免与页面其他组件（apiFetch）并发刷新同一 refreshToken 的轮换竞态。
+      const res = await apiFetch(`${API_BASE}/auth/me`);
       const result: ApiResponse<UserResponse> = await res.json();
       if (res.ok && result.success && result.data) {
         setUser(result.data);
         return result.data;
       }
-
-      // Try refresh
-      if (res.status === 401 && tokens.refreshToken) {
-        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: tokens.refreshToken }),
-        });
-
-        const refreshResult: ApiResponse<AuthResponse> = await refreshRes.json();
-        if (refreshRes.ok && refreshResult.success && refreshResult.data) {
-          saveTokens(refreshResult.data.tokens);
-          setUser(refreshResult.data.user);
-          return refreshResult.data.user;
-        }
-      }
-
       clearTokens();
       return null;
     } catch {
       clearTokens();
       return null;
     }
-  }, [getTokens, saveTokens, clearTokens]);
+  }, [getTokens, clearTokens]);
 
   // Auto-check login status on mount
   useEffect(() => {

@@ -15,7 +15,7 @@ import {
   Inject,
   BadRequestException,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -50,12 +50,16 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @SkipThrottle({ auth: true, generation: true, upload: true })
+  @Throttle({ default: { ttl: 60_000, limit: 100 } })
   async refresh(@Body() dto: RefreshTokenDto) {
     return this.authService.refresh(dto.refreshToken);
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
+  @SkipThrottle({ auth: true, generation: true, upload: true })
+  @Throttle({ default: { ttl: 60_000, limit: 100 } })
   @UseGuards(JwtAuthGuard)
   async logout(@Req() req: Request) {
     const token = (req as any).cookies?.refreshToken || (req.body as any)?.refreshToken;
@@ -66,12 +70,16 @@ export class AuthController {
   }
 
   @Get('me')
+  @SkipThrottle({ auth: true, generation: true, upload: true })
+  @Throttle({ default: { ttl: 60_000, limit: 100 } })
   @UseGuards(JwtAuthGuard)
   async getProfile(@Req() req: Request) {
     return this.authService.getProfile((req as any).user.userId);
   }
 
   @Patch('me')
+  @SkipThrottle({ auth: true, generation: true, upload: true })
+  @Throttle({ default: { ttl: 60_000, limit: 100 } })
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async updateProfile(@Req() req: Request, @Body() dto: UpdateProfileDto) {
@@ -79,6 +87,8 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @SkipThrottle({ auth: true, generation: true, upload: true })
+  @Throttle({ default: { ttl: 60_000, limit: 100 } })
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async changePassword(@Req() req: Request, @Body() dto: ChangePasswordDto) {
@@ -101,6 +111,8 @@ export class AuthController {
 
   // OAuth social login - redirect to provider
   @Get('oauth/:provider')
+  @SkipThrottle({ auth: true, generation: true, upload: true })
+  @Throttle({ default: { ttl: 60_000, limit: 100 } })
   @ApiOperation({ summary: 'OAuth 登录重定向' })
   @ApiParam({ name: 'provider', enum: ['google', 'github'] })
   async oauthRedirect(@Param('provider') provider: string, @Res() res: any) {
@@ -113,6 +125,8 @@ export class AuthController {
 
   // OAuth callback - exchange code, create/find user, redirect to frontend
   @Get('oauth/:provider/callback')
+  @SkipThrottle({ auth: true, generation: true, upload: true })
+  @Throttle({ default: { ttl: 60_000, limit: 100 } })
   @ApiOperation({ summary: 'OAuth 回调' })
   @ApiParam({ name: 'provider', enum: ['google', 'github'] })
   async oauthCallback(
