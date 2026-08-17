@@ -59,6 +59,7 @@ describe('AdminPage', () => {
     expect(screen.getByText('商品管理')).toBeInTheDocument();
     expect(screen.getByText('促销码')).toBeInTheDocument();
     expect(screen.getByText('系统配置')).toBeInTheDocument();
+    expect(screen.getByText('模型配置')).toBeInTheDocument();
   });
 
   it('应该加载并显示统计数据', async () => {

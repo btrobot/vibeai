@@ -13,10 +13,12 @@ import {
 import { DrizzleModule } from '../../common/drizzle.module';
 import { OrderModule } from '../order/order.module';
 import { AuditInterceptor } from '../../common/audit.interceptor';
+import { GatewayModule } from '../gateway/gateway.module';
+import { AdminModelConfigController } from './admin-model-config.controller';
 
 @Module({
-  imports: [DrizzleModule, OrderModule],
-  controllers: [AdminController, AdminOrderController, AdminAuditController],
+  imports: [DrizzleModule, OrderModule, GatewayModule],
+  controllers: [AdminController, AdminOrderController, AdminAuditController, AdminModelConfigController],
   providers: [
     {
       provide: 'ADMIN_USER_QUERY_SERVICE',

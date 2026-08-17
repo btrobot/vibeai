@@ -4,14 +4,14 @@
  * 查询逻辑：
  * 1. 查 modelProviders WHERE modelSlug = ? AND isActive = true ORDER BY priority
  * 2. 有记录 → 返回多渠道列表
- * 3. 无记录 → 回退到 aiModels 自身的 providerName/sdkModelId/sdkClient 构造单元素数组
+ * 3. 无记录 → 返回空列表，由任务执行层给出明确错误
  */
 
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
-import { modelProviders, aiModels } from '../../db/schema/gateway';
+import { modelProviders } from '../../db/schema/gateway';
 import { eq, and, asc } from 'drizzle-orm';
 
 // ===== Types =====
@@ -22,6 +22,7 @@ export interface ProviderInstance {
   sdkClient: string;
   priority: number;
   costPerCall: number | null;
+  costPerSecond: number | null;
   config: Record<string, unknown>;
 }
 
@@ -39,16 +40,10 @@ export class ProviderService {
    * 查询模型的所有可用渠道，按优先级排序
    *
    * @param modelSlug 模型 slug
-   * @param fallback 模型自身的默认渠道信息（从 aiModels 行提取）
    * @returns 按优先级排序的 ProviderInstance 列表
    */
   async getAvailableProviders(
     modelSlug: string,
-    fallback?: {
-      providerName: string;
-      sdkModelId: string;
-      sdkClient: string;
-    },
   ): Promise<ProviderInstance[]> {
     try {
       const rows = await this.db
@@ -64,51 +59,15 @@ export class ProviderService {
           sdkClient: r.sdkClient,
           priority: r.priority,
           costPerCall: r.costPerCall ? parseFloat(r.costPerCall) : null,
+          costPerSecond: r.costPerSecond ? parseFloat(r.costPerSecond) : null,
           config: (r.config as Record<string, unknown>) || {},
         }));
       }
     } catch (e) {
       this.logger.warn(
-        `Failed to query modelProviders for "${modelSlug}", using fallback: ${(e as Error).message}`,
+        `Failed to query modelProviders for "${modelSlug}": ${(e as Error).message}`,
       );
-    }
-
-    // Fallback: construct single-element array from aiModels fields
-    if (fallback) {
-      return [
-        {
-          providerName: fallback.providerName,
-          sdkModelId: fallback.sdkModelId,
-          sdkClient: fallback.sdkClient,
-          priority: 0,
-          costPerCall: null,
-          config: {},
-        },
-      ];
-    }
-
-    // Last resort: query aiModels for the fallback info
-    try {
-      const [model] = await this.db
-        .select()
-        .from(aiModels)
-        .where(eq(aiModels.slug, modelSlug))
-        .limit(1);
-
-      if (model) {
-        return [
-          {
-            providerName: model.providerName,
-            sdkModelId: model.sdkModelId,
-            sdkClient: model.sdkClient,
-            priority: 0,
-            costPerCall: null,
-            config: {},
-          },
-        ];
-      }
-    } catch {
-      // fall through
+      return [];
     }
 
     return [];

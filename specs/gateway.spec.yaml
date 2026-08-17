@@ -1,6 +1,6 @@
 domain: gateway
-version: '2.0'
-last_updated: '2025-01-15'
+version: '3.0'
+last_updated: '2026-08-17'
 entities:
   - name: AICapability
     table: ai_capabilities
@@ -224,6 +224,10 @@ entities:
         type: numeric(10,4)
         nullable: true
         desc: 单次调用采购成本（美元），用于利润分析
+      - name: costPerSecond
+        type: numeric(10,4)
+        nullable: true
+        desc: 按秒采购成本（美元），用于视频和音频利润分析
       - name: startedAt
         type: timestamp
         notNull: true
@@ -313,6 +317,54 @@ entities:
       - name: model_providers_model_priority_idx
         fields:
           - modelSlug
+          - priority
+    timestamps: true
+  - name: CapabilityModelRoute
+    table: capability_model_routes
+    description: 能力到逻辑模型的默认路由顺序
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: capabilitySlug
+        type: varchar(100)
+        notNull: true
+        desc: 代码能力注册表中的能力 slug
+      - name: modelSlug
+        type: varchar(100)
+        notNull: true
+        fk:
+          table: ai_models
+          field: slug
+          onDelete: cascade
+        desc: 关联的逻辑模型 slug
+      - name: priority
+        type: integer
+        notNull: true
+        default: 1
+        desc: 数字越小越优先，首个有效路由为默认模型
+      - name: isActive
+        type: boolean
+        notNull: true
+        default: true
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: capability_model_routes_capability_model_uidx
+        fields:
+          - capabilitySlug
+          - modelSlug
+      - name: capability_model_routes_lookup_idx
+        fields:
+          - capabilitySlug
+          - isActive
           - priority
     timestamps: true
 operations:
@@ -473,6 +525,106 @@ operations:
         condition: Provider 不存在
         message: Provider 不存在
     test: true
+  - name: getModelConfiguration
+    method: GET
+    path: /admin/model-config
+    description: 获取模型、Provider 和默认路由聚合配置
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+    post:
+      - 返回全部模型、Provider、能力和路由
+    test: true
+  - name: createConfiguredModel
+    method: POST
+    path: /admin/model-config/models
+    description: 创建逻辑模型
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+      - slug 全局唯一
+    effect:
+      - 创建 AIModel
+    errors:
+      - status: 409
+        condition: slug 已存在
+        message: 模型 slug 已存在
+        test: model-config.service.test.ts 拒绝重复 slug
+    test: true
+  - name: updateConfiguredModel
+    method: PATCH
+    path: /admin/model-config/models/:slug
+    description: 更新逻辑模型可编辑配置
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+      - slug 不可修改
+    effect:
+      - 更新名称、能力、成本、约束和展示配置
+    test: true
+  - name: setConfiguredModelStatus
+    method: PATCH
+    path: /admin/model-config/models/:slug/status
+    description: 设置逻辑模型启停状态
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+      - 停用当前默认模型时存在同能力的其他有效路由
+    effect:
+      - 更新 AIModel.isActive
+    errors:
+      - status: 409
+        condition: 模型是能力的唯一有效默认路由
+        message: 请先配置替代默认模型
+        test: model-config.service.test.ts 阻止停用唯一默认模型
+    test: true
+  - name: createConfiguredProvider
+    method: POST
+    path: /admin/model-config/providers
+    description: 为逻辑模型创建 Provider 渠道
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+      - Provider 组合标识唯一
+    effect:
+      - 创建 ModelProvider
+    test: true
+  - name: updateConfiguredProvider
+    method: PATCH
+    path: /admin/model-config/providers/:id
+    description: 更新 Provider 渠道配置
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+    effect:
+      - 更新 SDK 模型、优先级、采购成本和渠道参数
+    test: true
+  - name: setConfiguredProviderStatus
+    method: PATCH
+    path: /admin/model-config/providers/:id/status
+    description: 设置 Provider 启停状态
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+    effect:
+      - 更新 ModelProvider.isActive
+    test: true
+  - name: replaceCapabilityRoutes
+    method: PUT
+    path: /admin/model-config/routes/:capabilitySlug
+    description: 原子替换指定能力的有序模型路由
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+      - 至少提交一个启用且支持该能力的模型
+    effect:
+      - 在事务中替换该能力全部路由并顺序写入 priority
+    errors:
+      - status: 422
+        condition: 模型不支持目标能力或路由为空
+        message: 路由配置无效
+        test: model-config.service.test.ts 拒绝空路由和能力不匹配模型
+    test: true
 rules:
   - name: capability_slug_unique
     id: GTW-001
@@ -515,7 +667,7 @@ rules:
     level: error
     description: 按 sdkClient 选择对应 ProtocolAdapter（llm | image | video | replicate），支持多 provider 路由
     enforcement: TaskExecutionService 通过 ProviderService.getAvailableProviders 获取渠道列表，按 sdkClient 选择适配器
-    test: routeCapability 为 image-generation 返回正确的图片模型
+    test: 应根据 provider.sdkClient 获取适配器
   - name: llm_streaming
     id: GTW-008
     severity: error
@@ -534,9 +686,51 @@ rules:
     id: GTW-010
     severity: error
     level: error
-    description: provider 采购成本（costPerCall）记录到 providerAttempts 用于利润分析
-    enforcement: TaskExecutionService.recordProviderAttempt 写入 costPerCall 字段
-    test: providerAttempt 记录包含 costPerCall
+    description: provider 单次和按秒采购成本记录到 providerAttempts 用于利润分析
+    enforcement: TaskExecutionService.recordProviderAttempt 写入 costPerCall 和 costPerSecond 字段
+    test: providerAttempt 记录包含 Provider 的单次和按秒采购成本
+  - name: database_model_route_source
+    id: GTW-011
+    severity: error
+    level: error
+    description: 默认模型必须从 capability_model_routes 和启用的 ai_models 中解析
+    enforcement: ModelRoutingService.getDefaultModel 按启用路由 priority 和模型 sortOrder 查询数据库
+    test: model-routing.service.test.ts 返回首个启用路由模型及数据库 costCredits
+  - name: no_runtime_memory_model_fallback
+    id: GTW-012
+    severity: error
+    level: error
+    description: 数据库缺失或查询失败时不得构造内存模型或默认成本，查询失败必须返回服务不可用
+    enforcement: GatewayService 的模型查询和默认解析仅使用数据库服务，数据库异常抛出 ServiceUnavailableException
+    test: gateway.regression.test.ts 数据库查询失败返回服务不可用且不返回内存模型
+  - name: provider_records_required
+    id: GTW-013
+    severity: error
+    level: error
+    description: 模型执行必须至少存在一个启用的 model_providers 渠道
+    enforcement: ProviderService 仅返回 modelProviders 表中启用渠道，无隐式 fallback
+    test: provider.service.test.ts 无启用 Provider 时返回空列表
+  - name: model_capability_match
+    id: GTW-014
+    severity: error
+    level: error
+    description: 显式模型和默认路由模型都必须声明支持请求能力
+    enforcement: GatewayService 和 ModelConfigService 在提交或配置路由前校验 capabilities
+    test: gateway.service.test.ts 拒绝不支持请求能力的显式模型
+  - name: seed_preserves_admin_configuration
+    id: GTW-015
+    severity: error
+    level: error
+    description: 启动种子只补齐缺失记录，不得覆盖或重新激活管理员配置
+    enforcement: 路由替换保留未选路由为停用状态，seedModels 和独立 seed 脚本逐条 insert on conflict do nothing
+    test: 事务化替换能力路由并按提交顺序持久化 priority
+  - name: model_slug_immutable
+    id: GTW-016
+    severity: error
+    level: error
+    description: 逻辑模型 slug 创建后不可修改，模型下线使用 isActive
+    enforcement: UpdateModelSchema 不包含 slug 且 ModelConfigService 不提供模型硬删除
+    test: model-config.service.test.ts 更新模型时保持 slug 不变
 seed_data:
   models:
     - slug: doubao-seed-2-0-pro

@@ -6,7 +6,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { SEED_MODELS, SEED_RECIPES } from './model-seeds';
+import fs from 'node:fs';
+import path from 'node:path';
+import {
+  SEED_MODELS,
+  SEED_MODEL_PROVIDERS,
+  SEED_MODEL_ROUTES,
+  SEED_RECIPES,
+} from './model-seeds';
 import { builtInCapabilities } from '../capabilities/index';
 
 describe('Seeds Data Integrity', () => {
@@ -216,6 +223,50 @@ describe('Seeds Data Integrity', () => {
   // ===== 跨数据一致性 =====
 
   describe('跨数据一致性', () => {
+    it('验证模型 Provider 路由种子引用完整且使用冲突跳过策略', () => {
+      const modelSlugs = new Set(SEED_MODELS.map((model) => model.slug));
+      expect(SEED_MODEL_PROVIDERS.every((provider) => modelSlugs.has(provider.modelSlug))).toBe(true);
+      expect(SEED_MODEL_ROUTES.every((route) => modelSlugs.has(route.modelSlug))).toBe(true);
+
+      const gatewayServiceSource = fs.readFileSync(
+        path.resolve(__dirname, '../gateway.service.ts'),
+        'utf8',
+      );
+      const seedScriptSource = fs.readFileSync(
+        path.resolve(__dirname, '../../../scripts/seed.ts'),
+        'utf8',
+      );
+      const modelConfigSeedSource = seedScriptSource.split('// ===== Seed Subscription Plans =====')[0];
+      expect(gatewayServiceSource).toContain('onConflictDoNothing');
+      expect(modelConfigSeedSource).toContain('onConflictDoNothing');
+      expect(gatewayServiceSource).not.toContain('onConflictDoUpdate');
+      expect(modelConfigSeedSource).not.toContain('onConflictDoUpdate');
+    });
+
+    it('模型配置迁移不会静默删除现有 Provider', () => {
+      const migrationSource = fs.readFileSync(
+        path.resolve(__dirname, '../../../../drizzle/0011_model_configuration_chain.sql'),
+        'utf8',
+      );
+
+      expect(migrationSource).not.toMatch(/DELETE\s+FROM\s+"model_providers"/i);
+      expect(migrationSource).toContain('ADD COLUMN IF NOT EXISTS "cost_per_second"');
+    });
+
+    it('每个模型至少有一个 Provider 种子', () => {
+      for (const model of SEED_MODELS) {
+        expect(SEED_MODEL_PROVIDERS.some((provider) => provider.modelSlug === model.slug)).toBe(true);
+      }
+    });
+
+    it('每个路由引用存在且支持该能力的模型', () => {
+      for (const route of SEED_MODEL_ROUTES) {
+        const model = SEED_MODELS.find((candidate) => candidate.slug === route.modelSlug);
+        expect(model).toBeDefined();
+        expect(model?.capabilities).toContain(route.capabilitySlug);
+      }
+    });
+
     it('recipe 引用的 model 的 capability 包含 recipe 的 capabilitySlug', () => {
       for (const r of SEED_RECIPES) {
         const model = SEED_MODELS.find((m) => m.slug === r.modelSlug);

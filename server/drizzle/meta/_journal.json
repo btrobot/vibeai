@@ -78,6 +78,13 @@
       "when": 1786030000000,
       "tag": "0010_commerce_and_orders_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786040000000,
+      "tag": "0011_model_configuration_chain",
+      "breakpoints": true
     }
   ]
 }

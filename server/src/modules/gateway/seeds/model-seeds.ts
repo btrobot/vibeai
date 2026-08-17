@@ -8,8 +8,7 @@
  * 数据来源：coze-coding-dev-sdk 支持的模型列表
  */
 
-import { aiModels } from '../../../db/schema/gateway';
-import { modelProviders } from '../../../db/schema/gateway';
+import { aiModels, capabilityModelRoutes, modelProviders } from '../../../db/schema/gateway';
 
 type ModelSeed = typeof aiModels.$inferInsert;
 
@@ -297,7 +296,7 @@ export const SEED_MODELS: ModelSeed[] = [
     name: 'Doubao Seedance 2.0',
     providerName: 'doubao',
     description: '下一代多模态视频创作模型，支持参考图片/视频/音频',
-    capabilities: ['video-generation'],
+    capabilities: ['video-generation', 'style-cloning'],
     inputModes: ['text', 'image', 'video', 'audio'],
     outputType: 'video',
     modality: 'video',
@@ -427,37 +426,45 @@ export const SEED_MODELS: ModelSeed[] = [
  */
 type ProviderSeed = typeof modelProviders.$inferInsert;
 
-export const SEED_MODEL_PROVIDERS: ProviderSeed[] = [
-  {
-    modelSlug: 'gpt-image-2',
-    providerName: 'replicate',
-    sdkModelId: 'openai/gpt-image-2',
-    sdkClient: 'replicate',
-    priority: 1,
-    costPerCall: '0.05',
-    config: {},
-    isActive: true,
-  },
-  {
-    modelSlug: 'sdxl',
-    providerName: 'replicate',
-    sdkModelId: 'stability-ai/sdxl',
-    sdkClient: 'replicate',
-    priority: 1,
-    costPerCall: '0.002',
-    config: {},
-    isActive: true,
-  },
-  {
-    modelSlug: 'flux-schnell',
-    providerName: 'replicate',
-    sdkModelId: 'black-forest-labs/flux-schnell',
-    sdkClient: 'replicate',
-    priority: 1,
-    costPerCall: '0.003',
-    config: {},
-    isActive: true,
-  },
+const providerCostPerCall: Record<string, string> = {
+  'gpt-image-2': '0.05',
+  sdxl: '0.002',
+  'flux-schnell': '0.003',
+};
+
+export const SEED_MODEL_PROVIDERS: ProviderSeed[] = SEED_MODELS.map((model) => ({
+  modelSlug: model.slug as string,
+  providerName: model.providerName as string,
+  sdkModelId: model.sdkModelId as string,
+  sdkClient: model.sdkClient as string,
+  priority: 1,
+  costPerCall: providerCostPerCall[model.slug as string] ?? null,
+  config: {},
+  isActive: true,
+}));
+
+type ModelRouteSeed = typeof capabilityModelRoutes.$inferInsert;
+
+export const SEED_MODEL_ROUTES: ModelRouteSeed[] = [
+  { capabilitySlug: 'text-generation', modelSlug: 'doubao-seed-2-0-pro', priority: 1, isActive: true },
+  { capabilitySlug: 'text-generation', modelSlug: 'doubao-seed-2-0-lite', priority: 2, isActive: true },
+  { capabilitySlug: 'image-generation', modelSlug: 'doubao-seedream-5-0', priority: 1, isActive: true },
+  { capabilitySlug: 'image-generation', modelSlug: 'doubao-seedream-4-5', priority: 2, isActive: true },
+  { capabilitySlug: 'image-generation', modelSlug: 'gpt-image-2', priority: 3, isActive: true },
+  { capabilitySlug: 'image-generation', modelSlug: 'sdxl', priority: 4, isActive: true },
+  { capabilitySlug: 'image-generation', modelSlug: 'flux-schnell', priority: 5, isActive: true },
+  { capabilitySlug: 'video-generation', modelSlug: 'doubao-seedance-1-5-pro', priority: 1, isActive: true },
+  { capabilitySlug: 'video-generation', modelSlug: 'doubao-seedance-2-0', priority: 2, isActive: true },
+  { capabilitySlug: 'image-editing', modelSlug: 'doubao-seedream-5-0', priority: 1, isActive: true },
+  { capabilitySlug: 'image-editing', modelSlug: 'doubao-seedream-4-5', priority: 2, isActive: true },
+  { capabilitySlug: 'image-editing', modelSlug: 'gpt-image-2', priority: 3, isActive: true },
+  { capabilitySlug: 'background-removal', modelSlug: 'doubao-seedream-5-0', priority: 1, isActive: true },
+  { capabilitySlug: 'scene-composition', modelSlug: 'doubao-seedream-5-0', priority: 1, isActive: true },
+  { capabilitySlug: 'model-dressing', modelSlug: 'doubao-seedream-5-0', priority: 1, isActive: true },
+  { capabilitySlug: 'detail-page-generation', modelSlug: 'doubao-seed-2-0-pro', priority: 1, isActive: true },
+  { capabilitySlug: 'detail-page-generation', modelSlug: 'doubao-seed-2-0-lite', priority: 2, isActive: true },
+  { capabilitySlug: 'detail-page-generation', modelSlug: 'kimi-k2-5', priority: 3, isActive: true },
+  { capabilitySlug: 'style-cloning', modelSlug: 'doubao-seedance-2-0', priority: 1, isActive: true },
 ];
 
 /**

@@ -1,22 +1,36 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { tasks } from '../../db/schema/task-engine';
-import { aiModels, aiCapabilities, modelProviders } from '../../db/schema/gateway';
+import { aiModels, capabilityModelRoutes, modelProviders } from '../../db/schema/gateway';
 import { builtInCapabilityMap } from './capabilities/index';
-import { builtInModelMap } from './models/index';
-import { routeCapability, getModelsForCapability } from './router/index';
 import type { CapabilityDefinition } from './capabilities/index';
-import type { ModelDefinition } from './models/index';
 import { eq, and, sql } from 'drizzle-orm';
 import { TaskExecutionService } from './task-execution.service';
 import { BillingService } from '../billing/billing.service';
 import { CreateService } from '../create/create.service';
 import { StorageService } from '../storage/storage.service';
-import { SEED_MODELS, SEED_RECIPES, SEED_MODEL_PROVIDERS } from './seeds/model-seeds';
+import { SEED_MODELS, SEED_RECIPES, SEED_MODEL_PROVIDERS, SEED_MODEL_ROUTES } from './seeds/model-seeds';
 import type { AdapterModel } from './adapters/protocol-adapter.interface';
+import { ModelRoutingService } from './model-routing.service';
+import { toAdapterModel } from './model-mapper';
+
+export interface GatewayModelSummary extends AdapterModel {
+  description: string | null;
+  tags: string[];
+  isFeatured: boolean;
+  isDefault: boolean;
+}
 
 // ===== Gateway Types =====
 export interface GenerationTaskResponse {
@@ -39,45 +53,31 @@ export class GatewayService {
     @Inject('BILLING_SERVICE') private readonly billingService: BillingService,
     @Inject('CREATE_SERVICE') private readonly createService: CreateService,
     @Inject('STORAGE_SERVICE') private readonly storageService: StorageService,
-  ) {}
+    @Optional() @Inject('MODEL_ROUTING_SERVICE') modelRoutingService?: ModelRoutingService,
+  ) {
+    this.modelRoutingService = modelRoutingService ?? new ModelRoutingService(db);
+  }
+
+  private readonly modelRoutingService: ModelRoutingService;
 
   // ===== Seed =====
 
   async seedModels(): Promise<void> {
-    // Per-slug idempotent seeding (supports incremental model additions)
-    let insertedCount = 0;
     for (const model of SEED_MODELS) {
-      const [existing] = await this.db.select().from(aiModels).where(eq(aiModels.slug, model.slug as string)).limit(1);
-      if (!existing) {
-        await this.db.insert(aiModels).values(model);
-        insertedCount++;
-      }
-    }
-    if (insertedCount > 0) {
-      this.logger.log(`已初始化 ${insertedCount} 个 AI 模型种子数据`);
+      await this.db.insert(aiModels).values(model).onConflictDoNothing({ target: aiModels.slug });
     }
 
-    // Seed model providers (idempotent per modelSlug + providerName)
-    let providerCount = 0;
     for (const provider of SEED_MODEL_PROVIDERS) {
-      const [existing] = await this.db
-        .select()
-        .from(modelProviders)
-        .where(
-          and(
-            eq(modelProviders.modelSlug, provider.modelSlug as string),
-            eq(modelProviders.providerName, provider.providerName as string),
-          ),
-        )
-        .limit(1);
-      if (!existing) {
-        await this.db.insert(modelProviders).values(provider);
-        providerCount++;
-      }
+      await this.db.insert(modelProviders).values(provider).onConflictDoNothing();
     }
-    if (providerCount > 0) {
-      this.logger.log(`已初始化 ${providerCount} 个 Model Provider 渠道数据`);
+
+    for (const route of SEED_MODEL_ROUTES) {
+      await this.db.insert(capabilityModelRoutes).values(route).onConflictDoNothing();
     }
+
+    this.logger.log(
+      `已检查 ${SEED_MODELS.length} 个模型、${SEED_MODEL_PROVIDERS.length} 个渠道和 ${SEED_MODEL_ROUTES.length} 条能力路由`,
+    );
   }
 
   // ===== Capabilities =====
@@ -90,55 +90,51 @@ export class GatewayService {
     return builtInCapabilityMap.get(slug) ?? null;
   }
 
-  getModelsForCapability(capabilitySlug: string): ModelDefinition[] {
-    return Array.from(builtInModelMap.values())
-      .filter((m) => m.capabilities.includes(capabilitySlug))
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-  }
+  // ===== Models (database source of truth) =====
 
-  // ===== Models (DB-backed with in-memory fallback) =====
-
-  async listModels(capability?: string): Promise<AdapterModel[]> {
+  async listModels(capability?: string): Promise<GatewayModelSummary[]> {
     try {
-      let query = this.db.select().from(aiModels).where(eq(aiModels.isActive, true));
-      let rows;
-
-      if (capability) {
-        rows = await this.db
+      const rows = capability
+        ? await this.db
           .select()
           .from(aiModels)
-          .where(and(eq(aiModels.isActive, true), sql`${aiModels.capabilities} @> ARRAY[${capability}]::text[]`));
-      } else {
-        rows = await this.db.select().from(aiModels).where(eq(aiModels.isActive, true));
-      }
+          .where(and(eq(aiModels.isActive, true), sql`${aiModels.capabilities} @> ARRAY[${capability}]::text[]`))
+        : await this.db.select().from(aiModels).where(eq(aiModels.isActive, true));
 
-      if (rows.length === 0) {
-        // Fallback to in-memory
-        return this.listModelsFromMemory(capability);
-      }
+      const defaultModel = capability
+        ? await this.modelRoutingService.getDefaultModel(capability)
+        : null;
 
       return rows
         .sort((a: typeof aiModels.$inferSelect, b: typeof aiModels.$inferSelect) => a.sortOrder - b.sortOrder)
-        .map((r: typeof aiModels.$inferSelect) => this.toAdapterModel(r));
+        .map((r: typeof aiModels.$inferSelect) => ({
+          ...toAdapterModel(r),
+          description: r.description,
+          tags: r.tags ?? [],
+          isFeatured: r.isFeatured,
+          isDefault: r.slug === defaultModel?.slug,
+        }));
     } catch (e) {
-      this.logger.warn(`DB query failed, falling back to in-memory: ${(e as Error).message}`);
-      return this.listModelsFromMemory(capability);
+      this.logger.error(`DB model query failed: ${(e as Error).message}`);
+      throw new ServiceUnavailableException('模型配置暂时不可用');
     }
   }
 
   async getModel(slug: string): Promise<AdapterModel | null> {
     try {
-      const [row] = await this.db.select().from(aiModels).where(eq(aiModels.slug, slug)).limit(1);
+      const [row] = await this.db
+        .select()
+        .from(aiModels)
+        .where(and(eq(aiModels.slug, slug), eq(aiModels.isActive, true)))
+        .limit(1);
       if (row) {
-        return this.toAdapterModel(row);
+        return toAdapterModel(row);
       }
-    } catch {
-      // fall through to in-memory
+    } catch (error) {
+      this.logger.error(`DB model lookup failed for "${slug}": ${(error as Error).message}`);
+      throw new ServiceUnavailableException('模型配置暂时不可用');
     }
-
-    // Fallback
-    const model = builtInModelMap.get(slug);
-    return model ? this.modelDefToAdapterModel(model) : null;
+    return null;
   }
 
   async toggleModelActive(slug: string): Promise<{ slug: string; isActive: boolean } | null> {
@@ -176,56 +172,7 @@ export class GatewayService {
   }
 
   async getDefaultModel(capabilitySlug: string): Promise<AdapterModel | null> {
-    const models = await this.listModels(capabilitySlug);
-    return models[0] ?? null;
-  }
-
-  private listModelsFromMemory(capability?: string): AdapterModel[] {
-    const models = Array.from(builtInModelMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
-    const filtered = capability
-      ? models.filter((m) => m.capabilities.includes(capability))
-      : models;
-    return filtered.map((m) => this.modelDefToAdapterModel(m));
-  }
-
-  private toAdapterModel(row: typeof aiModels.$inferSelect): AdapterModel {
-    return {
-      slug: row.slug,
-      name: row.name,
-      sdkModelId: row.sdkModelId,
-      modality: row.modality as AdapterModel['modality'],
-      outputType: row.outputType,
-      providerName: row.providerName,
-      sdkClient: row.sdkClient,
-      capabilities: row.capabilities ?? [],
-      constraints: row.constraints as Record<string, unknown>,
-      defaultParams: row.defaultParams as Record<string, unknown>,
-      costCredits: row.costCredits,
-      sortOrder: row.sortOrder,
-    };
-  }
-
-  private modelDefToAdapterModel(m: ModelDefinition): AdapterModel {
-    // Derive modality from outputTypes
-    const modality: AdapterModel['modality'] =
-      m.outputTypes.includes('video') ? 'video' :
-      m.outputTypes.includes('image') ? 'image' : 'llm';
-
-    // Use slug as sdkModelId for in-memory fallback (old slugs ARE the SDK model IDs)
-    return {
-      slug: m.slug,
-      name: m.name,
-      sdkModelId: m.slug,
-      modality,
-      outputType: m.outputTypes[0] || 'text',
-      providerName: 'coze',
-      sdkClient: modality,
-      capabilities: m.capabilities ?? [],
-      constraints: m.config,
-      defaultParams: {},
-      costCredits: 1,
-      sortOrder: m.sortOrder,
-    };
+    return this.modelRoutingService.getDefaultModel(capabilitySlug);
   }
 
   // ===== Model Resolution Helpers =====
@@ -233,63 +180,32 @@ export class GatewayService {
   /**
    * Resolve a user-specified preferred model to an AdapterModel.
    *
-   * Lookup order:
-   * 1. DB (aiModels) — supports DB-only models like Replicate
-   * 2. In-memory router (builtInModelMap) — Coze SDK models
-   *
-   * If the preferred model doesn't support the requested capability,
-   * falls back to the default model for that capability.
+   * Explicit model selection is strict: it must be active and support the
+   * requested capability. Defaults are resolved separately from the route table.
    */
   private async resolvePreferredModel(
     preferredModel: string,
     capabilitySlug: string,
   ): Promise<AdapterModel> {
-    // 1. Try DB first
     const dbModel = await this.getModel(preferredModel);
-    if (dbModel) {
-      const caps = dbModel.capabilities ?? [];
-      if (caps.includes(capabilitySlug)) {
-        return dbModel;
-      }
-      // DB model exists but doesn't support this capability → fallback
-      return this.resolveDefaultModel(capabilitySlug);
+    if (!dbModel) {
+      throw new BadRequestException(`模型 "${preferredModel}" 不存在或已停用`);
     }
-
-    // 2. Try in-memory router
-    const route = routeCapability(capabilitySlug, preferredModel);
-    if (route && route.modelSlug === preferredModel) {
-      const memModel = builtInModelMap.get(preferredModel);
-      if (!memModel) {
-        throw new BadRequestException(`模型 "${preferredModel}" 不存在`);
-      }
-      return this.modelDefToAdapterModel(memModel);
+    if (!dbModel.capabilities.includes(capabilitySlug)) {
+      throw new BadRequestException(`模型 "${preferredModel}" 不支持能力 "${capabilitySlug}"`);
     }
-
-    // 3. Preferred model not found or doesn't support capability → fallback
-    return this.resolveDefaultModel(capabilitySlug);
+    return dbModel;
   }
 
   /**
-   * Resolve the default model for a capability.
-   * Uses in-memory router to find the default model slug, then resolves
-   * from DB (preferred) or in-memory definition (fallback).
+   * Resolve the default model through the database route table.
    */
   private async resolveDefaultModel(capabilitySlug: string): Promise<AdapterModel> {
-    const route = routeCapability(capabilitySlug);
-    if (!route) {
+    const model = await this.modelRoutingService.getDefaultModel(capabilitySlug);
+    if (!model) {
       throw new BadRequestException(`能力 "${capabilitySlug}" 没有可用的模型`);
     }
-
-    const dbModel = await this.getModel(route.modelSlug);
-    if (dbModel) {
-      return dbModel;
-    }
-
-    const memModel = builtInModelMap.get(route.modelSlug);
-    if (!memModel) {
-      throw new BadRequestException(`模型 "${route.modelSlug}" 不存在`);
-    }
-    return this.modelDefToAdapterModel(memModel);
+    return model;
   }
 
   // ===== Input Media Resolution (fileId → URL, at system boundary) =====
@@ -391,7 +307,7 @@ export class GatewayService {
       throw new NotFoundException(`能力 "${capabilitySlug}" 不存在`);
     }
 
-    // Resolve model: preferredModel (DB-first) → in-memory router → default fallback
+    // Resolve explicit selections or the database-backed capability default.
     const model = preferredModel
       ? await this.resolvePreferredModel(preferredModel, capabilitySlug)
       : await this.resolveDefaultModel(capabilitySlug);

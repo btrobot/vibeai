@@ -10,16 +10,15 @@
  * REG-005: transferResult 部分图片转存失败时其他图片仍继续
  * REG-006: submitGeneration Task 创建失败后退还信用
  * REG-007: 退款失败不影响任务失败状态
- * REG-008: modelDefToAdapterModel 内存回退时 sdkModelId 使用 slug 而非真实 SDK ID
+ * REG-008: 版本化 sdkModelId 不得作为逻辑模型 slug
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { GatewayService } from './gateway.service';
 import { TaskExecutionService } from './task-execution.service';
 import { createDrizzleMockForNestJS, mockSingle, mockEmpty } from '../../test/drizzle-mock';
 import { SEED_RECIPES, SEED_MODELS } from './seeds/model-seeds';
-import { builtInModelMap } from './models/index';
 import type { AdapterModel } from './adapters/protocol-adapter.interface';
 
 describe('AI Gateway 回归测试', () => {
@@ -27,6 +26,7 @@ describe('AI Gateway 回归测试', () => {
   let db: ReturnType<typeof createDrizzleMockForNestJS>;
   let mockBillingService: any;
   let mockTaskExecution: any;
+  let mockModelRouting: any;
 
   beforeEach(() => {
     db = createDrizzleMockForNestJS();
@@ -38,6 +38,22 @@ describe('AI Gateway 回归测试', () => {
     };
     mockTaskExecution = {
       executeTask: vi.fn().mockResolvedValue(undefined),
+    };
+    mockModelRouting = {
+      getDefaultModel: vi.fn().mockResolvedValue({
+        slug: 'doubao-seed-2-0-pro',
+        name: 'Doubao Seed 2.0 Pro',
+        sdkModelId: 'doubao-seed-2-0-pro-260215',
+        modality: 'llm',
+        outputType: 'text',
+        providerName: 'doubao',
+        sdkClient: 'llm',
+        capabilities: ['text-generation', 'detail-page-generation'],
+        constraints: {},
+        defaultParams: {},
+        costCredits: 5,
+        sortOrder: 1,
+      }),
     };
     service = new GatewayService(
       db as any,
@@ -53,6 +69,7 @@ describe('AI Gateway 回归测试', () => {
         resolveUrls: vi.fn().mockResolvedValue(new Map<string, string>()),
         resolveUrl: vi.fn().mockResolvedValue(null),
       } as any,
+      mockModelRouting as any,
     );
   });
 
@@ -82,36 +99,30 @@ describe('AI Gateway 回归测试', () => {
   });
 
   // ============================================================
-  // REG-002: quickCreate 传入 seed model slug 但 router 只识别内存 model slug
+  // REG-002: quickCreate 传入逻辑短 slug 时必须由数据库模型解析
   //
   // Bug: SEED_RECIPES 中 modelSlug 为 'doubao-seedream-5-0'（短 slug）
   //      但内存模型 map 的 key 为 'doubao-seedream-5-0-260128'（带版本号）
-  //      submitGeneration 中 routeCapability 找不到短 slug → 静默回退到默认模型
+  //      历史内存路由无法识别短 slug，曾静默回退到默认模型
   // 影响: 用户通过 quickCreate 指定的模型被忽略
   // ============================================================
-  describe('REG-002: quickCreate 模型 slug 与路由器不匹配', () => {
-    it('quickCreate 的 modelSlug 是短 slug（不含版本号）', () => {
-      // 验证 seed recipes 使用的是短 slug
+  describe('REG-002: quickCreate 逻辑模型 slug 解析', () => {
+    it('quickCreate 的 modelSlug 是数据库逻辑短 slug', () => {
       for (const recipe of SEED_RECIPES) {
         const modelDef = SEED_MODELS.find((m) => m.slug === recipe.modelSlug);
         expect(modelDef).toBeDefined();
-        // 短 slug 不在内存模型 map 中
-        expect(builtInModelMap.has(recipe.modelSlug)).toBe(false);
+        expect(recipe.modelSlug).not.toBe(modelDef?.sdkModelId);
       }
     });
 
     it('quickCreate 调用 submitGeneration 时传入的 modelSlug 能被正确解析', async () => {
-      // quickCreate → submitGeneration → getModel(preferredModel)
-      // getModel 先查 DB（mock 返回空）→ 回退到内存 map
-      // 内存 map 没有短 slug → 返回 null → 回退到默认模型
-      // 这是已知行为：DB 有种子数据时能找到，内存回退时找不到
+      const seedModel = SEED_MODELS.find((model) => model.slug === 'doubao-seedream-5-0');
+      mockSingle(db, seedModel as any);
       const result = await service.quickCreate('user-1', 'proj-1', 'text-to-image', { prompt: 'a cat' });
 
-      // 任务应该成功创建（使用默认模型）
       expect(result.taskId).toBeDefined();
       expect(result.status).toBe('queued');
-      // modelSlug 应该是 image-generation 的某个模型
-      expect(result.modelSlug).toBeDefined();
+      expect(result.modelSlug).toBe('doubao-seedream-5-0');
     });
 
     it('DB 有种子数据时 quickCreate 能正确使用 recipe 指定的模型', async () => {
@@ -121,10 +132,7 @@ describe('AI Gateway 回归测试', () => {
 
       const result = await service.quickCreate('user-1', 'proj-1', 'text-to-image', { prompt: 'a cat' });
 
-      // 应该使用 recipe 指定的模型（从 DB 找到）
-      // 注意: 由于 router 仍使用内存模型，preferredModel 能力检查会失败
-      // 但 submitGeneration 有回退逻辑：先 getModel → DB 找到 → 使用
-      // 实际行为取决于 routeCapability 的返回
+      // 应该使用 recipe 指定的逻辑模型（从 DB 找到）
       expect(result.taskId).toBeDefined();
     });
   });
@@ -484,21 +492,19 @@ describe('AI Gateway 回归测试', () => {
   });
 
   // ============================================================
-  // REG-008: modelDefToAdapterModel 内存回退时 sdkModelId 使用 slug
+  // REG-008: 版本化 SDK ID 不得作为逻辑 slug
   //
   // Bug: 内存回退时 sdkModelId = m.slug（内存模型的 slug）
   //      但实际 SDK 需要的是带版本号的完整 ID（如 doubao-seed-2-0-pro-260215）
   //      内存模型的 slug 恰好就是完整 ID，所以当前没有问题
   //      但如果将来内存模型 slug 与 SDK ID 分离，会出问题
   // ============================================================
-  describe('REG-008: 内存回退模型 sdkModelId 正确性', () => {
-    it('内存模型的 slug 与 sdkModelId 一致（当前设计）', async () => {
+  describe('REG-008: 逻辑 slug 与 sdkModelId 分离', () => {
+    it('版本化 SDK ID 不会被接受为逻辑模型 slug', async () => {
       mockEmpty(db);
 
       const model = await service.getModel('doubao-seed-2-0-pro-260215');
-      expect(model).not.toBeNull();
-      // 内存回退: sdkModelId = slug
-      expect(model!.sdkModelId).toBe('doubao-seed-2-0-pro-260215');
+      expect(model).toBeNull();
     });
 
     it('DB 模型的 sdkModelId 来自 DB 字段（不等于 slug）', async () => {
@@ -762,15 +768,14 @@ describe('AI Gateway 回归测试', () => {
   // Bug 场景: DB 查询抛异常时，getModel/getTask 应返回 null
   // 期望: 不抛异常，返回 null，让调用方自行处理
   // ============================================================
-  describe('REG-013: GatewayService DB 异常容错', () => {
-    it('getModel DB 查询抛异常时返回 null', async () => {
+  describe('REG-013: GatewayService DB 异常诊断', () => {
+    it('getModel DB 查询抛异常时返回服务不可用', async () => {
       vi.spyOn(db, 'select').mockImplementation(() => {
         throw new Error('DB connection lost');
       });
 
-      // 即使 DB 抛异常，getModel 也应返回 null（不抛异常）
-      const result = await service.getModel('non-existent');
-      expect(result).toBeNull();
+      await expect(service.getModel('non-existent'))
+        .rejects.toBeInstanceOf(ServiceUnavailableException);
     });
 
     it('getTask DB 查询抛异常时返回 null', async () => {
@@ -783,14 +788,12 @@ describe('AI Gateway 回归测试', () => {
       expect(result).toBeNull();
     });
 
-    it('listModels DB 查询抛异常时回退到内存模型', async () => {
+    it('数据库查询失败返回服务不可用且不返回内存模型', async () => {
       vi.spyOn(db, 'select').mockImplementation(() => {
         throw new Error('DB connection lost');
       });
 
-      // 即使 DB 抛异常，listModels 也应返回模型列表（内存回退）
-      const result = await service.listModels();
-      expect(result.length).toBeGreaterThan(0);
+      await expect(service.listModels()).rejects.toBeInstanceOf(ServiceUnavailableException);
     });
 
     it('getTask DB 结果为空时返回 null', async () => {
@@ -816,13 +819,10 @@ describe('AI Gateway 回归测试', () => {
       expect(result).toBeNull();
     });
 
-    it('submitGeneration 传入不存在的 preferredModel 应回退到默认', async () => {
-      const result = await service.submitGeneration(
+    it('submitGeneration 传入不存在的 preferredModel 应明确拒绝', async () => {
+      await expect(service.submitGeneration(
         'user-1', 'proj-1', 'text-generation', { prompt: 'test' }, 'non-existent-model',
-      );
-      // 回退到默认模型，任务仍然创建成功
-      expect(result.taskId).toBeDefined();
-      expect(result.status).toBe('queued');
+      )).rejects.toThrow(BadRequestException);
     });
 
     it('quickCreate 传入不存在的 recipeId 应抛异常', async () => {
@@ -833,18 +833,18 @@ describe('AI Gateway 回归测试', () => {
   });
 
   // ============================================================
-  // REG-015: resolvePreferredModel 三层查找路径
+  // REG-015: resolvePreferredModel 数据库严格校验
   //
   // 重构背景: submitGeneration 中 70 行嵌套逻辑被提取为
   //   resolvePreferredModel() 和 resolveDefaultModel() 两个私有方法。
   // 本组测试直接验证各查找路径的正确性，防止重构引入回归。
   //
-  // 查找顺序:
-  // 1. DB (aiModels) — 支持 DB-only 模型（如 Replicate gpt-image-2）
-  // 2. 内存路由 (routeCapability + builtInModelMap) — Coze SDK 模型
-  // 3. Fallback → resolveDefaultModel
+  // 查找规则:
+  // 1. 显式模型只从 DB aiModels 解析
+  // 2. 未指定模型时只从数据库能力路由解析默认模型
+  // 3. 任一数据库路径失败都不得构造内存模型
   // ============================================================
-  describe('REG-015: resolvePreferredModel 三层查找路径', () => {
+  describe('REG-015: resolvePreferredModel 数据库严格校验', () => {
     // Helper: 创建模拟 DB 行（aiModels.$inferSelect 结构）
     function createDbModelRow(overrides: Record<string, unknown> = {}) {
       return {
@@ -891,12 +891,7 @@ describe('AI Gateway 回归测试', () => {
       expect(model.capabilities).toContain('image-generation');
     });
 
-    it('DB 模型不支持该能力 → fallback 到默认模型', async () => {
-      // 使用 spy 精确控制 getModel 的返回：
-      // 第一次调用 (getModel('sdxl')) 返回不支持 image-generation 的 DB 模型
-      // 第二次调用 (getModel('doubao-seedream-5-0-260128')) 走真实路径 → DB 空 → 内存回退
-      mockEmpty(db);
-
+    it('DB 模型不支持该能力时明确拒绝', async () => {
       const getModelSpy = vi.spyOn(service as any, 'getModel');
       getModelSpy.mockResolvedValueOnce({
         slug: 'sdxl',
@@ -913,47 +908,35 @@ describe('AI Gateway 回归测试', () => {
         sortOrder: 32,
       } as any);
 
-      const model = await (service as any).resolvePreferredModel('sdxl', 'image-generation');
-
-      // 不应返回 preferredModel 'sdxl'（因为它不支持该能力）
-      expect(model).not.toBeNull();
-      expect(model.slug).not.toBe('sdxl');
-      // 应 fallback 到 image-generation 的默认模型
-      expect(model.slug).toBe('doubao-seedream-5-0-260128');
-      expect(model.capabilities).toContain('image-generation');
+      await expect(
+        (service as any).resolvePreferredModel('sdxl', 'image-generation'),
+      ).rejects.toThrow('不支持能力');
 
       getModelSpy.mockRestore();
     });
 
-    it('DB 无此模型 + 内存路由匹配 → 使用内存模型', async () => {
+    it('DB 无此模型时不使用内存路由', async () => {
       mockEmpty(db);
 
-      // kimi-k2-5-260127 在 builtInModelMap 中且支持 text-generation
-      const model = await (service as any).resolvePreferredModel('kimi-k2-5-260127', 'text-generation');
-
-      expect(model).not.toBeNull();
-      expect(model.slug).toBe('kimi-k2-5-260127');
+      await expect(
+        (service as any).resolvePreferredModel('kimi-k2-5-260127', 'text-generation'),
+      ).rejects.toThrow('不存在或已停用');
     });
 
-    it('DB 无此模型 + preferredModel 在内存中但不支持该能力 → fallback 默认', async () => {
+    it('版本化 SDK ID 不会回退到默认模型', async () => {
       mockEmpty(db);
 
-      // doubao-seedream-5-0-260128 是图片模型，不支持 text-generation
-      const model = await (service as any).resolvePreferredModel('doubao-seedream-5-0-260128', 'text-generation');
-
-      // 应 fallback 到 text-generation 的默认模型
-      expect(model).not.toBeNull();
-      expect(model.slug).toBe('doubao-seed-2-0-pro-260215');
+      await expect(
+        (service as any).resolvePreferredModel('doubao-seedream-5-0-260128', 'text-generation'),
+      ).rejects.toThrow('不存在或已停用');
     });
 
-    it('DB 无此模型 + preferredModel 不在内存中 → fallback 默认', async () => {
+    it('未知逻辑模型不会回退到默认模型', async () => {
       mockEmpty(db);
 
-      const model = await (service as any).resolvePreferredModel('non-existent-model', 'text-generation');
-
-      // 应 fallback 到 text-generation 的默认模型
-      expect(model).not.toBeNull();
-      expect(model.slug).toBe('doubao-seed-2-0-pro-260215');
+      await expect(
+        (service as any).resolvePreferredModel('non-existent-model', 'text-generation'),
+      ).rejects.toThrow('不存在或已停用');
     });
 
     it('submitGeneration 集成：DB 模型优先于内存模型', async () => {
@@ -974,85 +957,31 @@ describe('AI Gateway 回归测试', () => {
   });
 
   // ============================================================
-  // REG-016: resolveDefaultModel 默认模型解析
-  //
-  // 验证 resolveDefaultModel 在不同条件下的行为：
-  // 1. 内存路由 → DB 命中
-  // 2. 内存路由 → DB 未命中 → 内存模型
-  // 3. 无效能力 → 抛异常
+  // REG-016: resolveDefaultModel 数据库路由解析
   // ============================================================
-  describe('REG-016: resolveDefaultModel 默认模型解析', () => {
-    it('内存路由成功 + DB 有该默认模型 → 返回 DB 模型', async () => {
-      const dbModel = {
-        slug: 'doubao-seed-2-0-pro-260215',
-        name: 'Doubao Seed 2.0 Pro',
-        sdkModelId: 'doubao-seed-2-0-pro-260215',
-        modality: 'llm',
-        outputType: 'text',
-        providerName: 'coze',
-        sdkClient: 'llm',
-        capabilities: ['text-generation'],
-        constraints: {},
-        defaultParams: {},
-        costCredits: 5,
-        sortOrder: 1,
-        description: '',
-        avatar: null,
-        contextWindow: null,
-        maxOutputTokens: null,
-        inputModes: [],
-        inputSchema: {},
-        tags: [],
-        isActive: true,
-        isFeatured: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      mockSingle(db, dbModel as any);
-
+  describe('REG-016: resolveDefaultModel 数据库路由解析', () => {
+    it('返回路由服务解析的数据库逻辑模型和成本', async () => {
       const model = await (service as any).resolveDefaultModel('text-generation');
 
       expect(model).not.toBeNull();
-      expect(model.slug).toBe('doubao-seed-2-0-pro-260215');
-      // DB 模型的 sdkModelId 可能与 slug 不同
-      expect(model.sdkModelId).toBeDefined();
+      expect(model.slug).toBe('doubao-seed-2-0-pro');
+      expect(model.sdkModelId).toBe('doubao-seed-2-0-pro-260215');
+      expect(model.costCredits).toBe(5);
+      expect(mockModelRouting.getDefaultModel).toHaveBeenCalledWith('text-generation');
     });
 
-    it('内存路由成功 + DB 无此模型 → 返回内存模型', async () => {
-      mockEmpty(db);
-
-      const model = await (service as any).resolveDefaultModel('text-generation');
-
-      expect(model).not.toBeNull();
-      expect(model.slug).toBe('doubao-seed-2-0-pro-260215');
-      // 内存模型回退时 sdkModelId = slug
-      expect(model.sdkModelId).toBe(model.slug);
-    });
-
-    it('无效能力 → 抛 BadRequestException', async () => {
+    it('数据库路由为空时明确拒绝且不构造内存模型', async () => {
+      mockModelRouting.getDefaultModel.mockResolvedValueOnce(null);
       await expect(
-        (service as any).resolveDefaultModel('non-existent-capability'),
+        (service as any).resolveDefaultModel('image-generation'),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('image-generation 默认模型正确解析', async () => {
-      mockEmpty(db);
-
-      const model = await (service as any).resolveDefaultModel('image-generation');
-
-      expect(model).not.toBeNull();
-      expect(model.slug).toBe('doubao-seedream-5-0-260128');
-      expect(model.modality).toBe('image');
-    });
-
-    it('video-generation 默认模型正确解析', async () => {
-      mockEmpty(db);
-
-      const model = await (service as any).resolveDefaultModel('video-generation');
-
-      expect(model).not.toBeNull();
-      expect(model.slug).toBe('doubao-seedance-1-5-pro-251215');
-      expect(model.modality).toBe('video');
+    it('数据库路由查询失败时不回退到内存模型', async () => {
+      mockModelRouting.getDefaultModel.mockRejectedValueOnce(new Error('DB route failure'));
+      await expect(
+        (service as any).resolveDefaultModel('video-generation'),
+      ).rejects.toThrow('DB route failure');
     });
   });
 
@@ -1070,7 +999,7 @@ describe('AI Gateway 回归测试', () => {
         'user-1', 'proj-1', 'text-generation', { prompt: 'test' },
       );
 
-      expect(result.modelSlug).toBe('doubao-seed-2-0-pro-260215');
+      expect(result.modelSlug).toBe('doubao-seed-2-0-pro');
     });
 
     it('preferredModel 在 DB 中且支持能力 → 使用 DB 模型', async () => {
@@ -1109,18 +1038,38 @@ describe('AI Gateway 回归测试', () => {
       expect(result.status).toBe('queued');
     });
 
-    it('preferredModel 不支持能力时 fallback 到默认（不抛异常）', async () => {
-      mockEmpty(db);
+    it('preferredModel 不支持能力时明确拒绝', async () => {
+      const videoModel = {
+        slug: 'doubao-seedance-1-5-pro',
+        name: 'Doubao Seedance 1.5 Pro',
+        sdkModelId: 'doubao-seedance-1-5-pro-251215',
+        modality: 'video',
+        outputType: 'video',
+        providerName: 'doubao',
+        sdkClient: 'video',
+        capabilities: ['video-generation'],
+        constraints: {},
+        defaultParams: {},
+        costCredits: 30,
+        sortOrder: 20,
+        description: '',
+        avatar: null,
+        contextWindow: null,
+        maxOutputTokens: null,
+        inputModes: [],
+        inputSchema: {},
+        tags: [],
+        isActive: true,
+        isFeatured: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockSingle(db, videoModel as any);
 
-      // doubao-seedance-1-5-pro-251215 是视频模型，不支持 text-generation
-      const result = await service.submitGeneration(
+      await expect(service.submitGeneration(
         'user-1', 'proj-1', 'text-generation', { prompt: 'hello' },
-        'doubao-seedance-1-5-pro-251215',
-      );
-
-      // 不应使用视频模型，应 fallback 到 text-generation 默认模型
-      expect(result.modelSlug).toBe('doubao-seed-2-0-pro-260215');
-      expect(result.status).toBe('queued');
+        'doubao-seedance-1-5-pro',
+      )).rejects.toThrow('不支持能力');
     });
   });
 });

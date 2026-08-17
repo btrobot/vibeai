@@ -7,6 +7,7 @@ export { default as ProductTab } from './ProductTab';
 export { default as PromoCodeTab } from './PromoCodeTab';
 export { default as SystemConfigTab } from './SystemConfigTab';
 export { default as AuditLogTab } from './AuditLogTab';
+export { default as ModelConfigTab } from './ModelConfigTab';
 
 export type {
   Announcement,

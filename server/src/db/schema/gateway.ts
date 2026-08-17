@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, varchar, jsonb, index, boolean, integer, numeric } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, varchar, jsonb, index, uniqueIndex, boolean, integer, numeric } from 'drizzle-orm/pg-core';
 import { tasks } from './task-engine';
 
 // ===== AI Capabilities Table =====
@@ -67,6 +67,7 @@ export const providerAttempts = pgTable('provider_attempts', {
   durationMs: integer('duration_ms'),
   attemptNumber: integer('attempt_number').notNull().default(1),
   costPerCall: numeric('cost_per_call', { precision: 10, scale: 4 }),
+  costPerSecond: numeric('cost_per_second', { precision: 10, scale: 4 }),
   startedAt: timestamp('started_at').notNull().defaultNow(),
   completedAt: timestamp('completed_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -94,4 +95,24 @@ export const modelProviders = pgTable('model_providers', {
   index('model_providers_model_slug_idx').on(table.modelSlug),
   index('model_providers_active_idx').on(table.isActive),
   index('model_providers_model_priority_idx').on(table.modelSlug, table.priority),
+  uniqueIndex('model_providers_identity_uidx').on(
+    table.modelSlug,
+    table.providerName,
+    table.sdkClient,
+    table.sdkModelId,
+  ),
+]);
+
+// ===== Capability Model Routes Table =====
+export const capabilityModelRoutes = pgTable('capability_model_routes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  capabilitySlug: varchar('capability_slug', { length: 100 }).notNull(),
+  modelSlug: varchar('model_slug', { length: 100 }).notNull().references(() => aiModels.slug, { onDelete: 'cascade' }),
+  priority: integer('priority').notNull().default(1),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('capability_model_routes_capability_model_uidx').on(table.capabilitySlug, table.modelSlug),
+  index('capability_model_routes_lookup_idx').on(table.capabilitySlug, table.isActive, table.priority),
 ]);

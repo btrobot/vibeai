@@ -7,13 +7,34 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { GatewayService } from './gateway.service';
-import { createDrizzleMockForNestJS, mockSingle, mockEmpty } from '../../test/drizzle-mock';
+import { createDrizzleMockForNestJS, mockSingle, mockEmpty, mockMany } from '../../test/drizzle-mock';
 import { builtInCapabilities } from './capabilities/index';
-import { builtInModels } from './models/index';
-import { routeCapability } from './router/index';
 import { SEED_MODELS, SEED_RECIPES } from './seeds/model-seeds';
+
+function databaseModel(slug: string) {
+  const seed = SEED_MODELS.find((model) => model.slug === slug);
+  if (!seed) throw new Error(`Missing seed model: ${slug}`);
+  return {
+    id: `id-${slug}`,
+    description: null,
+    avatar: null,
+    contextWindow: null,
+    maxOutputTokens: null,
+    inputModes: [],
+    constraints: {},
+    inputSchema: {},
+    defaultParams: {},
+    tags: [],
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...seed,
+  };
+}
 
 describe('Gateway Spec Tests', () => {
   let service: GatewayService;
@@ -41,6 +62,22 @@ describe('Gateway Spec Tests', () => {
       {
         resolveUrls: vi.fn().mockResolvedValue(new Map<string, string>()),
         resolveUrl: vi.fn().mockResolvedValue(null),
+      } as any,
+      {
+        getDefaultModel: vi.fn().mockResolvedValue({
+          slug: 'doubao-seed-2-0-pro',
+          name: 'Doubao Seed 2.0 Pro',
+          sdkModelId: 'doubao-seed-2-0-pro-260215',
+          modality: 'llm',
+          outputType: 'text',
+          providerName: 'doubao',
+          sdkClient: 'llm',
+          capabilities: ['text-generation', 'detail-page-generation'],
+          constraints: {},
+          defaultParams: {},
+          costCredits: 5,
+          sortOrder: 1,
+        }),
       } as any,
     );
   });
@@ -78,9 +115,10 @@ describe('Gateway Spec Tests', () => {
   // ============================================================
   describe('GTW-002: model_slug_unique', () => {
     it('getModel 按 slug 返回正确的模型', async () => {
-      const model = await service.getModel('doubao-seedream-5-0-260128');
+      mockSingle(db, databaseModel('doubao-seedream-5-0'));
+      const model = await service.getModel('doubao-seedream-5-0');
       expect(model).not.toBeNull();
-      expect(model!.slug).toBe('doubao-seedream-5-0-260128');
+      expect(model!.slug).toBe('doubao-seedream-5-0');
     });
 
     it('种子数据中每个模型的 slug 唯一', () => {
@@ -89,7 +127,7 @@ describe('Gateway Spec Tests', () => {
       expect(uniqueSlugs.size).toBe(slugs.length);
     });
 
-    it('内存模型列表中 slug 唯一', async () => {
+    it('数据库模型列表中 slug 唯一', async () => {
       const models = await service.listModels();
       const slugs = models.map((m) => m.slug);
       const uniqueSlugs = new Set(slugs);
@@ -109,16 +147,15 @@ describe('Gateway Spec Tests', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('指定不存在的 preferredModel 时回退到默认模型', async () => {
-      // preferredModel 不支持该能力 → 回退到默认
-      const result = await service.submitGeneration(
+    it('指定不兼容的 preferredModel 时拒绝生成', async () => {
+      mockSingle(db, databaseModel('doubao-seedream-5-0'));
+      await expect(service.submitGeneration(
         'user-1',
         'proj-1',
         'text-generation',
         { prompt: 'Hello' },
-        'doubao-seedream-5-0-260128', // 图片模型不支持文本生成
-      );
-      expect(result.modelSlug).toBe('doubao-seed-2-0-pro-260215');
+        'doubao-seedream-5-0',
+      )).rejects.toThrow(BadRequestException);
     });
 
     it('能力没有可用模型时抛出异常', async () => {
@@ -220,37 +257,22 @@ describe('Gateway Spec Tests', () => {
   });
 
   // ============================================================
-  // GTW-007: 根据 model.modality 选择对应 ProtocolAdapter
-  // enforcement: TaskExecutionService 根据 model.sdkClient 字段选择适配器
-  // test: routeCapability 为 image-generation 返回正确的图片模型
+  // GTW-007: 根据 Provider sdkClient 选择对应 ProtocolAdapter
+  // enforcement: TaskExecutionService 通过 ProviderService 获取渠道并按 sdkClient 选择适配器
+  // test: TaskExecutionService 按 Provider sdkClient 选择对应适配器
   // ============================================================
   describe('GTW-007: protocol_adapter_dispatch', () => {
-    it('routeCapability 为 image-generation 返回正确的图片模型', () => {
-      const route = routeCapability('image-generation');
-      expect(route).not.toBeNull();
-      expect(route!.modelSlug).toBe('doubao-seedream-5-0-260128');
-    });
-
-    it('routeCapability 为 video-generation 返回正确的视频模型', () => {
-      const route = routeCapability('video-generation');
-      expect(route).not.toBeNull();
-      expect(route!.modelSlug).toBe('doubao-seedance-1-5-pro-251215');
-    });
-
-    it('routeCapability 为 text-generation 返回正确的文本模型', () => {
-      const route = routeCapability('text-generation');
-      expect(route).not.toBeNull();
-      expect(route!.modelSlug).toBe('doubao-seed-2-0-pro-260215');
-    });
-
-    it('内存模型的 modality 正确推导', async () => {
-      const imgModel = await service.getModel('doubao-seedream-5-0-260128');
+    it('数据库模型的 modality 正确映射', async () => {
+      mockSingle(db, databaseModel('doubao-seedream-5-0'));
+      const imgModel = await service.getModel('doubao-seedream-5-0');
       expect(imgModel!.modality).toBe('image');
 
-      const videoModel = await service.getModel('doubao-seedance-1-5-pro-251215');
+      mockSingle(db, databaseModel('doubao-seedance-1-5-pro'));
+      const videoModel = await service.getModel('doubao-seedance-1-5-pro');
       expect(videoModel!.modality).toBe('video');
 
-      const llmModel = await service.getModel('doubao-seed-2-0-pro-260215');
+      mockSingle(db, databaseModel('doubao-seed-2-0-pro'));
+      const llmModel = await service.getModel('doubao-seed-2-0-pro');
       expect(llmModel!.modality).toBe('llm');
     });
   });
@@ -297,13 +319,10 @@ describe('Gateway Spec Tests', () => {
   // 操作测试: getCapabilityDetail
   // ============================================================
   describe('操作: getCapabilityDetail', () => {
-    it('返回能力 + 关联模型信息', () => {
+    it('返回能力详情', () => {
       const cap = service.getCapability('image-generation');
       expect(cap).not.toBeNull();
       expect(cap!.slug).toBe('image-generation');
-      // 关联模型通过 getModelsForCapability 获取
-      const models = service.getModelsForCapability('image-generation');
-      expect(models.length).toBeGreaterThan(0);
     });
 
     it('能力不存在时返回 null（Controller 转 404）', () => {
@@ -316,8 +335,9 @@ describe('Gateway Spec Tests', () => {
   // ============================================================
   describe('操作: listModels', () => {
     it('返回激活的 AIModel 列表', async () => {
+      mockMany(db, [databaseModel('doubao-seed-2-0-pro'), databaseModel('doubao-seedream-5-0')]);
       const models = await service.listModels();
-      expect(models.length).toBeGreaterThan(0);
+      expect(models).toHaveLength(2);
     });
 
     it('支持 ?capability=xxx 过滤', async () => {
@@ -332,9 +352,10 @@ describe('Gateway Spec Tests', () => {
   // ============================================================
   describe('操作: getModelDetail', () => {
     it('返回模型详情', async () => {
-      const model = await service.getModel('doubao-seed-2-0-pro-260215');
+      mockSingle(db, databaseModel('doubao-seed-2-0-pro'));
+      const model = await service.getModel('doubao-seed-2-0-pro');
       expect(model).not.toBeNull();
-      expect(model!.slug).toBe('doubao-seed-2-0-pro-260215');
+      expect(model!.slug).toBe('doubao-seed-2-0-pro');
       expect(model!.sdkModelId).toBeDefined();
       expect(model!.modality).toBe('llm');
     });
@@ -383,6 +404,10 @@ describe('Gateway Spec Tests', () => {
   // 操作测试: quickCreate
   // ============================================================
   describe('操作: quickCreate', () => {
+    beforeEach(() => {
+      mockSingle(db, databaseModel('doubao-seedream-5-0'));
+    });
+
     it('根据 recipeId 查找预设配置', async () => {
       const result = await service.quickCreate('user-1', 'proj-1', 'text-to-image', { prompt: 'a cat' });
       expect(result).toBeDefined();
@@ -545,28 +570,26 @@ describe('Gateway Spec Tests', () => {
   });
 
   // ============================================================
-  // DB 回退测试
+  // DB 单一真相源测试
   // ============================================================
-  describe('DB 优先 + 内存回退', () => {
-    it('DB 查询返回空时回退到内存模型', async () => {
+  describe('数据库单一真相源', () => {
+    it('DB 查询返回空时返回空模型列表', async () => {
       mockEmpty(db);
       const models = await service.listModels();
-      expect(models.length).toBe(builtInModels.length);
+      expect(models).toEqual([]);
     });
 
-    it('DB 查询异常时回退到内存模型', async () => {
+    it('数据库查询失败返回服务不可用且不返回内存模型', async () => {
       vi.spyOn(db, 'select').mockImplementation(() => {
         throw new Error('DB connection error');
       });
-      const models = await service.listModels();
-      expect(models.length).toBe(builtInModels.length);
+      await expect(service.listModels()).rejects.toBeInstanceOf(ServiceUnavailableException);
     });
 
-    it('DB 查询单个模型返回空时回退到内存', async () => {
+    it('DB 查询单个模型返回空时返回 null', async () => {
       mockEmpty(db);
-      const model = await service.getModel('doubao-seed-2-0-pro-260215');
-      expect(model).not.toBeNull();
-      expect(model!.slug).toBe('doubao-seed-2-0-pro-260215');
+      const model = await service.getModel('doubao-seed-2-0-pro');
+      expect(model).toBeNull();
     });
   });
 });

@@ -61,6 +61,48 @@ export const defaultHandlers = [
 
 // 默认 billing handlers（各测试可覆盖）
 const now = new Date().toISOString();
+const defaultGatewayModels = [
+  {
+    slug: 'doubao-seed-2-0-pro',
+    name: 'Doubao Seed 2.0 Pro',
+    description: '默认文本生成模型',
+    costCredits: 5,
+    tags: ['featured'],
+    isDefault: true,
+    sortOrder: 1,
+  },
+];
+const defaultModelConfiguration = {
+  models: [
+    {
+      id: 'model-1',
+      slug: 'doubao-seed-2-0-pro',
+      name: 'Doubao Seed 2.0 Pro',
+      modality: 'llm',
+      capabilities: ['text-generation'],
+      description: '默认文本生成模型',
+      outputType: 'text',
+      costCredits: 5,
+      tags: ['featured'],
+      isActive: true,
+      isFeatured: true,
+      sortOrder: 1,
+    },
+  ],
+  providers: [],
+  routes: [
+    {
+      id: 'route-1',
+      capabilitySlug: 'text-generation',
+      modelSlug: 'doubao-seed-2-0-pro',
+      priority: 1,
+      isActive: true,
+    },
+  ],
+  capabilities: [
+    { slug: 'text-generation', name: '文本生成', sortOrder: 1 },
+  ],
+};
 const defaultBillingPlans = [
   {
     id: 'plan-free', slug: 'free', name: '免费版', description: '适合个人体验',
@@ -125,6 +167,7 @@ defaultHandlers.push(
     },
   })),
   http.get('/api/billing/payment-status', () => HttpResponse.json({ enabled: false })),
+  http.get('/api/gateway/models', () => HttpResponse.json({ success: true, data: defaultGatewayModels })),
   // Admin handlers
   http.get('/api/admin/stats', () => HttpResponse.json({
     success: true,
@@ -210,6 +253,10 @@ defaultHandlers.push(
   }),
   http.patch('/api/admin/gallery/:id/unpublish', () => HttpResponse.json({ success: true })),
   http.delete('/api/admin/gallery/:id', () => HttpResponse.json({ success: true })),
+  http.get('/api/admin/model-config', () => HttpResponse.json({
+    success: true,
+    data: defaultModelConfiguration,
+  })),
 );
 
 export const server = setupServer(...defaultHandlers);

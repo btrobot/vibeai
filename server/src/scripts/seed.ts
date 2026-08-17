@@ -17,10 +17,10 @@ import { config } from 'dotenv';
 import path from 'path';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { aiModels, modelProviders } from '../db/schema/gateway';
+import { aiModels, capabilityModelRoutes, modelProviders } from '../db/schema/gateway';
 import { subscriptionPlans } from '../db/schema/billing';
 import { systemSettings } from '../db/schema/content';
-import { SEED_MODELS, SEED_MODEL_PROVIDERS } from '../modules/gateway/seeds/model-seeds';
+import { SEED_MODELS, SEED_MODEL_PROVIDERS, SEED_MODEL_ROUTES } from '../modules/gateway/seeds/model-seeds';
 
 // ===== System Settings Seed (homepage + seo defaults) =====
 const SEED_SYSTEM_SETTINGS: Array<{
@@ -157,32 +157,25 @@ async function main(): Promise<void> {
 
   try {
     // ===== Seed AI Models =====
-    console.log('[seed] Checking AI models...');
-    const existingModels = await db.select().from(aiModels).limit(1);
-
-    if (existingModels.length > 0) {
-      console.log(`[seed] AI models already exist (${existingModels.length}+ rows), skipping model seed`);
-    } else {
-      console.log(`[seed] Seeding ${SEED_MODELS.length} AI models...`);
-      for (const model of SEED_MODELS) {
-        await db.insert(aiModels).values(model);
-      }
-      console.log(`[seed] Inserted ${SEED_MODELS.length} AI models`);
+    console.log('[seed] Ensuring AI model bootstrap records...');
+    for (const model of SEED_MODELS) {
+      await db.insert(aiModels).values(model).onConflictDoNothing({ target: aiModels.slug });
     }
+    console.log(`[seed] Checked ${SEED_MODELS.length} AI models`);
 
     // ===== Seed Model Providers =====
-    console.log('[seed] Checking model providers...');
-    const existingProviders = await db.select().from(modelProviders).limit(1);
-
-    if (existingProviders.length > 0) {
-      console.log(`[seed] Model providers already exist (${existingProviders.length}+ rows), skipping provider seed`);
-    } else {
-      console.log(`[seed] Seeding ${SEED_MODEL_PROVIDERS.length} model providers...`);
-      for (const provider of SEED_MODEL_PROVIDERS) {
-        await db.insert(modelProviders).values(provider);
-      }
-      console.log(`[seed] Inserted ${SEED_MODEL_PROVIDERS.length} model providers`);
+    console.log('[seed] Ensuring model provider bootstrap records...');
+    for (const provider of SEED_MODEL_PROVIDERS) {
+      await db.insert(modelProviders).values(provider).onConflictDoNothing();
     }
+    console.log(`[seed] Checked ${SEED_MODEL_PROVIDERS.length} model providers`);
+
+    // ===== Seed Capability Model Routes =====
+    console.log('[seed] Ensuring capability route bootstrap records...');
+    for (const route of SEED_MODEL_ROUTES) {
+      await db.insert(capabilityModelRoutes).values(route).onConflictDoNothing();
+    }
+    console.log(`[seed] Checked ${SEED_MODEL_ROUTES.length} capability routes`);
 
     // ===== Seed Subscription Plans =====
     console.log('[seed] Checking subscription plans...');

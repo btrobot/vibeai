@@ -15,6 +15,7 @@ const ENTITY_TYPE_MAP: Record<string, string> = {
   'admin/users': 'user',
   'admin/orders': 'order',
   'admin/gallery': 'gallery',
+  'admin/model-config': 'model_config',
   'admin/commerce/products': 'product',
   'admin/commerce/promo-codes': 'promo_code',
   'admin/commerce/categories': 'category',

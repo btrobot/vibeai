@@ -74,11 +74,7 @@ export class TaskExecutionService {
 
     try {
       // ===== Multi-Provider Routing + Fallback =====
-      const providers = await this.providerService.getAvailableProviders(model.slug, {
-        providerName: model.providerName || 'coze',
-        sdkModelId: model.sdkModelId,
-        sdkClient: model.sdkClient,
-      });
+      const providers = await this.providerService.getAvailableProviders(model.slug);
 
       if (providers.length === 0) {
         throw new Error(`模型 "${model.slug}" 没有可用的渠道`);
@@ -120,6 +116,7 @@ export class TaskExecutionService {
             durationMs: Date.now() - attemptStart,
             attemptNumber,
             costPerCall: provider.costPerCall,
+            costPerSecond: provider.costPerSecond,
           });
 
           this.logger.log(
@@ -142,6 +139,7 @@ export class TaskExecutionService {
             durationMs: Date.now() - attemptStart,
             attemptNumber,
             costPerCall: provider.costPerCall,
+            costPerSecond: provider.costPerSecond,
           });
 
           this.logger.warn(
@@ -256,6 +254,7 @@ export class TaskExecutionService {
     durationMs: number;
     attemptNumber: number;
     costPerCall: number | null;
+    costPerSecond: number | null;
   }): Promise<void> {
     try {
       await this.db.insert(providerAttempts).values({
@@ -270,6 +269,7 @@ export class TaskExecutionService {
         durationMs: params.durationMs,
         attemptNumber: params.attemptNumber,
         costPerCall: params.costPerCall?.toString() ?? null,
+        costPerSecond: params.costPerSecond?.toString() ?? null,
         startedAt: new Date(Date.now() - params.durationMs),
         completedAt: new Date(),
       } as any);

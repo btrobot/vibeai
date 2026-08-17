@@ -37,6 +37,27 @@ const mockCreates = [
   { id: 'create-2', capabilitySlug: 'image-generation', prompt: 'test2', sourceCreateId: null, status: 'processing', output: null, modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskStatus: 'submitting', taskProgress: 45, createdAt: '2026-01-15T11:00:00Z', updatedAt: '2026-01-15T11:00:30Z' },
 ];
 
+const mockModels = [
+  {
+    slug: 'doubao-seed-2-0-pro',
+    name: 'Doubao Seed 2.0 Pro',
+    description: '旗舰文本模型',
+    costCredits: 5,
+    tags: ['featured'],
+    isDefault: true,
+    sortOrder: 1,
+  },
+  {
+    slug: 'kimi-k2-5',
+    name: 'Kimi K2.5',
+    description: '高性能文本模型',
+    costCredits: 3,
+    tags: [],
+    isDefault: false,
+    sortOrder: 2,
+  },
+];
+
 function renderWorkspace(projectId = 'proj-1') {
   localStorage.setItem('auth_tokens', JSON.stringify({
     accessToken: 'mock-token',
@@ -55,9 +76,20 @@ describe('WorkspacePage', () => {
   beforeEach(() => {
     server.resetHandlers();
     localStorage.clear();
+    const interceptedFetch = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => interceptedFetch(
+      input,
+      init?.signal ? { ...init, signal: undefined } : init,
+    ));
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({ total: 2, items: mockCreates })),
+      http.get('/api/gateway/models', () => HttpResponse.json({ success: true, data: mockModels })),
+    );
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     localStorage.clear();
   });
 
@@ -165,5 +197,57 @@ describe('WorkspacePage', () => {
     await waitFor(() => {
       expect(screen.getByText('发布')).toBeInTheDocument();
     });
+  });
+
+  it('按服务端默认标记选择模型', async () => {
+    renderWorkspace();
+
+    const selector = await screen.findByRole('combobox', { name: '模型' });
+    expect(selector).toHaveValue('doubao-seed-2-0-pro');
+    expect(screen.getByText('5 积分/次')).toBeInTheDocument();
+  });
+
+  it('提交用户选择的逻辑模型 slug', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    server.use(
+      http.post('/api/gateway/generate', async ({ request }) => {
+        requestBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({
+          success: true,
+          data: { taskId: 'task-1', createId: 'create-3', modelSlug: 'kimi-k2-5' },
+        });
+      }),
+    );
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    await user.selectOptions(await screen.findByRole('combobox', { name: '模型' }), 'kimi-k2-5');
+    await user.type(screen.getByPlaceholderText(/输入提示词/), '写一段商品文案');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => expect(requestBody).toMatchObject({
+      capabilitySlug: 'text-generation',
+      modelSlug: 'kimi-k2-5',
+    }));
+  });
+
+  it('模型列表为空时禁用提交', async () => {
+    server.use(
+      http.get('/api/gateway/models', () => HttpResponse.json({ success: true, data: [] })),
+    );
+    renderWorkspace();
+
+    expect(await screen.findByText('当前能力暂无可用模型')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
+  });
+
+  it('模型加载失败时不使用硬编码模型并禁用提交', async () => {
+    server.use(
+      http.get('/api/gateway/models', () => HttpResponse.json({ message: 'failed' }, { status: 503 })),
+    );
+    renderWorkspace();
+
+    expect(await screen.findByText('模型加载失败')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
   });
 });

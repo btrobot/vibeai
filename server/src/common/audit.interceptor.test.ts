@@ -60,6 +60,21 @@ describe('AuditInterceptor', () => {
     );
   });
 
+  it('should classify model configuration mutations for audit', async () => {
+    const ctx = createMockContext('PUT', '/api/admin/model-config/routes/image-generation', { id: 'admin-1' });
+    const next = createMockHandler();
+
+    await interceptor.intercept(ctx, next).toPromise();
+
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'update',
+        entityType: 'model_config',
+        status: 'success',
+      }),
+    );
+  });
+
   it('should log with status failed when handler throws', async () => {
     const ctx = createMockContext('DELETE', '/api/admin/gallery/abc-123', { id: 'admin-1' });
     const next = createMockHandler(true);

@@ -485,8 +485,8 @@ describe('TaskExecutionService', () => {
       });
     });
 
-    it('providerAttempt 记录包含 costPerCall', async () => {
-      const provider = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: {} };
+    it('providerAttempt 记录包含 Provider 的单次和按秒采购成本', async () => {
+      const provider = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, costPerSecond: 0.004, config: {} };
       mockProviderService.getAvailableProviders.mockResolvedValue([provider]);
 
       mockAdapter.execute.mockResolvedValue({
@@ -501,6 +501,7 @@ describe('TaskExecutionService', () => {
       expect(spy).toHaveBeenCalledWith(
         expect.objectContaining({
           costPerCall: 0.05,
+          costPerSecond: 0.004,
           providerName: 'replicate',
           status: 'success',
         }),

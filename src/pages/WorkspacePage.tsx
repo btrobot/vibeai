@@ -59,6 +59,16 @@ interface CapabilityInfo {
   category: string;
 }
 
+interface GatewayModelSummary {
+  slug: string;
+  name: string;
+  description: string | null;
+  costCredits: number;
+  tags: string[];
+  isDefault: boolean;
+  sortOrder: number;
+}
+
 // Fallback capabilities (used while loading or if API fails)
 const fallbackCapabilities: CapabilityInfo[] = [
   { slug: 'text-generation', name: '文本生成', icon: 'message-square', category: 'text' },
@@ -115,6 +125,10 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [capabilities, setCapabilities] = useState<CapabilityInfo[]>(fallbackCapabilities);
   const [activeCapability, setActiveCapability] = useState('text-generation');
+  const [models, setModels] = useState<GatewayModelSummary[]>([]);
+  const [selectedModelSlug, setSelectedModelSlug] = useState('');
+  const [modelLoading, setModelLoading] = useState(true);
+  const [modelError, setModelError] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [sourceCreateId, setSourceCreateId] = useState<string | null>(null);
@@ -227,6 +241,38 @@ export default function WorkspacePage() {
     if (projectId) fetchProject();
   }, [projectId]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    setModels([]);
+    setSelectedModelSlug('');
+    setModelLoading(true);
+    setModelError(null);
+
+    fetch(`/api/gateway/models?capability=${encodeURIComponent(activeCapability)}`, {
+      headers: { ...getAuthHeaders() },
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('模型加载失败');
+        const result = await response.json() as { data?: GatewayModelSummary[] } | GatewayModelSummary[];
+        const data = Array.isArray(result) ? result : result.data ?? [];
+        if (!Array.isArray(data)) throw new Error('模型加载失败');
+        setModels(data);
+        const defaultModel = data.find((model) => model.isDefault) ?? data[0];
+        setSelectedModelSlug(defaultModel?.slug ?? '');
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return;
+        if (reason instanceof Error && reason.name === 'AbortError') return;
+        setModelError('模型加载失败');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setModelLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [activeCapability]);
+
   // Clear uploaded file when switching to a non-image-upload capability
   useEffect(() => {
     if (!imageUploadCapabilities.includes(activeCapability) && uploadedFile) {
@@ -235,7 +281,7 @@ export default function WorkspacePage() {
   }, [activeCapability]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async () => {
-    if (!prompt.trim() || submitting) return;
+    if (!prompt.trim() || submitting || modelLoading || Boolean(modelError) || !selectedModelSlug || models.length === 0) return;
     setSubmitting(true);
 
     try {
@@ -253,6 +299,7 @@ export default function WorkspacePage() {
         body: JSON.stringify({
           projectId,
           capabilitySlug: activeCapability,
+          modelSlug: selectedModelSlug,
           input,
           sourceCreateId: sourceCreateId ?? undefined,
         }),
@@ -277,7 +324,7 @@ export default function WorkspacePage() {
             sourceCreateId: null,
             status: 'processing' as const,
             output: null,
-            modelSlug: data.data.modelSlug ?? null,
+            modelSlug: data.data.modelSlug ?? selectedModelSlug,
             taskCount: 0,
             errorMessage: null,
             taskStatus: 'queued',
@@ -644,6 +691,34 @@ export default function WorkspacePage() {
               </button>
             </div>
           )}
+          <div className="mb-3 flex items-center gap-2">
+            <label htmlFor="workspace-model" className="text-xs font-medium text-muted-foreground">模型</label>
+            {modelLoading ? (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />加载中</span>
+            ) : modelError ? (
+              <span className="text-xs text-destructive">模型加载失败</span>
+            ) : models.length === 0 ? (
+              <span className="text-xs text-muted-foreground">当前能力暂无可用模型</span>
+            ) : (
+              <>
+                <select
+                  id="workspace-model"
+                  aria-label="模型"
+                  value={selectedModelSlug}
+                  onChange={(event) => setSelectedModelSlug(event.target.value)}
+                  disabled={submitting}
+                  className="h-9 min-w-52 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+                >
+                  {models.map((model) => <option key={model.slug} value={model.slug}>{model.name}</option>)}
+                </select>
+                {models.find((model) => model.slug === selectedModelSlug) && (
+                  <span className="text-xs text-muted-foreground">
+                    {models.find((model) => model.slug === selectedModelSlug)?.costCredits} 积分/次
+                  </span>
+                )}
+              </>
+            )}
+          </div>
           <div className="flex gap-3 items-end">
             {supportsImageUpload && (
               <>
@@ -683,7 +758,7 @@ export default function WorkspacePage() {
               size="icon"
               className="h-10 w-10 shrink-0"
               onClick={handleSubmit}
-              disabled={!prompt.trim() || submitting}
+              disabled={!prompt.trim() || submitting || modelLoading || Boolean(modelError) || models.length === 0 || !selectedModelSlug}
               aria-label="发送"
             >
               {submitting ? (

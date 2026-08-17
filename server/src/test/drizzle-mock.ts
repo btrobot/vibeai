@@ -25,6 +25,7 @@ export interface DrizzleMock {
   orderBy: ReturnType<typeof vi.fn>;
   groupBy: ReturnType<typeof vi.fn>;
   values: ReturnType<typeof vi.fn>;
+  onConflictDoUpdate: ReturnType<typeof vi.fn>;
   set: ReturnType<typeof vi.fn>;
   returning: ReturnType<typeof vi.fn>;
   execute: ReturnType<typeof vi.fn>;
@@ -57,6 +58,7 @@ export function createDrizzleMock(): DrizzleMock {
     // ── 写入链（链式，返回自身） ──
     insert: vi.fn(() => chainable),
     values: vi.fn(() => chainable),
+    onConflictDoUpdate: vi.fn(() => chainable),
     update: vi.fn(() => {
       // 返回一个对象，其中 set 是原始的 db.set spy
       return {
