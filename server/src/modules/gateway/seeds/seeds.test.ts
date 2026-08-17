@@ -10,7 +10,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   SEED_MODELS,
-  SEED_MODEL_PROVIDERS,
+  SEED_PLATFORMS,
+  SEED_CHANNELS,
   SEED_MODEL_ROUTES,
   SEED_RECIPES,
 } from './model-seeds';
@@ -223,9 +224,10 @@ describe('Seeds Data Integrity', () => {
   // ===== 跨数据一致性 =====
 
   describe('跨数据一致性', () => {
-    it('验证模型 Provider 路由种子引用完整且使用冲突跳过策略', () => {
+    it('验证模型渠道/路由种子引用完整且使用冲突跳过策略', () => {
       const modelSlugs = new Set(SEED_MODELS.map((model) => model.slug));
-      expect(SEED_MODEL_PROVIDERS.every((provider) => modelSlugs.has(provider.modelSlug))).toBe(true);
+      expect(SEED_CHANNELS.every((channel) => modelSlugs.has(channel.modelSlug))).toBe(true);
+      expect(SEED_CHANNELS.every((channel) => SEED_PLATFORMS.some((p) => p.name === channel.platformName))).toBe(true);
       expect(SEED_MODEL_ROUTES.every((route) => modelSlugs.has(route.modelSlug))).toBe(true);
 
       const gatewayServiceSource = fs.readFileSync(
@@ -253,9 +255,26 @@ describe('Seeds Data Integrity', () => {
       expect(migrationSource).toContain('ADD COLUMN IF NOT EXISTS "cost_per_second"');
     });
 
-    it('每个模型至少有一个 Provider 种子', () => {
+    it('平台维度迁移 0012 先搬迁数据再删旧表（不丢渠道与密钥）', () => {
+      const migrationSource = fs.readFileSync(
+        path.resolve(__dirname, '../../../../drizzle/0012_platform_dimension.sql'),
+        'utf8',
+      );
+
+      expect(migrationSource).toContain('CREATE TABLE IF NOT EXISTS "ai_platforms"');
+      expect(migrationSource).toContain('CREATE TABLE IF NOT EXISTS "model_channels"');
+      // 数据搬迁逻辑：先插平台/渠道，再 DROP 旧表
+      const insertIdx = migrationSource.indexOf('INSERT INTO model_channels');
+      const dropIdx = migrationSource.indexOf('DROP TABLE IF EXISTS "model_providers"');
+      expect(insertIdx).toBeGreaterThan(-1);
+      expect(dropIdx).toBeGreaterThan(insertIdx);
+      // key 提升逻辑存在（共享账号 → 平台级）
+      expect(migrationSource).toContain('SET base_url');
+    });
+
+    it('每个模型至少有一个渠道种子', () => {
       for (const model of SEED_MODELS) {
-        expect(SEED_MODEL_PROVIDERS.some((provider) => provider.modelSlug === model.slug)).toBe(true);
+        expect(SEED_CHANNELS.some((channel) => channel.modelSlug === model.slug)).toBe(true);
       }
     });
 

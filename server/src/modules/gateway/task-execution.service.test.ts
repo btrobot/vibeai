@@ -59,7 +59,7 @@ describe('TaskExecutionService', () => {
     sdkModelId: 'doubao-seedream-5-0-260128',
     modality: 'image',
     outputType: 'image',
-    providerName: 'doubao',
+    platformName: 'doubao',
     sdkClient: 'image',
     constraints: {},
     defaultParams: {},
@@ -68,7 +68,7 @@ describe('TaskExecutionService', () => {
   };
 
   const defaultProvider = {
-    providerName: 'doubao',
+    platformName: 'doubao',
     sdkModelId: 'doubao-seedream-5-0-260128',
     sdkClient: 'image',
     priority: 0,
@@ -391,8 +391,8 @@ describe('TaskExecutionService', () => {
 
   describe('多 Provider 路由 + Fallback', () => {
     it('第一个 provider 成功时不尝试第二个', async () => {
-      const provider1 = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: {} };
-      const provider2 = { providerName: 'coze', sdkModelId: 'doubao-seedream-5-0-260128', sdkClient: 'image', priority: 2, costPerCall: null, config: {} };
+      const provider1 = { platformName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: {} };
+      const provider2 = { platformName: 'coze', sdkModelId: 'doubao-seedream-5-0-260128', sdkClient: 'image', priority: 2, costPerCall: null, config: {} };
       mockProviderService.getAvailableProviders.mockResolvedValue([provider1, provider2]);
 
       mockAdapter.execute.mockResolvedValue({
@@ -408,8 +408,8 @@ describe('TaskExecutionService', () => {
     });
 
     it('第一个 provider 失败时应 fallback 到第二个', async () => {
-      const provider1 = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: {} };
-      const provider2 = { providerName: 'coze', sdkModelId: 'doubao-seedream-5-0-260128', sdkClient: 'image', priority: 2, costPerCall: null, config: {} };
+      const provider1 = { platformName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: {} };
+      const provider2 = { platformName: 'coze', sdkModelId: 'doubao-seedream-5-0-260128', sdkClient: 'image', priority: 2, costPerCall: null, config: {} };
       mockProviderService.getAvailableProviders.mockResolvedValue([provider1, provider2]);
 
       // First call fails, second succeeds
@@ -432,8 +432,8 @@ describe('TaskExecutionService', () => {
     });
 
     it('所有 provider 都失败时应抛出"所有渠道均失败"', async () => {
-      const provider1 = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: {} };
-      const provider2 = { providerName: 'coze', sdkModelId: 'doubao-seedream-5-0-260128', sdkClient: 'image', priority: 2, costPerCall: null, config: {} };
+      const provider1 = { platformName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: {} };
+      const provider2 = { platformName: 'coze', sdkModelId: 'doubao-seedream-5-0-260128', sdkClient: 'image', priority: 2, costPerCall: null, config: {} };
       mockProviderService.getAvailableProviders.mockResolvedValue([provider1, provider2]);
 
       mockAdapter.execute
@@ -455,8 +455,48 @@ describe('TaskExecutionService', () => {
       expect(mockBillingService.refundCredits).toHaveBeenCalledWith('user-1', 'task-1', 10, '任务失败退款');
     });
 
+    it('模型 defaultParams 覆盖渠道 config（二级 key：模型 > 渠道）', async () => {
+      const provider = {
+        platformName: 'pptoken', sdkModelId: 'gpt-image-2', sdkClient: 'openai',
+        priority: 1, costPerCall: 0.05,
+        config: { apiKey: 'channel-key', baseUrl: 'https://channel.example/v1' },
+      };
+      mockProviderService.getAvailableProviders.mockResolvedValue([provider]);
+      const modelWithKey: AdapterModel = {
+        ...mockModel,
+        sdkClient: 'openai',
+        defaultParams: { apiKey: 'model-key', baseUrl: 'https://model.example/v1' },
+      };
+
+      mockAdapter.execute.mockResolvedValue({ output: { images: [{ url: 'https://cdn.example.com/a.png' }] } });
+      mockStorageService.downloadAndStore.mockResolvedValue({ fileId: 'f1', url: 'https://s.com/a.png' });
+
+      await service.executeTask('task-1', 'user-1', 'image-generation', { prompt: 'test' }, modelWithKey);
+
+      const passedModel = mockAdapter.execute.mock.calls[0][1] as AdapterModel;
+      expect(passedModel.defaultParams.apiKey).toBe('model-key');
+      expect(passedModel.defaultParams.baseUrl).toBe('https://model.example/v1');
+    });
+
+    it('渠道 config 提供默认 key（模型未指定时）', async () => {
+      const provider = {
+        platformName: 'pptoken', sdkModelId: 'gpt-image-2', sdkClient: 'openai',
+        priority: 1, costPerCall: 0.05,
+        config: { apiKey: 'channel-key', baseUrl: 'https://channel.example/v1' },
+      };
+      mockProviderService.getAvailableProviders.mockResolvedValue([provider]);
+
+      mockAdapter.execute.mockResolvedValue({ output: { images: [{ url: 'https://cdn.example.com/a.png' }] } });
+      mockStorageService.downloadAndStore.mockResolvedValue({ fileId: 'f1', url: 'https://s.com/a.png' });
+
+      await service.executeTask('task-1', 'user-1', 'image-generation', { prompt: 'test' }, mockModel);
+
+      const passedModel = mockAdapter.execute.mock.calls[0][1] as AdapterModel;
+      expect(passedModel.defaultParams.apiKey).toBe('channel-key');
+    });
+
     it('provider 成功时应传递 provider 的 sdkModelId 给适配器', async () => {
-      const provider = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc123', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: { width: 1024 } };
+      const provider = { platformName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc123', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, config: { width: 1024 } };
       mockProviderService.getAvailableProviders.mockResolvedValue([provider]);
 
       mockAdapter.execute.mockResolvedValue({
@@ -486,7 +526,7 @@ describe('TaskExecutionService', () => {
     });
 
     it('providerAttempt 记录包含 Provider 的单次和按秒采购成本', async () => {
-      const provider = { providerName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, costPerSecond: 0.004, config: {} };
+      const provider = { platformName: 'replicate', sdkModelId: 'openai/gpt-image-2:abc', sdkClient: 'replicate', priority: 1, costPerCall: 0.05, costPerSecond: 0.004, config: {} };
       mockProviderService.getAvailableProviders.mockResolvedValue([provider]);
 
       mockAdapter.execute.mockResolvedValue({

@@ -9,22 +9,18 @@ import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE } from '../../common/drizzle.constants';
 import * as schema from '../../db/schema';
-import { aiModels, capabilityModelRoutes, modelProviders } from '../../db/schema/gateway';
+import { aiModels, aiPlatforms, capabilityModelRoutes, modelChannels } from '../../db/schema/gateway';
 import { builtInCapabilities, builtInCapabilityMap } from './capabilities';
 import type {
+  CreateChannelInput,
   CreateModelInput,
-  CreateProviderInput,
+  CreatePlatformInput,
+  UpdateChannelInput,
   UpdateModelInput,
-  UpdateProviderInput,
+  UpdatePlatformInput,
 } from './dto/model-config';
 
 const sensitiveKeyPattern = /(api[-_]?key|token|secret|password|authorization|credential)/i;
-const supportedSdkClients = ['llm', 'image', 'video', 'replicate'] as const;
-type SupportedSdkClient = typeof supportedSdkClients[number];
-
-function isSupportedSdkClient(value: string): value is SupportedSdkClient {
-  return supportedSdkClients.some((client) => client === value);
-}
 
 function omitSensitiveConfig(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(omitSensitiveConfig);
@@ -37,12 +33,30 @@ function omitSensitiveConfig(value: unknown): unknown {
   );
 }
 
-function sanitizeProvider<T extends { config: unknown }>(provider: T): Omit<T, 'config'> & {
+function hasApiKeyConfigured(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const apiKey = (value as Record<string, unknown>).apiKey;
+  return typeof apiKey === 'string' && apiKey.trim().length > 0;
+}
+
+function sanitizeChannel<T extends { config: unknown }>(channel: T): Omit<T, 'config'> & {
   config: Record<string, unknown>;
+  apiKeyConfigured: boolean;
 } {
   return {
-    ...provider,
-    config: omitSensitiveConfig(provider.config) as Record<string, unknown>,
+    ...channel,
+    config: omitSensitiveConfig(channel.config) as Record<string, unknown>,
+    apiKeyConfigured: hasApiKeyConfigured(channel.config),
+  };
+}
+
+function sanitizePlatform<T extends { apiKey: string | null }>(platform: T): Omit<T, 'apiKey'> & {
+  apiKeyConfigured: boolean;
+} {
+  const { apiKey, ...rest } = platform;
+  return {
+    ...rest,
+    apiKeyConfigured: typeof apiKey === 'string' && apiKey.trim().length > 0,
   };
 }
 
@@ -53,9 +67,14 @@ export class ModelConfigService {
   ) {}
 
   async getConfiguration() {
-    const [models, providers, routes] = await Promise.all([
+    const [models, platforms, channelsRows, routes] = await Promise.all([
       this.db.select().from(aiModels).orderBy(asc(aiModels.sortOrder), asc(aiModels.slug)),
-      this.db.select().from(modelProviders).orderBy(asc(modelProviders.modelSlug), asc(modelProviders.priority)),
+      this.db.select().from(aiPlatforms).orderBy(asc(aiPlatforms.name)),
+      this.db
+        .select({ channel: modelChannels, platformName: aiPlatforms.name })
+        .from(modelChannels)
+        .innerJoin(aiPlatforms, eq(modelChannels.platformId, aiPlatforms.id))
+        .orderBy(asc(aiPlatforms.name), asc(modelChannels.modelSlug), asc(modelChannels.priority)),
       this.db.select().from(capabilityModelRoutes).orderBy(
         asc(capabilityModelRoutes.capabilitySlug),
         asc(capabilityModelRoutes.priority),
@@ -63,12 +82,22 @@ export class ModelConfigService {
     ]);
 
     return {
-      models,
-      providers: providers.map(sanitizeProvider),
+      models: models.map((m) => ({
+        ...m,
+        defaultParams: omitSensitiveConfig(m.defaultParams) as Record<string, unknown>,
+        apiKeyConfigured: hasApiKeyConfigured(m.defaultParams),
+      })),
+      platforms: platforms.map(sanitizePlatform),
+      channels: channelsRows.map(({ channel, platformName }) => ({
+        ...sanitizeChannel(channel),
+        platformName,
+      })),
       routes,
       capabilities: [...builtInCapabilities].sort((a, b) => a.sortOrder - b.sortOrder),
     };
   }
+
+  // ===== 模型 =====
 
   async createModel(input: CreateModelInput) {
     const [existing] = await this.db
@@ -107,9 +136,19 @@ export class ModelConfigService {
       }
     }
 
+    // defaultParams 合并语义：只覆盖传入字段，保留模型已有参数（含 apiKey）。
+    // 前端经脱敏后无法回显 apiKey，留空不传即保留旧 key。
+    const mergedDefaultParams = input.defaultParams
+      ? { ...(model.defaultParams ?? {}), ...input.defaultParams }
+      : undefined;
+
     const [updated] = await this.db
       .update(aiModels)
-      .set({ ...input, updatedAt: new Date() })
+      .set({
+        ...input,
+        ...(mergedDefaultParams !== undefined && { defaultParams: mergedDefaultParams }),
+        updatedAt: new Date(),
+      })
       .where(eq(aiModels.slug, model.slug))
       .returning();
     return updated;
@@ -127,60 +166,145 @@ export class ModelConfigService {
     return updated;
   }
 
-  async createProvider(input: CreateProviderInput) {
-    await this.requireModel(input.modelSlug);
-    await this.assertProviderIdentityAvailable(input);
+  // ===== 平台（ai_platforms）=====
 
-    const [created] = await this.db.insert(modelProviders).values({
-      ...input,
+  async createPlatform(input: CreatePlatformInput) {
+    await this.assertPlatformNameAvailable(input.name);
+
+    const [created] = await this.db.insert(aiPlatforms).values({
+      name: input.name,
+      ...(input.baseUrl ? { baseUrl: input.baseUrl } : {}),
+      ...(input.apiKey ? { apiKey: input.apiKey } : {}),
+      ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+    }).returning();
+    return sanitizePlatform(created);
+  }
+
+  async updatePlatform(id: string, input: UpdatePlatformInput) {
+    const platform = await this.requirePlatform(id);
+    if (input.name && input.name !== platform.name) {
+      await this.assertPlatformNameAvailable(input.name);
+    }
+
+    // 合并语义：baseUrl/apiKey 留空不传即保留旧值（无法回显 key，空串视为不修改）
+    const values: Record<string, unknown> = { updatedAt: new Date() };
+    if (input.name !== undefined) values.name = input.name;
+    if (input.baseUrl !== undefined && input.baseUrl.trim() !== '') values.baseUrl = input.baseUrl;
+    if (input.apiKey !== undefined && input.apiKey.trim() !== '') values.apiKey = input.apiKey;
+    if (input.isActive !== undefined) values.isActive = input.isActive;
+
+    const [updated] = await this.db
+      .update(aiPlatforms)
+      .set(values)
+      .where(eq(aiPlatforms.id, id))
+      .returning();
+    return sanitizePlatform(updated);
+  }
+
+  async setPlatformStatus(id: string, isActive: boolean) {
+    await this.requirePlatform(id);
+    const [updated] = await this.db
+      .update(aiPlatforms)
+      .set({ isActive, updatedAt: new Date() })
+      .where(eq(aiPlatforms.id, id))
+      .returning();
+    return sanitizePlatform(updated);
+  }
+
+  async deletePlatform(id: string) {
+    const platform = await this.requirePlatform(id);
+    // 渠道随平台级联删除（FK ON DELETE CASCADE）
+    await this.db.delete(aiPlatforms).where(eq(aiPlatforms.id, id));
+    return platform;
+  }
+
+  // ===== 渠道（model_channels）=====
+
+  async createChannel(input: CreateChannelInput) {
+    await this.requirePlatform(input.platformId);
+    await this.requireModel(input.modelSlug);
+    await this.assertChannelIdentityAvailable({
+      platformId: input.platformId,
+      modelSlug: input.modelSlug,
+      sdkModelId: input.sdkModelId,
+    });
+
+    // copyFromId：复制同平台已有渠道的完整 config（含 apiKey），前端无需重新填写密钥。
+    // 前端显式传入的 config 字段可覆盖复制的值。
+    const { copyFromId, config: inputConfig, ...rest } = input;
+    let config = inputConfig;
+    if (copyFromId) {
+      const source = await this.requireChannel(copyFromId);
+      config = { ...(source.config ?? {}), ...(inputConfig ?? {}) };
+    }
+
+    const [created] = await this.db.insert(modelChannels).values({
+      ...rest,
+      ...(config !== undefined && { config }),
+      priority: input.priority ?? 1,
       costPerCall: input.costPerCall == null ? null : String(input.costPerCall),
       costPerSecond: input.costPerSecond == null ? null : String(input.costPerSecond),
     }).returning();
-    return sanitizeProvider(created);
+    const platform = await this.requirePlatform(input.platformId);
+    return { ...sanitizeChannel(created), platformName: platform.name };
   }
 
-  async updateProvider(id: string, input: UpdateProviderInput) {
-    const provider = await this.requireProvider(id);
-    const sdkClient = input.sdkClient ?? provider.sdkClient;
-    if (!isSupportedSdkClient(sdkClient)) {
-      throw new UnprocessableEntityException(`不支持的 SDK 客户端 "${sdkClient}"`);
+  async updateChannel(id: string, input: UpdateChannelInput) {
+    const channel = await this.requireChannel(id);
+    const platformId = input.platformId ?? channel.platformId;
+    const sdkModelId = input.sdkModelId ?? channel.sdkModelId;
+    if (platformId !== channel.platformId || sdkModelId !== channel.sdkModelId) {
+      await this.assertChannelIdentityAvailable(
+        { platformId, modelSlug: channel.modelSlug, sdkModelId },
+        id,
+      );
     }
-    const identity = {
-      modelSlug: provider.modelSlug,
-      providerName: input.providerName ?? provider.providerName,
-      sdkClient,
-      sdkModelId: input.sdkModelId ?? provider.sdkModelId,
-    };
-    await this.assertProviderIdentityAvailable(identity, id);
 
-    const { costPerCall, costPerSecond, ...editableFields } = input;
-    const values = {
-      ...editableFields,
-      ...(costPerCall !== undefined && {
-        costPerCall: costPerCall == null ? null : String(costPerCall),
-      }),
-      ...(costPerSecond !== undefined && {
-        costPerSecond: costPerSecond == null ? null : String(costPerSecond),
-      }),
+    // config 合并语义：只覆盖传入字段，保留渠道已有配置（含 apiKey）。
+    const mergedConfig = input.config
+      ? { ...(channel.config ?? {}), ...input.config }
+      : undefined;
+    const values: Record<string, unknown> = {
       updatedAt: new Date(),
     };
+    for (const key of ['platformId', 'sdkClient', 'sdkModelId', 'priority'] as const) {
+      if (input[key] !== undefined) values[key] = input[key];
+    }
+    if (input.isActive !== undefined) values.isActive = input.isActive;
+    if (mergedConfig !== undefined) values.config = mergedConfig;
+    if (input.costPerCall !== undefined) {
+      values.costPerCall = input.costPerCall == null ? null : String(input.costPerCall);
+    }
+    if (input.costPerSecond !== undefined) {
+      values.costPerSecond = input.costPerSecond == null ? null : String(input.costPerSecond);
+    }
+
     const [updated] = await this.db
-      .update(modelProviders)
+      .update(modelChannels)
       .set(values)
-      .where(eq(modelProviders.id, id))
+      .where(eq(modelChannels.id, id))
       .returning();
-    return sanitizeProvider(updated);
+    const platform = await this.requirePlatform(platformId);
+    return { ...sanitizeChannel(updated), platformName: platform.name };
   }
 
-  async setProviderStatus(id: string, isActive: boolean) {
-    await this.requireProvider(id);
+  async setChannelStatus(id: string, isActive: boolean) {
+    await this.requireChannel(id);
     const [updated] = await this.db
-      .update(modelProviders)
+      .update(modelChannels)
       .set({ isActive, updatedAt: new Date() })
-      .where(eq(modelProviders.id, id))
+      .where(eq(modelChannels.id, id))
       .returning();
-    return sanitizeProvider(updated);
+    return sanitizeChannel(updated);
   }
+
+  async deleteChannel(id: string) {
+    const channel = await this.requireChannel(id);
+    await this.db.delete(modelChannels).where(eq(modelChannels.id, id));
+    return channel;
+  }
+
+  // ===== 能力路由 =====
 
   async replaceCapabilityRoutes(capabilitySlug: string, modelSlugs: string[]) {
     if (!builtInCapabilityMap.has(capabilitySlug)) {
@@ -231,6 +355,8 @@ export class ModelConfigService {
     return routes;
   }
 
+  // ===== 私有辅助 =====
+
   private assertCapabilitiesExist(capabilitySlugs: string[]): void {
     const invalid = capabilitySlugs.find((slug) => !builtInCapabilityMap.has(slug));
     if (invalid) throw new UnprocessableEntityException(`能力 "${invalid}" 不存在`);
@@ -246,34 +372,52 @@ export class ModelConfigService {
     return model;
   }
 
-  private async requireProvider(id: string) {
-    const [provider] = await this.db
+  private async requirePlatform(id: string) {
+    const [platform] = await this.db
       .select()
-      .from(modelProviders)
-      .where(eq(modelProviders.id, id))
+      .from(aiPlatforms)
+      .where(eq(aiPlatforms.id, id))
       .limit(1);
-    if (!provider) throw new NotFoundException(`Provider "${id}" 不存在`);
-    return provider;
+    if (!platform) throw new NotFoundException(`平台 "${id}" 不存在`);
+    return platform;
   }
 
-  private async assertProviderIdentityAvailable(
-    identity: Pick<CreateProviderInput, 'modelSlug' | 'providerName' | 'sdkClient' | 'sdkModelId'>,
+  private async requireChannel(id: string) {
+    const [channel] = await this.db
+      .select()
+      .from(modelChannels)
+      .where(eq(modelChannels.id, id))
+      .limit(1);
+    if (!channel) throw new NotFoundException(`渠道 "${id}" 不存在`);
+    return channel;
+  }
+
+  private async assertPlatformNameAvailable(name: string): Promise<void> {
+    const [duplicate] = await this.db
+      .select({ id: aiPlatforms.id })
+      .from(aiPlatforms)
+      .where(eq(aiPlatforms.name, name))
+      .limit(1);
+    if (duplicate) throw new ConflictException('平台名称已存在');
+  }
+
+  private async assertChannelIdentityAvailable(
+    identity: Pick<CreateChannelInput, 'platformId' | 'modelSlug' | 'sdkModelId'>,
     excludeId?: string,
   ): Promise<void> {
     const conditions = [
-      eq(modelProviders.modelSlug, identity.modelSlug),
-      eq(modelProviders.providerName, identity.providerName),
-      eq(modelProviders.sdkClient, identity.sdkClient),
-      eq(modelProviders.sdkModelId, identity.sdkModelId),
+      eq(modelChannels.platformId, identity.platformId),
+      eq(modelChannels.modelSlug, identity.modelSlug),
+      eq(modelChannels.sdkModelId, identity.sdkModelId),
     ];
-    if (excludeId) conditions.push(ne(modelProviders.id, excludeId));
+    if (excludeId) conditions.push(ne(modelChannels.id, excludeId));
 
     const [duplicate] = await this.db
-      .select({ id: modelProviders.id })
-      .from(modelProviders)
+      .select({ id: modelChannels.id })
+      .from(modelChannels)
       .where(and(...conditions))
       .limit(1);
-    if (duplicate) throw new ConflictException('Provider 组合标识已存在');
+    if (duplicate) throw new ConflictException('渠道组合标识（平台 × 模型 × sdkModelId）已存在');
   }
 
   private async assertDefaultRoutesRemainAvailable(modelSlug: string): Promise<void> {

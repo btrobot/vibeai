@@ -18,6 +18,7 @@ import { ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { GatewayService } from './gateway.service';
 import { AdapterRegistry } from './adapters/adapter-registry';
+import { sanitizeModelForClient } from './gateway.service';
 import { BillingService } from '../billing/billing.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../../common/guards/admin.guard';
@@ -59,7 +60,7 @@ export class GatewayController {
   async listModels(@Req() req: any) {
     const capability = req.query?.capability as string | undefined;
     const models = await this.gatewayService.listModels(capability);
-    return { success: true, data: models };
+    return { success: true, data: models.map(sanitizeModelForClient) };
   }
 
   @Get('models/:slug')
@@ -69,7 +70,7 @@ export class GatewayController {
     if (!model) {
       throw new NotFoundException(`模型 "${slug}" 不存在`);
     }
-    return { success: true, data: model };
+    return { success: true, data: sanitizeModelForClient(model) };
   }
 
   // ===== Recipes =====
@@ -136,7 +137,8 @@ export class GatewayController {
     res.flushHeaders();
 
     try {
-      const adapter = this.adapterRegistry.getAdapter('llm');
+      // 按模型的 sdkClient 选择适配器（Coze 'llm' 或 OpenAI 兼容 'openai' 等）
+      const adapter = this.adapterRegistry.getAdapter(model.sdkClient || 'llm');
       const result = await adapter.execute(body, model, {
         taskId: `llm-${Date.now()}`,
         userId,
@@ -174,13 +176,13 @@ export class GatewayController {
     return { success: true, data: updated };
   }
 
-  @Post('admin/providers/:id/toggle')
+  @Post('admin/channels/:id/toggle')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, AdminGuard)
-  async toggleProvider(@Param('id') id: string) {
-    const updated = await this.gatewayService.toggleProviderActive(id);
+  async toggleChannel(@Param('id') id: string) {
+    const updated = await this.gatewayService.toggleChannelActive(id);
     if (!updated) {
-      throw new NotFoundException(`Provider "${id}" 不存在`);
+      throw new NotFoundException(`渠道 "${id}" 不存在`);
     }
     return { success: true, data: updated };
   }

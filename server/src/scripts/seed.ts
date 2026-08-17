@@ -17,10 +17,11 @@ import { config } from 'dotenv';
 import path from 'path';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { aiModels, capabilityModelRoutes, modelProviders } from '../db/schema/gateway';
+import { inArray } from 'drizzle-orm';
+import { aiModels, aiPlatforms, capabilityModelRoutes, modelChannels } from '../db/schema/gateway';
 import { subscriptionPlans } from '../db/schema/billing';
 import { systemSettings } from '../db/schema/content';
-import { SEED_MODELS, SEED_MODEL_PROVIDERS, SEED_MODEL_ROUTES } from '../modules/gateway/seeds/model-seeds';
+import { SEED_MODELS, SEED_PLATFORMS, SEED_CHANNELS, SEED_MODEL_ROUTES } from '../modules/gateway/seeds/model-seeds';
 
 // ===== System Settings Seed (homepage + seo defaults) =====
 const SEED_SYSTEM_SETTINGS: Array<{
@@ -163,12 +164,22 @@ async function main(): Promise<void> {
     }
     console.log(`[seed] Checked ${SEED_MODELS.length} AI models`);
 
-    // ===== Seed Model Providers =====
-    console.log('[seed] Ensuring model provider bootstrap records...');
-    for (const provider of SEED_MODEL_PROVIDERS) {
-      await db.insert(modelProviders).values(provider).onConflictDoNothing();
+    // ===== Seed Platforms + Channels =====
+    console.log('[seed] Ensuring platform bootstrap records...');
+    for (const platform of SEED_PLATFORMS) {
+      await db.insert(aiPlatforms).values(platform).onConflictDoNothing({ target: aiPlatforms.name });
     }
-    console.log(`[seed] Checked ${SEED_MODEL_PROVIDERS.length} model providers`);
+    const platformRows = await db.select().from(aiPlatforms)
+      .where(inArray(aiPlatforms.name, SEED_PLATFORMS.map((p) => p.name)));
+    const platformIdByName = new Map(platformRows.map((p) => [p.name, p.id]));
+
+    console.log('[seed] Ensuring channel bootstrap records...');
+    for (const channel of SEED_CHANNELS) {
+      const platformId = platformIdByName.get(channel.platformName);
+      if (!platformId) continue;
+      await db.insert(modelChannels).values({ ...channel, platformId }).onConflictDoNothing();
+    }
+    console.log(`[seed] Checked ${SEED_PLATFORMS.length} platforms / ${SEED_CHANNELS.length} channels`);
 
     // ===== Seed Capability Model Routes =====
     console.log('[seed] Ensuring capability route bootstrap records...');

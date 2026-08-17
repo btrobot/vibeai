@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -20,6 +20,8 @@ const configuration = {
       isActive: true,
       isFeatured: true,
       sortOrder: 10,
+      defaultParams: { apiKey: 'sk-model-secret', baseUrl: 'https://model.example.com', size: '1024x1024' },
+      apiKeyConfigured: true,
     },
     {
       id: 'model-2',
@@ -34,19 +36,67 @@ const configuration = {
       isActive: true,
       isFeatured: false,
       sortOrder: 20,
+      defaultParams: {},
+      apiKeyConfigured: false,
     },
   ],
-  providers: [
+  platforms: [
     {
-      id: 'provider-1',
+      id: 'platform-1',
+      name: 'doubao',
+      baseUrl: null,
+      apiKeyConfigured: false,
+      isActive: true,
+    },
+    {
+      id: 'platform-2',
+      name: 'pptoken',
+      baseUrl: 'https://cn.pptoken.cc/v1',
+      apiKeyConfigured: true,
+      isActive: true,
+    },
+  ],
+  channels: [
+    {
+      id: 'channel-1',
+      platformId: 'platform-1',
+      platformName: 'doubao',
       modelSlug: 'doubao-seedream-5-0',
-      providerName: 'doubao',
       sdkClient: 'image',
       sdkModelId: 'doubao-seedream-5-0-260128',
       priority: 1,
       costPerCall: '0.0300',
       costPerSecond: '0.0040',
       config: {},
+      apiKeyConfigured: false,
+      isActive: true,
+    },
+    {
+      id: 'channel-2',
+      platformId: 'platform-1',
+      platformName: 'doubao',
+      modelSlug: 'sdxl',
+      sdkClient: 'image',
+      sdkModelId: 'stability-ai/sdxl',
+      priority: 2,
+      costPerCall: '0.0200',
+      costPerSecond: null,
+      config: { baseUrl: 'https://cn.pptoken.cc/v1' },
+      apiKeyConfigured: false,
+      isActive: true,
+    },
+    {
+      id: 'channel-3',
+      platformId: 'platform-2',
+      platformName: 'pptoken',
+      modelSlug: 'gpt-image-2',
+      sdkClient: 'openai',
+      sdkModelId: 'gpt-image-2',
+      priority: 1,
+      costPerCall: '0.0500',
+      costPerSecond: null,
+      config: {},
+      apiKeyConfigured: true,
       isActive: true,
     },
   ],
@@ -67,17 +117,19 @@ describe('ModelConfigTab', () => {
     );
   });
 
-  it('加载配置并可切换模型、Provider 和默认路由视图', async () => {
+  it('加载配置并可切换模型、平台、渠道和默认路由视图', async () => {
     render(<ModelConfigTab />);
 
     expect(await screen.findByText('Doubao SeeDream 5.0')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Provider' }));
+    await userEvent.click(screen.getByRole('button', { name: '平台' }));
+    expect(screen.getByText('pptoken')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '渠道' }));
     expect(screen.getByText('doubao-seedream-5-0-260128')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '默认路由' }));
     expect(screen.getByText('图片生成')).toBeInTheDocument();
   });
 
-  it('编辑并保存模型用户积分成本', async () => {
+  it('编辑并保存模型积分成本', async () => {
     let requestBody: unknown;
     server.use(
       http.patch('/api/admin/model-config/models/:slug', async ({ request }) => {
@@ -89,7 +141,7 @@ describe('ModelConfigTab', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: '编辑 Doubao SeeDream 5.0' }));
-    const costInput = screen.getByLabelText('用户积分成本');
+    const costInput = screen.getByLabelText('积分成本');
     await user.clear(costInput);
     await user.type(costInput, '12');
     await user.click(screen.getByRole('button', { name: '保存模型' }));
@@ -97,42 +149,60 @@ describe('ModelConfigTab', () => {
     await waitFor(() => expect(requestBody).toMatchObject({ costCredits: 12 }));
   });
 
-  it('切换 Provider 状态并提交显式状态值', async () => {
+  it('切换渠道状态并提交显式状态值', async () => {
     let requestBody: unknown;
     server.use(
-      http.patch('/api/admin/model-config/providers/:id/status', async ({ request }) => {
+      http.patch('/api/admin/model-config/channels/:id/status', async ({ request }) => {
         requestBody = await request.json();
-        return HttpResponse.json({ success: true, data: { ...configuration.providers[0], isActive: false } });
+        return HttpResponse.json({ success: true, data: { ...configuration.channels[0], isActive: false } });
       }),
     );
     render(<ModelConfigTab />);
     const user = userEvent.setup();
 
     await screen.findByText('Doubao SeeDream 5.0');
-    await user.click(screen.getByRole('button', { name: 'Provider' }));
+    await user.click(screen.getByRole('button', { name: '渠道' }));
+    await user.click(await screen.findByRole('button', { name: '停用 doubao-seedream-5-0' }));
+
+    await waitFor(() => expect(requestBody).toEqual({ isActive: false }));
+  });
+
+  it('切换平台状态并提交显式状态值', async () => {
+    let requestBody: unknown;
+    server.use(
+      http.patch('/api/admin/model-config/platforms/:id/status', async ({ request }) => {
+        requestBody = await request.json();
+        return HttpResponse.json({ success: true, data: { ...configuration.platforms[0], isActive: false } });
+      }),
+    );
+    render(<ModelConfigTab />);
+    const user = userEvent.setup();
+
+    await screen.findByText('Doubao SeeDream 5.0');
+    await user.click(screen.getByRole('button', { name: '平台' }));
     await user.click(await screen.findByRole('button', { name: '停用 doubao' }));
 
     await waitFor(() => expect(requestBody).toEqual({ isActive: false }));
   });
 
-  it('编辑 Provider 时提交按秒采购成本', async () => {
+  it('编辑渠道时提交按秒采购成本', async () => {
     let requestBody: unknown;
     server.use(
-      http.patch('/api/admin/model-config/providers/:id', async ({ request }) => {
+      http.patch('/api/admin/model-config/channels/:id', async ({ request }) => {
         requestBody = await request.json();
-        return HttpResponse.json({ success: true, data: configuration.providers[0] });
+        return HttpResponse.json({ success: true, data: configuration.channels[0] });
       }),
     );
     render(<ModelConfigTab />);
     const user = userEvent.setup();
 
     await screen.findByText('Doubao SeeDream 5.0');
-    await user.click(screen.getByRole('button', { name: 'Provider' }));
-    await user.click(await screen.findByRole('button', { name: '编辑 doubao' }));
+    await user.click(screen.getByRole('button', { name: '渠道' }));
+    await user.click(await screen.findByRole('button', { name: '编辑 doubao-seedream-5-0 @ doubao' }));
     const costInput = screen.getByLabelText('每秒采购成本');
     await user.clear(costInput);
     await user.type(costInput, '0.006');
-    await user.click(screen.getByRole('button', { name: '保存 Provider' }));
+    await user.click(screen.getByRole('button', { name: '保存渠道' }));
 
     await waitFor(() => expect(requestBody).toMatchObject({ costPerSecond: 0.006 }));
   });
@@ -155,5 +225,176 @@ describe('ModelConfigTab', () => {
     await waitFor(() => expect(requestBody).toEqual({
       modelSlugs: ['doubao-seedream-5-0', 'sdxl'],
     }));
+  });
+
+  it('显示模型级/平台级/渠道级 Key 配置状态徽章', async () => {
+    render(<ModelConfigTab />);
+
+    expect(await screen.findByText('Doubao SeeDream 5.0')).toBeInTheDocument();
+    // 模型视图：model-1 已配置模型级 key，sdxl 未配置
+    expect(screen.getAllByText('已配置').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('未配置')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: '平台' }));
+    expect(await screen.findAllByText('未配置')).not.toHaveLength(0);
+    expect(screen.getAllByText('已配置').length).toBeGreaterThanOrEqual(1);
+
+    await userEvent.click(screen.getByRole('button', { name: '渠道' }));
+    expect((await screen.findAllByText('已配置')).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('编辑模型时填写网关参数并提交 defaultParams（含 apiKey）', async () => {
+    let requestBody: unknown;
+    server.use(
+      http.patch('/api/admin/model-config/models/:slug', async ({ request }) => {
+        requestBody = await request.json();
+        return HttpResponse.json({ success: true, data: configuration.models[0] });
+      }),
+    );
+    render(<ModelConfigTab />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: '编辑 SDXL' }));
+    await user.type(screen.getByLabelText('Base URL'), 'https://cn.pptoken.cc/v1');
+    await user.type(screen.getByLabelText('API Key（模型级）'), 'sk-new-model-key');
+    await user.type(screen.getByLabelText('超时（毫秒）'), '120000');
+    await user.click(screen.getByRole('button', { name: '保存模型' }));
+
+    await waitFor(() => expect(requestBody).toMatchObject({
+      defaultParams: { baseUrl: 'https://cn.pptoken.cc/v1', apiKey: 'sk-new-model-key', timeoutMs: 120000 },
+    }));
+  });
+
+  it('编辑渠道时填写渠道 apiKey 并提交 config', async () => {
+    let requestBody: unknown;
+    server.use(
+      http.patch('/api/admin/model-config/channels/:id', async ({ request }) => {
+        requestBody = await request.json();
+        return HttpResponse.json({ success: true, data: configuration.channels[0] });
+      }),
+    );
+    render(<ModelConfigTab />);
+    const user = userEvent.setup();
+
+    await screen.findByText('Doubao SeeDream 5.0');
+    await user.click(screen.getByRole('button', { name: '渠道' }));
+    await user.click(await screen.findByRole('button', { name: '编辑 doubao-seedream-5-0 @ doubao' }));
+    await user.type(screen.getByLabelText('API Key（渠道级）'), 'sk-new-channel-key');
+    await user.click(screen.getByRole('button', { name: '保存渠道' }));
+
+    await waitFor(() => expect(requestBody).toMatchObject({
+      config: { apiKey: 'sk-new-channel-key' },
+    }));
+  });
+
+  it('新增平台时提交 baseUrl 与 apiKey', async () => {
+    let requestBody: unknown;
+    server.use(
+      http.post('/api/admin/model-config/platforms', async ({ request }) => {
+        requestBody = await request.json();
+        return HttpResponse.json({ success: true, data: { id: 'platform-new', ...configuration.platforms[0] } });
+      }),
+    );
+    render(<ModelConfigTab />);
+    const user = userEvent.setup();
+
+    await screen.findByText('Doubao SeeDream 5.0');
+    await user.click(screen.getByRole('button', { name: '平台' }));
+    await user.click(await screen.findByRole('button', { name: '新增平台' }));
+    await user.type(screen.getByLabelText('平台名称'), 'moonshot');
+    await user.type(screen.getByLabelText('Base URL'), 'https://api.moonshot.cn/v1');
+    await user.type(screen.getByLabelText('API Key（平台级）'), 'sk-moonshot');
+    await user.click(screen.getByRole('button', { name: '保存平台' }));
+
+    await waitFor(() => expect(requestBody).toMatchObject({
+      name: 'moonshot',
+      baseUrl: 'https://api.moonshot.cn/v1',
+      apiKey: 'sk-moonshot',
+    }));
+  });
+
+  it('编辑模型时 apiKey 留空则不提交 defaultParams 中的 key 字段', async () => {
+    let requestBody: unknown;
+    server.use(
+      http.patch('/api/admin/model-config/models/:slug', async ({ request }) => {
+        requestBody = await request.json();
+        return HttpResponse.json({ success: true, data: configuration.models[0] });
+      }),
+    );
+    render(<ModelConfigTab />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: '编辑 Doubao SeeDream 5.0' }));
+    await user.click(screen.getByRole('button', { name: '保存模型' }));
+
+    await waitFor(() => expect(requestBody).not.toHaveProperty('defaultParams.apiKey'));
+  });
+
+  it('渠道列表按平台分组显示组头（平台名 + 渠道数 + Key 状态 + Base URL）', async () => {
+    render(<ModelConfigTab />);
+
+    await screen.findByText('Doubao SeeDream 5.0');
+    await userEvent.click(screen.getByRole('button', { name: '渠道' }));
+
+    // 组头：doubao（2 个渠道） + pptoken（1 个渠道，已配置平台 Key）
+    expect(await screen.findByText('doubao')).toBeInTheDocument();
+    expect(screen.getByText('2 个渠道')).toBeInTheDocument();
+    expect(screen.getByText('1 个渠道')).toBeInTheDocument();
+    expect(screen.getByText('https://cn.pptoken.cc/v1')).toBeInTheDocument();
+    expect(screen.getByText('pptoken')).toBeInTheDocument();
+  });
+
+  it('复制渠道：预填表单并在保存时提交 copyFromId', async () => {
+    let requestBody: unknown;
+    server.use(
+      http.post('/api/admin/model-config/channels', async ({ request }) => {
+        requestBody = await request.json();
+        return HttpResponse.json({ success: true, data: { ...configuration.channels[0], id: 'channel-new', sdkModelId: 'doubao-seedream-6-0' } });
+      }),
+    );
+    render(<ModelConfigTab />);
+    const user = userEvent.setup();
+
+    await screen.findByText('Doubao SeeDream 5.0');
+    await user.click(screen.getByRole('button', { name: '渠道' }));
+    await user.click(await screen.findByRole('button', { name: '复制 doubao-seedream-5-0' }));
+
+    // 弹窗预填平台 + 复制提示
+    expect(screen.getByLabelText('平台')).toHaveValue('platform-1');
+    expect(screen.getByText(/将复制 doubao · doubao-seedream-5-0-260128 的渠道配置/)).toBeInTheDocument();
+
+    // 只改 SDK Model ID 后保存
+    const sdkInput = screen.getByLabelText('SDK Model ID');
+    await user.clear(sdkInput);
+    await user.type(sdkInput, 'doubao-seedream-6-0');
+    await user.click(screen.getByRole('button', { name: '保存渠道' }));
+
+    await waitFor(() => expect(requestBody).toMatchObject({
+      platformId: 'platform-1',
+      modelSlug: 'doubao-seedream-5-0',
+      sdkClient: 'image',
+      sdkModelId: 'doubao-seedream-6-0',
+      copyFromId: 'channel-1',
+    }));
+  });
+
+  it('删除渠道提交 DELETE 请求', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    let deleteCalled = false;
+    server.use(
+      http.delete('/api/admin/model-config/channels/:id', () => {
+        deleteCalled = true;
+        return HttpResponse.json({ success: true, data: { id: 'channel-1' } });
+      }),
+    );
+    render(<ModelConfigTab />);
+    const user = userEvent.setup();
+
+    await screen.findByText('Doubao SeeDream 5.0');
+    await user.click(screen.getByRole('button', { name: '渠道' }));
+    await user.click(await screen.findByRole('button', { name: '删除 doubao-seedream-5-0' }));
+
+    await waitFor(() => expect(deleteCalled).toBe(true));
+    confirmSpy.mockRestore();
   });
 });

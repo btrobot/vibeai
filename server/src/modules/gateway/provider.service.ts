@@ -1,28 +1,39 @@
 /**
- * ProviderService — 多 Provider 渠道查询服务
+ * ProviderService — 渠道实例查询服务（平台维度）
+ *
+ * 数据模型：
+ *   ai_platforms  平台共享账号（baseUrl + apiKey 默认存放处）
+ *   model_channels 平台 × 逻辑模型 × 协议 的渠道实例
  *
  * 查询逻辑：
- * 1. 查 modelProviders WHERE modelSlug = ? AND isActive = true ORDER BY priority
- * 2. 有记录 → 返回多渠道列表
+ * 1. join model_channels + ai_platforms，WHERE modelSlug = ? AND 渠道/平台均 isActive = true
+ *    ORDER BY channel.priority
+ * 2. config 合并：平台 baseUrl/apiKey 为默认值，渠道 config（仅 baseUrl/apiKey）覆盖
  * 3. 无记录 → 返回空列表，由任务执行层给出明确错误
+ *
+ * 三级 key 解析（最终在 TaskExecutionService 完成）：
+ *   模型 defaultParams.apiKey（最高，向后兼容例外）> 渠道 config.apiKey > 平台 apiKey > 显性报错
  */
 
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
-import { modelProviders } from '../../db/schema/gateway';
-import { eq, and, asc } from 'drizzle-orm';
+import { aiPlatforms, modelChannels } from '../../db/schema/gateway';
+import { and, asc, eq } from 'drizzle-orm';
 
 // ===== Types =====
 
 export interface ProviderInstance {
-  providerName: string;
+  channelId: string;
+  platformId: string;
+  platformName: string;
   sdkModelId: string;
   sdkClient: string;
   priority: number;
   costPerCall: number | null;
   costPerSecond: number | null;
+  /** 已合并的渠道配置：{...平台默认, ...渠道覆盖}，仅含 baseUrl/apiKey */
   config: Record<string, unknown>;
 }
 
@@ -37,7 +48,7 @@ export class ProviderService {
   ) {}
 
   /**
-   * 查询模型的所有可用渠道，按优先级排序
+   * 查询模型的所有可用渠道（平台默认配置 + 渠道覆盖合并），按优先级排序
    *
    * @param modelSlug 模型 slug
    * @returns 按优先级排序的 ProviderInstance 列表
@@ -47,25 +58,42 @@ export class ProviderService {
   ): Promise<ProviderInstance[]> {
     try {
       const rows = await this.db
-        .select()
-        .from(modelProviders)
-        .where(and(eq(modelProviders.modelSlug, modelSlug), eq(modelProviders.isActive, true)))
-        .orderBy(asc(modelProviders.priority));
+        .select({
+          channel: modelChannels,
+          platformName: aiPlatforms.name,
+          platformBaseUrl: aiPlatforms.baseUrl,
+          platformApiKey: aiPlatforms.apiKey,
+        })
+        .from(modelChannels)
+        .innerJoin(aiPlatforms, eq(modelChannels.platformId, aiPlatforms.id))
+        .where(and(
+          eq(modelChannels.modelSlug, modelSlug),
+          eq(modelChannels.isActive, true),
+          eq(aiPlatforms.isActive, true),
+        ))
+        .orderBy(asc(modelChannels.priority), asc(modelChannels.createdAt));
 
       if (rows.length > 0) {
         return rows.map((r) => ({
-          providerName: r.providerName,
-          sdkModelId: r.sdkModelId,
-          sdkClient: r.sdkClient,
-          priority: r.priority,
-          costPerCall: r.costPerCall ? parseFloat(r.costPerCall) : null,
-          costPerSecond: r.costPerSecond ? parseFloat(r.costPerSecond) : null,
-          config: (r.config as Record<string, unknown>) || {},
+          channelId: r.channel.id,
+          platformId: r.channel.platformId,
+          platformName: r.platformName,
+          sdkModelId: r.channel.sdkModelId,
+          sdkClient: r.channel.sdkClient,
+          priority: r.channel.priority,
+          costPerCall: r.channel.costPerCall ? parseFloat(r.channel.costPerCall) : null,
+          costPerSecond: r.channel.costPerSecond ? parseFloat(r.channel.costPerSecond) : null,
+          // 平台默认（baseUrl/apiKey）→ 渠道 config 覆盖
+          config: {
+            ...(r.platformBaseUrl ? { baseUrl: r.platformBaseUrl } : {}),
+            ...(r.platformApiKey ? { apiKey: r.platformApiKey } : {}),
+            ...((r.channel.config as Record<string, unknown>) || {}),
+          },
         }));
       }
     } catch (e) {
       this.logger.warn(
-        `Failed to query modelProviders for "${modelSlug}": ${(e as Error).message}`,
+        `Failed to query modelChannels for "${modelSlug}": ${(e as Error).message}`,
       );
       return [];
     }

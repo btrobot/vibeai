@@ -94,12 +94,13 @@ export class TaskExecutionService {
           const providerModel: AdapterModel = {
             ...model,
             sdkModelId: provider.sdkModelId,
-            providerName: provider.providerName,
-            defaultParams: { ...model.defaultParams, ...provider.config },
+            providerName: provider.platformName,
+            // 三级 key：模型 defaultParams 最高 > 渠道 config（覆盖平台）> 平台默认（ProviderService 已合并）
+            defaultParams: { ...provider.config, ...model.defaultParams },
           };
 
           this.logger.log(
-            `Task ${taskId}: trying provider "${provider.providerName}" (sdkClient=${provider.sdkClient}, priority=${provider.priority}, attempt=${attemptNumber}/${providers.length})`,
+            `Task ${taskId}: trying provider "${provider.platformName}" (sdkClient=${provider.sdkClient}, priority=${provider.priority}, attempt=${attemptNumber}/${providers.length})`,
           );
 
           result = await adapter.execute(input, providerModel, context);
@@ -108,7 +109,7 @@ export class TaskExecutionService {
           await this.recordProviderAttempt({
             taskId,
             modelSlug: model.slug,
-            providerName: provider.providerName,
+            providerName: provider.platformName,
             sdkClient: provider.sdkClient,
             requestPayload: input,
             responsePayload: result.output,
@@ -120,7 +121,7 @@ export class TaskExecutionService {
           });
 
           this.logger.log(
-            `Task ${taskId}: provider "${provider.providerName}" succeeded (${Date.now() - attemptStart}ms)`,
+            `Task ${taskId}: provider "${provider.platformName}" succeeded (${Date.now() - attemptStart}ms)`,
           );
 
           break; // Success, stop trying
@@ -131,7 +132,7 @@ export class TaskExecutionService {
           await this.recordProviderAttempt({
             taskId,
             modelSlug: model.slug,
-            providerName: provider.providerName,
+            providerName: provider.platformName,
             sdkClient: provider.sdkClient,
             requestPayload: input,
             status: 'failed',
@@ -143,7 +144,7 @@ export class TaskExecutionService {
           });
 
           this.logger.warn(
-            `Task ${taskId}: provider "${provider.providerName}" failed: ${e.message}`,
+            `Task ${taskId}: provider "${provider.platformName}" failed: ${e.message}`,
           );
           // Continue to next provider
         }

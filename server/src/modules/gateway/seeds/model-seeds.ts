@@ -8,7 +8,7 @@
  * 数据来源：coze-coding-dev-sdk 支持的模型列表
  */
 
-import { aiModels, capabilityModelRoutes, modelProviders } from '../../../db/schema/gateway';
+import { aiModels, aiPlatforms, capabilityModelRoutes } from '../../../db/schema/gateway';
 
 type ModelSeed = typeof aiModels.$inferInsert;
 
@@ -421,26 +421,42 @@ export const SEED_MODELS: ModelSeed[] = [
 ];
 
 /**
- * Model Provider 渠道实例种子数据
- * 每个逻辑模型对应的渠道配置（起步阶段每模型一个渠道）
+ * 平台 + 渠道种子数据（平台维度）
+ *
+ * 平台：由模型默认 providerName 去重生成。起步阶段每平台一个共享账号，
+ *       baseUrl/apiKey 不在种子中硬编码（运行时在 Admin 后台配置，效率优先）。
+ * 渠道：每个逻辑模型一个渠道实例，config 留空（继承平台默认账号）。
  */
-type ProviderSeed = typeof modelProviders.$inferInsert;
+type PlatformSeed = typeof aiPlatforms.$inferInsert;
 
-const providerCostPerCall: Record<string, string> = {
+export interface ChannelSeed {
+  platformName: string;
+  modelSlug: string;
+  sdkModelId: string;
+  sdkClient: string;
+  priority: number;
+  costPerCall: string | null;
+  config: Record<string, unknown>;
+}
+
+const channelCostPerCall: Record<string, string> = {
   'gpt-image-2': '0.05',
   sdxl: '0.002',
   'flux-schnell': '0.003',
 };
 
-export const SEED_MODEL_PROVIDERS: ProviderSeed[] = SEED_MODELS.map((model) => ({
+export const SEED_PLATFORMS: PlatformSeed[] = Array.from(
+  new Set(SEED_MODELS.map((model) => model.providerName as string)),
+).map((name) => ({ name }));
+
+export const SEED_CHANNELS: ChannelSeed[] = SEED_MODELS.map((model) => ({
+  platformName: model.providerName as string,
   modelSlug: model.slug as string,
-  providerName: model.providerName as string,
   sdkModelId: model.sdkModelId as string,
   sdkClient: model.sdkClient as string,
   priority: 1,
-  costPerCall: providerCostPerCall[model.slug as string] ?? null,
+  costPerCall: channelCostPerCall[model.slug as string] ?? null,
   config: {},
-  isActive: true,
 }));
 
 type ModelRouteSeed = typeof capabilityModelRoutes.$inferInsert;

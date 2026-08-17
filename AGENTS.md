@@ -281,14 +281,15 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
   - `publishWork()` 从 `create.output` 提取 `{ fileId, url }` 对象，优先存储 fileId
   - `GalleryModule` 导入 `StorageModule` 以注入 `StorageService`
   - 前端 `WorkspacePage` 新增图片上传功能：图像类能力（image-generation/background-removal/scene-composition/model-dressing/image-editing）显示上传按钮，上传后提交 `{ referenceImage: { fileId } }`
-- **多 Provider 架构**（Migration 0005）
-  - `model_providers` 表：每个逻辑模型可注册多个渠道（providerName + sdkClient + sdkModelId + priority + costPerCall + config）
-  - `AdapterRegistry` 按 `sdkClient` 字段路由到对应适配器（`'llm'/'image'/'video'` → Coze SDK 适配器，`'replicate'` → ReplicateAdapter）
-  - `ProviderService.getAvailableProviders(modelSlug)` 查询 DB 中活跃渠道并按 priority 升序返回
-  - `TaskExecutionService` 遍历 providers 列表，成功后 break，失败后自动 fallback 到下一个渠道
-  - `ReplicateAdapter`：纯 REST 调用 Replicate API（POST /v1/predictions + GET 轮询），不依赖 SDK
-  - 每次 provider 调用记录到 `provider_attempts` 表（含 costPerCall 用于利润分析）
-  - 种子数据：3 个 Replicate 图片模型（gpt-image-2 / sdxl / flux-schnell）+ 对应 3 条 provider 记录
+- **平台维度 + 多渠道架构**（Migration 0005 → 0012）
+  - `ai_platforms` 表：平台共享账号（name + baseUrl + apiKey，key 明文存 DB 运行时替换，效率优先；API 不回显）
+  - `model_channels` 表：渠道实例（platformId × modelSlug × sdkModelId，unique），含 sdkClient/priority/costPerCall/costPerSecond/config
+  - **三级 key 解析**：模型 defaultParams.apiKey（最高，向后兼容例外）> 渠道 config.apiKey（覆盖平台）> 平台 apiKey（默认）> 均未配置 → 显性报错（**无 Mock**）
+  - `ProviderService.getAvailableProviders(modelSlug)` join 平台+渠道，config 合并（平台 baseUrl/apiKey 默认 + 渠道 config 覆盖），按 priority 升序返回
+  - `TaskExecutionService` 遍历渠道列表，成功后 break，失败后自动 fallback 到下一个渠道；每次调用记录 `provider_attempts`（providerName = 平台名）
+  - `AdapterRegistry` 按 `sdkClient` 路由适配器（`'llm'/'image'/'video'` → Coze SDK 适配器，`'replicate'` → ReplicateAdapter，`'openai'` → OpenAIAdapter 兼容 OpenAI 协议网关如 pptoken）
+  - Admin 端 `admin/model-config`：平台 CRUD（含 Key 配置）+ 渠道 CRUD（选平台，支持复制渠道含 Key）+ 模型 CRUD + 能力路由
+  - 种子数据：`SEED_PLATFORMS`（按模型 providerName 去重）+ `SEED_CHANNELS`（每模型一个渠道）
 - **API 限流**（Phase 8 — @nestjs/throttler v6.5.0）
   - 全局 `ThrottlerGuard` 通过 `APP_GUARD` 注册，所有路由默认限流 100 次/分钟
   - 四层命名限流器（named throttlers）：
@@ -418,7 +419,14 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 | `0002_create_entity_schema.sql` | Create 实体层 + ai_models 新 schema + provider_attempts |
 | `0003_file_source_and_creates_input.sql` | files 表加 source/external_url；creates 表加 input JSONB |
 | `0004_gallery_works_file_ids.sql` | gallery_works 表加 image_file_id/video_file_id 外键 |
-| `0005_model_providers.sql` | model_providers 表（多 Provider 渠道管理） |
+| `0005_model_providers.sql` | model_providers 表（多 Provider 渠道管理，0012 后废弃） |
+| `0006_payments_and_orders.sql` | Stripe 支付 + 订单 |
+| `0007_content_management.sql` | 内容管理（公告/系统设置） |
+| `0008_audit_logs.sql` | 审计日志 |
+| `0009_notifications.sql` | 通知 |
+| `0010_commerce_and_orders_columns.sql` | 电商/订单列扩展 |
+| `0011_model_configuration_chain.sql` | capability_model_routes + provider 唯一标识 |
+| `0012_platform_dimension.sql` | 平台维度重构：ai_platforms + model_channels，数据搬迁后删 model_providers |
 
 ### 独立脚本
 

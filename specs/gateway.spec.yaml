@@ -1,5 +1,5 @@
 domain: gateway
-version: '3.0'
+version: '4.0'
 last_updated: '2026-08-17'
 entities:
   - name: AICapability
@@ -78,11 +78,11 @@ entities:
         type: varchar(100)
         notNull: true
         default: coze
-        desc: 供应商标识，当前固定为 coze
+        desc: 供应商标识（doubao | replicate | coze | openai | ...）
       - name: modality
         type: varchar(50)
         notNull: true
-        desc: text_generation | image_generation | video_generation
+        desc: llm | image | video
       - name: sdkModelId
         type: varchar(200)
         notNull: true
@@ -91,7 +91,7 @@ entities:
         type: varchar(50)
         notNull: true
         default: llm
-        desc: llm | image_generation | video_generation
+        desc: llm | image | video | replicate | openai
       - name: capabilities
         type: text[]
         default: '[]'
@@ -161,9 +161,6 @@ entities:
       - name: ai_models_slug_idx
         fields:
           - slug
-      - name: ai_models_capability_slug_idx
-        fields:
-          - capabilitySlug
       - name: ai_models_modality_idx
         fields:
           - modality
@@ -250,14 +247,64 @@ entities:
         fields:
           - status
     timestamps: false
-  - name: ModelProvider
-    table: model_providers
-    description: 多 Provider 渠道实例（同一模型可有多个渠道，支持优先级路由和故障切换）
+  - name: AIPlatform
+    table: ai_platforms
+    description: 平台共享账号（baseUrl/apiKey 的默认存放处，渠道未覆盖时继承）
     fields:
       - name: id
         type: uuid
         pk: true
         default: gen_random_uuid()
+      - name: name
+        type: varchar(100)
+        notNull: true
+        unique: true
+        desc: 平台名称（doubao | replicate | pptoken | ...）
+      - name: baseUrl
+        type: varchar(500)
+        nullable: true
+        desc: 平台默认网关地址
+      - name: apiKey
+        type: text
+        nullable: true
+        desc: 平台默认密钥（运行时在 Admin 配置，不回显）
+      - name: isActive
+        type: boolean
+        notNull: true
+        default: true
+      - name: createdAt
+        type: timestamp
+        notNull: true
+        default: now()
+      - name: updatedAt
+        type: timestamp
+        notNull: true
+        default: now()
+    indexes:
+      - name: ai_platforms_name_uidx
+        unique: true
+        fields:
+          - name
+      - name: ai_platforms_active_idx
+        fields:
+          - isActive
+    timestamps: true
+  - name: ModelChannel
+    table: model_channels
+    description: 渠道实例（平台 × 逻辑模型 × 协议）。key 解析：模型 defaultParams > 渠道 config > 平台 apiKey
+    fields:
+      - name: id
+        type: uuid
+        pk: true
+        default: gen_random_uuid()
+      - name: platformId
+        type: uuid
+        notNull: true
+        fk:
+          table: ai_platforms
+          field: id
+          onDelete: cascade
+        desc: 归属平台
       - name: modelSlug
         type: varchar(100)
         notNull: true
@@ -266,10 +313,6 @@ entities:
           field: slug
           onDelete: cascade
         desc: 关联的逻辑模型 slug
-      - name: providerName
-        type: varchar(100)
-        notNull: true
-        desc: 供应商标识（openai | replicate | coze | ...）
       - name: sdkModelId
         type: varchar(200)
         notNull: true
@@ -294,7 +337,7 @@ entities:
       - name: config
         type: jsonb
         default: '{}'
-        desc: 渠道特定配置
+        desc: 渠道级覆盖配置（仅 baseUrl/apiKey，覆盖平台默认）
       - name: isActive
         type: boolean
         notNull: true
@@ -308,16 +351,25 @@ entities:
         notNull: true
         default: now()
     indexes:
-      - name: model_providers_model_slug_idx
+      - name: model_channels_platform_id_idx
+        fields:
+          - platformId
+      - name: model_channels_model_slug_idx
         fields:
           - modelSlug
-      - name: model_providers_active_idx
+      - name: model_channels_active_idx
         fields:
           - isActive
-      - name: model_providers_model_priority_idx
+      - name: model_channels_model_priority_idx
         fields:
           - modelSlug
           - priority
+      - name: model_channels_identity_uidx
+        unique: true
+        fields:
+          - platformId
+          - modelSlug
+          - sdkModelId
     timestamps: true
   - name: CapabilityModelRoute
     table: capability_model_routes
@@ -432,7 +484,7 @@ operations:
       - 结果转存到 StorageObject
       - 调用 BillingService.settleCredits 结算
     errors:
-      - status: 402
+      - status: 400
         condition: 信用额度不足
         message: 信用额度不足
       - status: 404
@@ -456,7 +508,7 @@ operations:
       - 不创建 Task 记录
       - 按实际 Token 消耗结算信用
     errors:
-      - status: 402
+      - status: 400
         condition: 信用额度不足
         message: 信用额度不足
       - status: 404
@@ -479,7 +531,7 @@ operations:
       - status: 404
         condition: Recipe 不存在
         message: 快捷创作方案不存在
-      - status: 402
+      - status: 400
         condition: 信用额度不足
         message: 信用额度不足
     test: true
@@ -509,31 +561,31 @@ operations:
         condition: 模型不存在
         message: 模型不存在
     test: true
-  - name: toggleProvider
+  - name: toggleChannel
     method: POST
-    path: /gateway/admin/providers/:id/toggle
-    description: 启用/禁用 Provider
+    path: /gateway/admin/channels/:id/toggle
+    description: 启用/禁用渠道
     auth: jwt
     pre:
       - 用户已登录
       - 当前用户为管理员
     effect:
-      - 翻转 modelProviders.isActive
+      - 翻转 model_channels.isActive
       - 记录审计日志
     errors:
       - status: 404
-        condition: Provider 不存在
-        message: Provider 不存在
+        condition: 渠道不存在
+        message: 渠道不存在
     test: true
   - name: getModelConfiguration
     method: GET
     path: /admin/model-config
-    description: 获取模型、Provider 和默认路由聚合配置
+    description: 获取模型、平台、渠道和默认路由聚合配置
     auth: jwt
     pre:
       - 当前用户为管理员
     post:
-      - 返回全部模型、Provider、能力和路由
+      - 返回全部模型、平台、渠道、能力和路由
     test: true
   - name: createConfiguredModel
     method: POST
@@ -578,36 +630,97 @@ operations:
         message: 请先配置替代默认模型
         test: model-config.service.test.ts 阻止停用唯一默认模型
     test: true
-  - name: createConfiguredProvider
+  - name: createConfiguredPlatform
     method: POST
-    path: /admin/model-config/providers
-    description: 为逻辑模型创建 Provider 渠道
+    path: /admin/model-config/platforms
+    description: 创建平台（共享账号）
     auth: jwt
     pre:
       - 当前用户为管理员
-      - Provider 组合标识唯一
+      - 平台名称全局唯一
     effect:
-      - 创建 ModelProvider
+      - 创建 AIPlatform
+    errors:
+      - status: 409
+        condition: 平台名称已存在
+        message: 平台名称已存在
+        test: model-config.service.test.ts 拒绝重复平台名称
     test: true
-  - name: updateConfiguredProvider
+  - name: updateConfiguredPlatform
     method: PATCH
-    path: /admin/model-config/providers/:id
-    description: 更新 Provider 渠道配置
+    path: /admin/model-config/platforms/:id
+    description: 更新平台 baseUrl/apiKey 等配置
     auth: jwt
     pre:
       - 当前用户为管理员
     effect:
-      - 更新 SDK 模型、优先级、采购成本和渠道参数
+      - 更新 AIPlatform（apiKey 留空保留旧值，不回显）
     test: true
-  - name: setConfiguredProviderStatus
+  - name: setConfiguredPlatformStatus
     method: PATCH
-    path: /admin/model-config/providers/:id/status
-    description: 设置 Provider 启停状态
+    path: /admin/model-config/platforms/:id/status
+    description: 设置平台启停状态
     auth: jwt
     pre:
       - 当前用户为管理员
     effect:
-      - 更新 ModelProvider.isActive
+      - 更新 AIPlatform.isActive
+    test: true
+  - name: deleteConfiguredPlatform
+    method: DELETE
+    path: /admin/model-config/platforms/:id
+    description: 删除平台（级联删除其全部渠道）
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+    effect:
+      - 删除 AIPlatform 及其全部渠道
+    test: true
+  - name: createConfiguredChannel
+    method: POST
+    path: /admin/model-config/channels
+    description: 为平台 × 逻辑模型创建渠道实例
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+      - 渠道组合标识（平台 × 模型 × sdkModelId）唯一
+    effect:
+      - 创建 ModelChannel
+    errors:
+      - status: 409
+        condition: 渠道组合标识已存在
+        message: 渠道组合标识（平台 × 模型 × sdkModelId）已存在
+        test: model-config.service.test.ts 拒绝重复渠道组合标识
+    test: true
+  - name: updateConfiguredChannel
+    method: PATCH
+    path: /admin/model-config/channels/:id
+    description: 更新渠道配置
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+    effect:
+      - 更新 SDK 模型、优先级、采购成本和渠道参数（config 合并保留旧 key）
+    test: true
+  - name: setConfiguredChannelStatus
+    method: PATCH
+    path: /admin/model-config/channels/:id/status
+    description: 设置渠道启停状态
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+    effect:
+      - 更新 ModelChannel.isActive
+    test: true
+  - name: deleteConfiguredChannel
+    method: DELETE
+    path: /admin/model-config/channels/:id
+    description: 删除渠道实例
+    auth: jwt
+    pre:
+      - 当前用户为管理员
+    effect:
+      - 删除 ModelChannel
     test: true
   - name: replaceCapabilityRoutes
     method: PUT
@@ -653,7 +766,7 @@ rules:
     level: error
     description: 提交生成任务前必须预扣信用额度（reserve 而非仅检查）
     enforcement: submitGeneration 先调 BillingService.reserveCredits 再创建 Task
-    test: 信用不足时返回 409 并拒绝创建
+    test: 信用不足时返回 400 并拒绝创建
   - name: result_persist
     id: GTW-006
     severity: error
@@ -707,9 +820,9 @@ rules:
     id: GTW-013
     severity: error
     level: error
-    description: 模型执行必须至少存在一个启用的 model_providers 渠道
+    description: 模型执行必须至少存在一个启用的 model_channels 渠道
     enforcement: ProviderService 仅返回 modelProviders 表中启用渠道，无隐式 fallback
-    test: provider.service.test.ts 无启用 Provider 时返回空列表
+    test: provider.service.test.ts 无启用渠道时返回空列表
   - name: model_capability_match
     id: GTW-014
     severity: error
@@ -732,114 +845,349 @@ rules:
     enforcement: UpdateModelSchema 不包含 slug 且 ModelConfigService 不提供模型硬删除
     test: model-config.service.test.ts 更新模型时保持 slug 不变
 seed_data:
+  # 权威来源：server/src/modules/gateway/seeds/model-seeds.ts
+  # 生成方式：node --import tsx /tmp/dump-seeds.ts | node -e "js-yaml dump"
   models:
     - slug: doubao-seed-2-0-pro
-      name: 豆包 Seed 2.0 Pro
-      providerName: coze
-      modality: text_generation
-      sdkModelId: doubao-seed-2-0-pro-250515
-      sdkClient: llm
-      capabilitySlug: text_generation
-      contextWindow: 64000
-      maxOutputTokens: 8000
+      name: Doubao Seed 2.0 Pro
+      providerName: doubao
+      description: 旗舰级全能通用模型，面向复杂推理与长链路任务执行
+      capabilities:
+        - text-generation
+        - detail-page-generation
       inputModes:
         - text
-        - image_url
+        - image
+        - video
       outputType: text
+      modality: llm
+      sdkModelId: doubao-seed-2-0-pro-260215
+      sdkClient: llm
+      constraints:
+        supportsThinking: true
+        supportsCaching: true
+        maxTokens: 65536
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 用户输入
+          systemPrompt:
+            type: string
+            description: 系统提示词
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            default: 0.7
+          thinkingMode:
+            type: boolean
+            default: false
+          images:
+            type: array
+            items:
+              type: string
+              format: uri
+            description: 图片 URL（多模态输入）
+          videos:
+            type: array
+            items:
+              type: string
+              format: uri
+            description: 视频 URL（多模态输入）
+          conversationHistory:
+            type: array
+            description: 多轮对话历史
+        required:
+          - prompt
+      defaultParams:
+        temperature: 0.7
+        thinking: disabled
       costCredits: 5
+      isActive: true
       isFeatured: true
       sortOrder: 1
     - slug: doubao-seed-2-0-lite
-      name: 豆包 Seed 2.0 Lite
-      providerName: coze
-      modality: text_generation
-      sdkModelId: doubao-seed-2-0-lite-250415
-      sdkClient: llm
-      capabilitySlug: text_generation
-      contextWindow: 32000
-      maxOutputTokens: 4000
+      name: Doubao Seed 2.0 Lite
+      providerName: doubao
+      description: 性能与成本均衡的通用模型，适合高频生产场景
+      capabilities:
+        - text-generation
+        - detail-page-generation
       inputModes:
         - text
-        - image_url
+        - image
+        - video
       outputType: text
+      modality: llm
+      sdkModelId: doubao-seed-2-0-lite-260215
+      sdkClient: llm
+      constraints:
+        supportsThinking: true
+        supportsCaching: true
+        maxTokens: 32768
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 用户输入
+          systemPrompt:
+            type: string
+            description: 系统提示词
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            default: 0.7
+          thinkingMode:
+            type: boolean
+            default: false
+          images:
+            type: array
+            items:
+              type: string
+              format: uri
+          videos:
+            type: array
+            items:
+              type: string
+              format: uri
+          conversationHistory:
+            type: array
+        required:
+          - prompt
+      defaultParams:
+        temperature: 0.7
+        thinking: disabled
       costCredits: 2
+      isActive: true
+      isFeatured: false
       sortOrder: 2
     - slug: doubao-seed-2-0-mini
-      name: 豆包 Seed 2.0 Mini
-      providerName: coze
-      modality: text_generation
-      sdkModelId: doubao-seed-2-0-mini-250415
-      sdkClient: llm
-      capabilitySlug: text_generation
-      contextWindow: 32000
-      maxOutputTokens: 4000
+      name: Doubao Seed 2.0 Mini
+      providerName: doubao
+      description: 低时延高并发场景的轻量模型
+      capabilities:
+        - text-generation
       inputModes:
         - text
-        - image_url
+        - image
+        - video
       outputType: text
+      modality: llm
+      sdkModelId: doubao-seed-2-0-mini-260215
+      sdkClient: llm
+      constraints:
+        supportsThinking: true
+        supportsCaching: true
+        maxTokens: 16384
+        maxThinkingLength: 4
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 用户输入
+          systemPrompt:
+            type: string
+            description: 系统提示词
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            default: 0.7
+          thinkingMode:
+            type: boolean
+            default: false
+          images:
+            type: array
+            items:
+              type: string
+              format: uri
+          videos:
+            type: array
+            items:
+              type: string
+              format: uri
+          conversationHistory:
+            type: array
+        required:
+          - prompt
+      defaultParams:
+        temperature: 0.7
+        thinking: disabled
       costCredits: 1
+      isActive: true
+      isFeatured: false
       sortOrder: 3
     - slug: doubao-seed-1-8
-      name: 豆包 Seed 1.8
-      providerName: coze
-      modality: text_generation
-      sdkModelId: doubao-seed-1-8-250415
-      sdkClient: llm
-      capabilitySlug: text_generation
-      contextWindow: 32000
-      maxOutputTokens: 4000
+      name: Doubao Seed 1.8
+      providerName: doubao
+      description: 多模态 Agent 场景优化模型，更强的多模态理解能力
+      capabilities:
+        - text-generation
       inputModes:
         - text
-        - image_url
+        - image
+        - video
       outputType: text
+      modality: llm
+      sdkModelId: doubao-seed-1-8-251228
+      sdkClient: llm
+      constraints:
+        supportsThinking: true
+        supportsCaching: true
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 用户输入
+          systemPrompt:
+            type: string
+            description: 系统提示词
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            default: 0.7
+          thinkingMode:
+            type: boolean
+            default: false
+          images:
+            type: array
+            items:
+              type: string
+              format: uri
+          videos:
+            type: array
+            items:
+              type: string
+              format: uri
+          conversationHistory:
+            type: array
+        required:
+          - prompt
+      defaultParams:
+        temperature: 0.7
+        thinking: disabled
       costCredits: 2
+      isActive: true
+      isFeatured: false
       sortOrder: 4
     - slug: kimi-k2-5
       name: Kimi K2.5
-      providerName: coze
-      modality: text_generation
-      sdkModelId: kimi-k2-5-250425
-      sdkClient: llm
-      capabilitySlug: text_generation
-      contextWindow: 131072
-      maxOutputTokens: 8000
+      providerName: moonshot
+      description: Kimi 迄今最智能的模型，Agent、代码、视觉理解全面领先
+      capabilities:
+        - text-generation
+        - detail-page-generation
       inputModes:
         - text
-        - image_url
+        - image
+        - video
       outputType: text
-      costCredits: 4
-      isFeatured: true
+      modality: llm
+      sdkModelId: kimi-k2-5-260127
+      sdkClient: llm
+      constraints:
+        supportsThinking: true
+        fixedTemperature: true
+        fixedTopP: true
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 用户输入
+          systemPrompt:
+            type: string
+            description: 系统提示词
+          thinkingMode:
+            type: boolean
+            default: false
+          images:
+            type: array
+            items:
+              type: string
+              format: uri
+          videos:
+            type: array
+            items:
+              type: string
+              format: uri
+          conversationHistory:
+            type: array
+        required:
+          - prompt
+      defaultParams:
+        temperature: 0.6
+        thinking: disabled
+      costCredits: 3
+      isActive: true
+      isFeatured: false
       sortOrder: 5
     - slug: glm-5-0
-      name: 智谱 GLM 5.0
-      providerName: coze
-      modality: text_generation
-      sdkModelId: glm-5-0-250518
-      sdkClient: llm
-      capabilitySlug: text_generation
-      contextWindow: 128000
-      maxOutputTokens: 8000
+      name: GLM-5
+      providerName: zhipu
+      description: 面向 Agentic Engineering 的旗舰基座模型
+      capabilities:
+        - text-generation
       inputModes:
         - text
-        - image_url
       outputType: text
-      costCredits: 4
+      modality: llm
+      sdkModelId: glm-5-0-260211
+      sdkClient: llm
+      constraints: {}
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 用户输入
+          systemPrompt:
+            type: string
+            description: 系统提示词
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            default: 0.7
+          conversationHistory:
+            type: array
+        required:
+          - prompt
+      defaultParams:
+        temperature: 0.7
+      costCredits: 2
+      isActive: true
+      isFeatured: false
       sortOrder: 6
-    - slug: seedream-4-0
-      name: Seedream 4.0 图片生成
-      providerName: coze
-      modality: image_generation
-      sdkModelId: seedream-4-0-250528
-      sdkClient: image_generation
-      capabilitySlug: image_generation
+    - slug: doubao-seedream-5-0
+      name: Doubao SeeDream 5.0
+      providerName: doubao
+      description: 最新一代图片生成模型，画质与风格控制能力领先
+      capabilities:
+        - image-generation
+        - image-editing
+        - background-removal
+        - scene-composition
+        - model-dressing
       inputModes:
         - text
       outputType: image
+      modality: image
+      sdkModelId: doubao-seedream-5-0-260128
+      sdkClient: image
       constraints:
         sizes:
-          - 1024x1024
-          - 1280x720
-          - 720x1280
+          - 2K
+          - 4K
+        supportsImageToImage: true
+        supportsSequential: true
       inputSchema:
         type: object
         properties:
@@ -849,39 +1197,104 @@ seed_data:
           size:
             type: string
             enum:
-              - 1024x1024
-              - 1280x720
-              - 720x1280
-            default: 1024x1024
-          referenceImage:
+              - 2K
+              - 4K
+            default: 2K
+          watermark:
+            type: boolean
+            default: true
+          referenceImages:
+            type: array
+            items:
+              type: string
+              format: uri
+            description: 参考图片 URL（图生图）
+          sequentialImageGeneration:
             type: string
-            description: 参考图片 URL
+            enum:
+              - auto
+              - disabled
+            default: disabled
         required:
           - prompt
       defaultParams:
-        size: 1024x1024
+        size: 2K
+        watermark: true
       costCredits: 10
+      isActive: true
       isFeatured: true
       sortOrder: 10
-    - slug: seedance-2-0
-      name: Seedance 2.0 视频生成
-      providerName: coze
-      modality: video_generation
-      sdkModelId: seedance-2-0-250528
-      sdkClient: video_generation
-      capabilitySlug: video_generation
+    - slug: doubao-seedream-4-5
+      name: Doubao SeeDream 4.5
+      providerName: doubao
+      description: 通用高质量图片生成模型
+      capabilities:
+        - image-generation
+        - image-editing
       inputModes:
         - text
-        - image_url
-      outputType: video
+      outputType: image
+      modality: image
+      sdkModelId: doubao-seedream-4-5-251128
+      sdkClient: image
       constraints:
-        durations:
-          - 5
-          - 10
-        aspectRatios:
-          - 16:9
-          - 9:16
-          - 1:1
+        sizes:
+          - 2K
+          - 4K
+        supportsImageToImage: true
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 图片描述
+          size:
+            type: string
+            enum:
+              - 2K
+              - 4K
+            default: 2K
+          watermark:
+            type: boolean
+            default: true
+          referenceImages:
+            type: array
+            items:
+              type: string
+              format: uri
+        required:
+          - prompt
+      defaultParams:
+        size: 2K
+        watermark: true
+      costCredits: 8
+      isActive: true
+      isFeatured: false
+      sortOrder: 11
+    - slug: doubao-seedance-1-5-pro
+      name: Doubao Seedance 1.5 Pro
+      providerName: doubao
+      description: 专业级视频生成模型，支持文本到视频与首帧控制
+      capabilities:
+        - video-generation
+      inputModes:
+        - text
+        - image
+      outputType: video
+      modality: video
+      sdkModelId: doubao-seedance-1-5-pro-251215
+      sdkClient: video
+      constraints:
+        maxDuration: 12
+        minDuration: 4
+        ratios:
+          - '16:9'
+          - '9:16'
+          - '1:1'
+        resolutions:
+          - 480p
+          - 720p
+          - 1080p
       inputSchema:
         type: object
         properties:
@@ -889,29 +1302,502 @@ seed_data:
             type: string
             description: 视频描述
           duration:
-            type: integer
-            enum:
-              - 5
-              - 10
+            type: number
+            minimum: 4
+            maximum: 12
             default: 5
-          aspectRatio:
+            description: 视频时长（秒）
+          ratio:
             type: string
             enum:
-              - 16:9
-              - 9:16
-              - 1:1
-            default: 16:9
+              - '16:9'
+              - '9:16'
+              - '1:1'
+            default: '16:9'
+          resolution:
+            type: string
+            enum:
+              - 480p
+              - 720p
+              - 1080p
+            default: 720p
+          watermark:
+            type: boolean
+            default: true
+          generateAudio:
+            type: boolean
+            default: true
           firstFrame:
             type: string
+            format: uri
             description: 首帧图片 URL
           lastFrame:
             type: string
-            description: 末帧图片 URL
+            format: uri
+            description: 尾帧图片 URL
+          seed:
+            type: number
+            description: 随机种子
+          cameraFixed:
+            type: boolean
+            default: false
         required:
           - prompt
       defaultParams:
         duration: 5
-        aspectRatio: 16:9
+        ratio: '16:9'
+        resolution: 720p
+        watermark: true
+        generateAudio: true
+        returnLastFrame: true
+        maxWaitTime: 900
       costCredits: 30
+      isActive: true
       isFeatured: true
       sortOrder: 20
+    - slug: doubao-seedance-2-0
+      name: Doubao Seedance 2.0
+      providerName: doubao
+      description: 下一代多模态视频创作模型，支持参考图片/视频/音频
+      capabilities:
+        - video-generation
+        - style-cloning
+      inputModes:
+        - text
+        - image
+        - video
+        - audio
+      outputType: video
+      modality: video
+      sdkModelId: doubao-seedance-2-0-260128
+      sdkClient: video
+      constraints:
+        maxDuration: 12
+        minDuration: 4
+        ratios:
+          - '16:9'
+          - '9:16'
+          - '1:1'
+          - '4:3'
+          - '3:4'
+          - '21:9'
+          - adaptive
+        resolutions:
+          - 480p
+          - 720p
+          - 1080p
+        supportsMultimodalReference: true
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 视频描述
+          duration:
+            type: number
+            minimum: 4
+            maximum: 12
+            default: 5
+          ratio:
+            type: string
+            enum:
+              - '16:9'
+              - '9:16'
+              - '1:1'
+              - '4:3'
+              - '3:4'
+              - '21:9'
+              - adaptive
+            default: '16:9'
+          resolution:
+            type: string
+            enum:
+              - 480p
+              - 720p
+              - 1080p
+            default: 720p
+          watermark:
+            type: boolean
+            default: true
+          generateAudio:
+            type: boolean
+            default: true
+          referenceImages:
+            type: array
+            items:
+              type: string
+              format: uri
+            maxItems: 9
+            description: 参考图片 URL
+          referenceVideos:
+            type: array
+            items:
+              type: string
+              format: uri
+            maxItems: 3
+            description: 参考视频 URL
+          referenceAudios:
+            type: array
+            items:
+              type: string
+              format: uri
+            maxItems: 3
+            description: 参考音频 URL
+          firstFrame:
+            type: string
+            format: uri
+            description: 首帧图片 URL（与 referenceImages 互斥）
+          lastFrame:
+            type: string
+            format: uri
+            description: 尾帧图片 URL
+          seed:
+            type: number
+          cameraFixed:
+            type: boolean
+            default: false
+        required:
+          - prompt
+      defaultParams:
+        duration: 5
+        ratio: '16:9'
+        resolution: 720p
+        watermark: true
+        generateAudio: true
+        returnLastFrame: true
+        maxWaitTime: 900
+      costCredits: 50
+      isActive: true
+      isFeatured: false
+      sortOrder: 21
+    - slug: gpt-image-2
+      name: GPT Image 2
+      providerName: replicate
+      description: OpenAI GPT Image 2 via Replicate, 高质量图片生成与编辑
+      capabilities:
+        - image-generation
+        - image-editing
+      inputModes:
+        - text
+        - image
+      outputType: image
+      modality: image
+      sdkModelId: openai/gpt-image-2
+      sdkClient: replicate
+      constraints:
+        supportsImageToImage: true
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 图片描述
+          image:
+            type: string
+            format: uri
+            description: 参考图片 URL（图生图）
+          quality:
+            type: string
+            enum:
+              - low
+              - medium
+              - high
+              - auto
+            default: low
+            description: 图片质量（low 最便宜）
+          aspect_ratio:
+            type: string
+            enum:
+              - '1:1'
+              - '3:2'
+              - '2:3'
+              - '4:3'
+              - '3:4'
+              - '16:9'
+              - '9:16'
+              - auto
+            default: '1:1'
+          output_format:
+            type: string
+            enum:
+              - webp
+              - png
+              - jpeg
+            default: webp
+          number_of_images:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 1
+        required:
+          - prompt
+      defaultParams:
+        maxWaitTime: 300
+        quality: low
+        output_format: webp
+        number_of_images: 1
+        aspect_ratio: '1:1'
+      costCredits: 10
+      isActive: true
+      isFeatured: false
+      sortOrder: 30
+    - slug: sdxl
+      name: Stable Diffusion XL
+      providerName: replicate
+      description: Stability AI SDXL via Replicate, 开源高质量图片生成
+      capabilities:
+        - image-generation
+      inputModes:
+        - text
+      outputType: image
+      modality: image
+      sdkModelId: stability-ai/sdxl
+      sdkClient: replicate
+      constraints: {}
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 图片描述
+          negative_prompt:
+            type: string
+            description: 负面提示词
+          width:
+            type: integer
+            default: 1024
+          height:
+            type: integer
+            default: 1024
+          num_inference_steps:
+            type: integer
+            default: 30
+          guidance_scale:
+            type: number
+            default: 7.5
+        required:
+          - prompt
+      defaultParams:
+        maxWaitTime: 300
+      costCredits: 5
+      isActive: true
+      isFeatured: false
+      sortOrder: 31
+    - slug: flux-schnell
+      name: FLUX Schnell
+      providerName: replicate
+      description: Black Forest Labs FLUX Schnell via Replicate, 极速高质量图片生成
+      capabilities:
+        - image-generation
+      inputModes:
+        - text
+      outputType: image
+      modality: image
+      sdkModelId: black-forest-labs/flux-schnell
+      sdkClient: replicate
+      constraints: {}
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 图片描述
+          width:
+            type: integer
+            default: 1024
+          height:
+            type: integer
+            default: 1024
+          num_outputs:
+            type: integer
+            default: 1
+        required:
+          - prompt
+      defaultParams:
+        maxWaitTime: 300
+      costCredits: 3
+      isActive: true
+      isFeatured: false
+      sortOrder: 32
+  providers:
+    - modelSlug: doubao-seed-2-0-pro
+      providerName: doubao
+      sdkModelId: doubao-seed-2-0-pro-260215
+      sdkClient: llm
+      priority: 1
+      costPerCall: null
+      config: {}
+      isActive: true
+    - modelSlug: doubao-seed-2-0-lite
+      providerName: doubao
+      sdkModelId: doubao-seed-2-0-lite-260215
+      sdkClient: llm
+      priority: 1
+      costPerCall: null
+      config: {}
+      isActive: true
+    - modelSlug: doubao-seed-2-0-mini
+      providerName: doubao
+      sdkModelId: doubao-seed-2-0-mini-260215
+      sdkClient: llm
+      priority: 1
+      costPerCall: null
+      config: {}
+      isActive: true
+    - modelSlug: doubao-seed-1-8
+      providerName: doubao
+      sdkModelId: doubao-seed-1-8-251228
+      sdkClient: llm
+      priority: 1
+      costPerCall: null
+      config: {}
+      isActive: true
+    - modelSlug: kimi-k2-5
+      providerName: moonshot
+      sdkModelId: kimi-k2-5-260127
+      sdkClient: llm
+      priority: 1
+      costPerCall: null
+      config: {}
+      isActive: true
+    - modelSlug: glm-5-0
+      providerName: zhipu
+      sdkModelId: glm-5-0-260211
+      sdkClient: llm
+      priority: 1
+      costPerCall: null
+      config: {}
+      isActive: true
+    - modelSlug: doubao-seedream-5-0
+      providerName: doubao
+      sdkModelId: doubao-seedream-5-0-260128
+      sdkClient: image
+      priority: 1
+      costPerCall: null
+      config: {}
+      isActive: true
+    - modelSlug: doubao-seedream-4-5
+      providerName: doubao
+      sdkModelId: doubao-seedream-4-5-251128
+      sdkClient: image
+      priority: 1
+      costPerCall: null
+      config: {}
+      isActive: true
+    - modelSlug: doubao-seedance-1-5-pro
+      providerName: doubao
+      sdkModelId: doubao-seedance-1-5-pro-251215
+      sdkClient: video
+      priority: 1
+      costPerCall: null
+      config: {}
+      isActive: true
+    - modelSlug: doubao-seedance-2-0
+      providerName: doubao
+      sdkModelId: doubao-seedance-2-0-260128
+      sdkClient: video
+      priority: 1
+      costPerCall: null
+      config: {}
+      isActive: true
+    - modelSlug: gpt-image-2
+      providerName: replicate
+      sdkModelId: openai/gpt-image-2
+      sdkClient: replicate
+      priority: 1
+      costPerCall: '0.05'
+      config: {}
+      isActive: true
+    - modelSlug: sdxl
+      providerName: replicate
+      sdkModelId: stability-ai/sdxl
+      sdkClient: replicate
+      priority: 1
+      costPerCall: '0.002'
+      config: {}
+      isActive: true
+    - modelSlug: flux-schnell
+      providerName: replicate
+      sdkModelId: black-forest-labs/flux-schnell
+      sdkClient: replicate
+      priority: 1
+      costPerCall: '0.003'
+      config: {}
+      isActive: true
+  routes:
+    - capabilitySlug: text-generation
+      modelSlug: doubao-seed-2-0-pro
+      priority: 1
+      isActive: true
+    - capabilitySlug: text-generation
+      modelSlug: doubao-seed-2-0-lite
+      priority: 2
+      isActive: true
+    - capabilitySlug: image-generation
+      modelSlug: doubao-seedream-5-0
+      priority: 1
+      isActive: true
+    - capabilitySlug: image-generation
+      modelSlug: doubao-seedream-4-5
+      priority: 2
+      isActive: true
+    - capabilitySlug: image-generation
+      modelSlug: gpt-image-2
+      priority: 3
+      isActive: true
+    - capabilitySlug: image-generation
+      modelSlug: sdxl
+      priority: 4
+      isActive: true
+    - capabilitySlug: image-generation
+      modelSlug: flux-schnell
+      priority: 5
+      isActive: true
+    - capabilitySlug: video-generation
+      modelSlug: doubao-seedance-1-5-pro
+      priority: 1
+      isActive: true
+    - capabilitySlug: video-generation
+      modelSlug: doubao-seedance-2-0
+      priority: 2
+      isActive: true
+    - capabilitySlug: image-editing
+      modelSlug: doubao-seedream-5-0
+      priority: 1
+      isActive: true
+    - capabilitySlug: image-editing
+      modelSlug: doubao-seedream-4-5
+      priority: 2
+      isActive: true
+    - capabilitySlug: image-editing
+      modelSlug: gpt-image-2
+      priority: 3
+      isActive: true
+    - capabilitySlug: background-removal
+      modelSlug: doubao-seedream-5-0
+      priority: 1
+      isActive: true
+    - capabilitySlug: scene-composition
+      modelSlug: doubao-seedream-5-0
+      priority: 1
+      isActive: true
+    - capabilitySlug: model-dressing
+      modelSlug: doubao-seedream-5-0
+      priority: 1
+      isActive: true
+    - capabilitySlug: detail-page-generation
+      modelSlug: doubao-seed-2-0-pro
+      priority: 1
+      isActive: true
+    - capabilitySlug: detail-page-generation
+      modelSlug: doubao-seed-2-0-lite
+      priority: 2
+      isActive: true
+    - capabilitySlug: detail-page-generation
+      modelSlug: kimi-k2-5
+      priority: 3
+      isActive: true
+    - capabilitySlug: style-cloning
+      modelSlug: doubao-seedance-2-0
+      priority: 1
+      isActive: true

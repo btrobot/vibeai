@@ -12,18 +12,34 @@ import { DRIZZLE } from '../../common/drizzle.constants';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../db/schema';
 import { tasks } from '../../db/schema/task-engine';
-import { aiModels, capabilityModelRoutes, modelProviders } from '../../db/schema/gateway';
+import { aiModels, aiPlatforms, capabilityModelRoutes, modelChannels } from '../../db/schema/gateway';
 import { builtInCapabilityMap } from './capabilities/index';
 import type { CapabilityDefinition } from './capabilities/index';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 import { TaskExecutionService } from './task-execution.service';
 import { BillingService } from '../billing/billing.service';
 import { CreateService } from '../create/create.service';
 import { StorageService } from '../storage/storage.service';
-import { SEED_MODELS, SEED_RECIPES, SEED_MODEL_PROVIDERS, SEED_MODEL_ROUTES } from './seeds/model-seeds';
+import { SEED_MODELS, SEED_RECIPES, SEED_PLATFORMS, SEED_CHANNELS, SEED_MODEL_ROUTES } from './seeds/model-seeds';
 import type { AdapterModel } from './adapters/protocol-adapter.interface';
 import { ModelRoutingService } from './model-routing.service';
 import { toAdapterModel } from './model-mapper';
+
+const sensitiveKeyPattern = /(api[-_]?key|token|secret|password|authorization|credential)/i;
+
+/**
+ * 模型 HTTP 出口脱敏：移除 defaultParams 中的密钥字段（apiKey/token 等），
+ * 避免模型级 key 通过 /gateway/models 泄露给前端。
+ * 注意：getModel/listModels 内部返回仍含完整 defaultParams（chat 等内部链路需要）。
+ */
+export function sanitizeModelForClient<T extends { defaultParams?: Record<string, unknown> }>(model: T): T {
+  if (!model.defaultParams || typeof model.defaultParams !== 'object') return model;
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(model.defaultParams)) {
+    if (!sensitiveKeyPattern.test(key)) cleaned[key] = value;
+  }
+  return { ...model, defaultParams: cleaned };
+}
 
 export interface GatewayModelSummary extends AdapterModel {
   description: string | null;
@@ -67,8 +83,19 @@ export class GatewayService {
       await this.db.insert(aiModels).values(model).onConflictDoNothing({ target: aiModels.slug });
     }
 
-    for (const provider of SEED_MODEL_PROVIDERS) {
-      await this.db.insert(modelProviders).values(provider).onConflictDoNothing();
+    for (const platform of SEED_PLATFORMS) {
+      await this.db.insert(aiPlatforms).values(platform).onConflictDoNothing({ target: aiPlatforms.name });
+    }
+    const platformRows = await this.db
+      .select()
+      .from(aiPlatforms)
+      .where(inArray(aiPlatforms.name, SEED_PLATFORMS.map((p) => p.name)));
+    const platformIdByName = new Map(platformRows.map((p) => [p.name, p.id]));
+
+    for (const channel of SEED_CHANNELS) {
+      const platformId = platformIdByName.get(channel.platformName);
+      if (!platformId) continue;
+      await this.db.insert(modelChannels).values({ ...channel, platformId }).onConflictDoNothing();
     }
 
     for (const route of SEED_MODEL_ROUTES) {
@@ -76,7 +103,7 @@ export class GatewayService {
     }
 
     this.logger.log(
-      `已检查 ${SEED_MODELS.length} 个模型、${SEED_MODEL_PROVIDERS.length} 个渠道和 ${SEED_MODEL_ROUTES.length} 条能力路由`,
+      `已检查 ${SEED_MODELS.length} 个模型、${SEED_PLATFORMS.length} 个平台、${SEED_CHANNELS.length} 个渠道和 ${SEED_MODEL_ROUTES.length} 条能力路由`,
     );
   }
 
@@ -154,19 +181,19 @@ export class GatewayService {
     }
   }
 
-  async toggleProviderActive(id: string): Promise<{ id: string; isActive: boolean } | null> {
+  async toggleChannelActive(id: string): Promise<{ id: string; isActive: boolean } | null> {
     try {
-      const [row] = await this.db.select().from(modelProviders).where(eq(modelProviders.id, id)).limit(1);
+      const [row] = await this.db.select().from(modelChannels).where(eq(modelChannels.id, id)).limit(1);
       if (!row) return null;
       const next = !row.isActive;
       await this.db
-        .update(modelProviders)
+        .update(modelChannels)
         .set({ isActive: next, updatedAt: new Date() })
-        .where(eq(modelProviders.id, id));
-      this.logger.warn(`Admin toggled provider "${id}" → isActive=${next}`);
+        .where(eq(modelChannels.id, id));
+      this.logger.warn(`Admin toggled channel "${id}" → isActive=${next}`);
       return { id, isActive: next };
     } catch (e) {
-      this.logger.error(`toggleProviderActive failed for "${id}": ${(e as Error).message}`);
+      this.logger.error(`toggleChannelActive failed for "${id}": ${(e as Error).message}`);
       return null;
     }
   }

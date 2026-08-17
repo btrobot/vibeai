@@ -77,28 +77,46 @@ export const providerAttempts = pgTable('provider_attempts', {
   index('provider_attempts_status_idx').on(table.status),
 ]);
 
-// ===== Model Providers Table (多 Provider 渠道实例) =====
-export const modelProviders = pgTable('model_providers', {
+// ===== AI Platforms Table (平台：共享账号，baseUrl + apiKey 的默认存放处) =====
+// 平台不持有协议：协议（sdkClient）属于渠道，同一平台可挂不同协议渠道
+// （如 doubao 平台既有 llm 也有 image/video 的 Coze 客户端渠道）。
+export const aiPlatforms = pgTable('ai_platforms', {
   id: uuid('id').defaultRandom().primaryKey(),
-  modelSlug: varchar('model_slug', { length: 100 }).notNull().references(() => aiModels.slug, { onDelete: 'cascade' }),
-  providerName: varchar('provider_name', { length: 100 }).notNull(),
-  sdkModelId: varchar('sdk_model_id', { length: 200 }).notNull(),
-  sdkClient: varchar('sdk_client', { length: 50 }).notNull(),
-  priority: integer('priority').notNull().default(1),
-  costPerCall: numeric('cost_per_call', { precision: 10, scale: 4 }),
-  costPerSecond: numeric('cost_per_second', { precision: 10, scale: 4 }),
-  config: jsonb('config').default({}),
+  name: varchar('name', { length: 100 }).notNull(),
+  baseUrl: varchar('base_url', { length: 500 }),
+  apiKey: text('api_key'),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (table) => [
-  index('model_providers_model_slug_idx').on(table.modelSlug),
-  index('model_providers_active_idx').on(table.isActive),
-  index('model_providers_model_priority_idx').on(table.modelSlug, table.priority),
-  uniqueIndex('model_providers_identity_uidx').on(
+  uniqueIndex('ai_platforms_name_uidx').on(table.name),
+  index('ai_platforms_active_idx').on(table.isActive),
+]);
+
+// ===== Model Channels Table (平台 × 逻辑模型 × 协议的渠道实例) =====
+// key 解析顺序：模型 defaultParams.apiKey > 渠道 config.apiKey > 平台 apiKey > 报错。
+// 渠道 config 仅 baseUrl/apiKey（可覆盖平台），留空继承平台。
+export const modelChannels = pgTable('model_channels', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  platformId: uuid('platform_id').notNull().references(() => aiPlatforms.id, { onDelete: 'cascade' }),
+  modelSlug: varchar('model_slug', { length: 100 }).notNull().references(() => aiModels.slug, { onDelete: 'cascade' }),
+  sdkModelId: varchar('sdk_model_id', { length: 200 }).notNull(),
+  sdkClient: varchar('sdk_client', { length: 50 }).notNull(), // openai | replicate | llm | image | video
+  priority: integer('priority').notNull().default(1),
+  costPerCall: numeric('cost_per_call', { precision: 10, scale: 4 }),
+  costPerSecond: numeric('cost_per_second', { precision: 10, scale: 4 }),
+  config: jsonb('config').default({}), // 渠道级覆盖（仅 baseUrl/apiKey），留空继承平台
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => [
+  index('model_channels_platform_id_idx').on(table.platformId),
+  index('model_channels_model_slug_idx').on(table.modelSlug),
+  index('model_channels_active_idx').on(table.isActive),
+  index('model_channels_model_priority_idx').on(table.modelSlug, table.priority),
+  uniqueIndex('model_channels_identity_uidx').on(
+    table.platformId,
     table.modelSlug,
-    table.providerName,
-    table.sdkClient,
     table.sdkModelId,
   ),
 ]);
