@@ -10,10 +10,10 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as yaml from 'js-yaml';
-import { IMAGE_OUTPUT_CAPABILITIES, REF_IMAGE_ROLES } from './WorkspacePage';
+import { IMAGE_OUTPUT_CAPABILITIES, REF_IMAGE_ROLES, SELECTABLE_IMAGE_CAPABILITIES } from './WorkspacePage';
 
 interface SpecRefRole { role: string; label: string; max: number }
-interface SpecCapabilitySeed { slug: string; refImageRoles: SpecRefRole[] }
+interface SpecCapabilitySeed { slug: string; enabled: boolean; refImageRoles: SpecRefRole[] }
 
 describe('图片能力 refImageRoles Spec 一致性（gateway.spec.yaml = SOT）', () => {
   let specCaps: SpecCapabilitySeed[];
@@ -44,6 +44,12 @@ describe('图片能力 refImageRoles Spec 一致性（gateway.spec.yaml = SOT）
     for (const slug of Object.keys(REF_IMAGE_ROLES)) {
       expect(specSlugSet.has(slug)).toBe(true);
     }
+  });
+
+  it('spec enabled 能力与前端可选项 SELECTABLE_IMAGE_CAPABILITIES 一一对应（屏蔽白底/场景/换装）', () => {
+    const enabledSlugs = specCaps.filter((c) => c.enabled).map((c) => c.slug).sort();
+    const selectableSlugs = [...SELECTABLE_IMAGE_CAPABILITIES].sort();
+    expect(enabledSlugs).toEqual(selectableSlugs);
   });
 
   it('每个角色 max >= 1', () => {

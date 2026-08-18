@@ -32,7 +32,7 @@ test.describe('工作区图片/视频创建链路', () => {
     await page.locator('[data-testid="create-list"]').waitFor({ state: 'visible', timeout: 10000 });
   }
 
-  test('1. 图片 Tab：能力选择器出现，选"模特换装"后模型过滤 + 角色槽位渲染', async ({ page }) => {
+  test('1. 图片 Tab：能力选择器出现，选"图片编辑"后模型过滤 + 通用多参考图堆叠', async ({ page }) => {
     await openWorkspace(page);
 
     // 进入图片 Tab
@@ -45,14 +45,12 @@ test.describe('工作区图片/视频创建链路', () => {
     await expect(modelSelect).toBeVisible();
     await expect(modelSelect).toHaveValue('doubao-seedream-5-0', { timeout: 10000 });
 
-    // 手动选"模特换装"：模型按 capability 过滤（seedream-5-0 唯一支持）+ 角色槽位出现
-    await capSelect.selectOption('model-dressing');
+    // 手动选"图片编辑"：模型按 capability 过滤（seedream-5-0 优先）+ 通用多参考图堆叠（无角色槽位）
+    await capSelect.selectOption('image-editing');
     await expect(modelSelect).toHaveValue('doubao-seedream-5-0');
-    await expect(page.getByText('模特图 + 衣服图')).toBeVisible();
-    await expect(page.getByLabel('模特图（点击上传）')).toBeVisible();
-    await expect(page.getByLabel('衣服图（点击上传）')).toBeVisible();
+    await expect(page.getByLabel('上传参考图')).toBeVisible({ timeout: 5000 });
 
-    // 切回自动识别：槽位收起（回到通用参考图堆叠）
+    // 切回自动识别：仍为通用参考图堆叠（自动识别不分配角色槽位）
     await capSelect.selectOption('');
     await expect(page.getByLabel('上传参考图')).toBeVisible({ timeout: 5000 });
   });
@@ -87,7 +85,7 @@ test.describe('工作区图片/视频创建链路', () => {
     await page.getByTitle('图片').click();
     const imgCap = page.getByRole('combobox', { name: '图片能力' });
     await expect(imgCap).toBeVisible();
-    await imgCap.selectOption('scene-composition');
+    await imgCap.selectOption('image-editing');
     await imgCap.selectOption('');
     await page.waitForTimeout(200);
 

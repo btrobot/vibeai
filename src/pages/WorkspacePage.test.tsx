@@ -914,8 +914,8 @@ describe('WorkspacePage', () => {
       http.get('/api/gateway/models', ({ request }) => {
         requestedUrl = request.url;
         const capability = new URL(request.url).searchParams.get('capability');
-        if (capability === 'model-dressing') {
-          return HttpResponse.json({ success: true, data: mockImageModels.filter((m) => m.capabilities.includes('model-dressing')) });
+        if (capability === 'image-editing') {
+          return HttpResponse.json({ success: true, data: mockImageModels.filter((m) => m.capabilities.includes('image-editing')) });
         }
         return HttpResponse.json({ success: true, data: mockModels });
       }),
@@ -931,28 +931,28 @@ describe('WorkspacePage', () => {
       expect(requestedUrl).toContain('modality=image');
     });
 
-    // 手动选择"模特换装"
+    // 手动选择"图片编辑"
     const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
-    await user.selectOptions(capSelect, 'model-dressing');
+    await user.selectOptions(capSelect, 'image-editing');
 
     await waitFor(() => {
-      expect(requestedUrl).toContain('capability=model-dressing');
+      expect(requestedUrl).toContain('capability=image-editing');
     });
-    // 模型列表收敛为支持该能力的模型（gpt-image-2 不支持 model-dressing，被过滤）
+    // 模型列表收敛为支持该能力的模型
     const modelSelect = await screen.findByRole('combobox', { name: '模型' });
     await waitFor(() => {
       expect(modelSelect).toHaveValue('doubao-seedream-5-0');
     });
   });
 
-  it('手动选能力（模特换装）上传参考图按槽位分配 role 提交', async () => {
+  it('手动选能力（图片编辑）上传多张参考图，无 role 通用数组提交', async () => {
     let requestBody: Record<string, unknown> | undefined;
     let uploadSeq = 0;
     server.use(
       http.get('/api/gateway/models', ({ request }) => {
         const capability = new URL(request.url).searchParams.get('capability');
-        if (capability === 'model-dressing') {
-          return HttpResponse.json({ success: true, data: mockImageModels.filter((m) => m.capabilities.includes('model-dressing')) });
+        if (capability === 'image-editing') {
+          return HttpResponse.json({ success: true, data: mockImageModels.filter((m) => m.capabilities.includes('image-editing')) });
         }
         return HttpResponse.json({ success: true, data: mockImageModels });
       }),
@@ -969,42 +969,34 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByTitle('图片'));
 
     const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
-    await user.selectOptions(capSelect, 'model-dressing');
+    await user.selectOptions(capSelect, 'image-editing');
 
-    // 槽位提示：第 1 张模特图 + 第 2 张衣服图（能力选择器旁摘要 + 组件标签）
-    await waitFor(() => {
-      expect(screen.getByText('模特图 + 衣服图')).toBeInTheDocument();
-    });
-    // 两个角色槽位（空态）
-    expect(screen.getByLabelText('模特图（点击上传）')).toBeInTheDocument();
-    expect(screen.getByLabelText('衣服图（点击上传）')).toBeInTheDocument();
+    // 图片编辑 = 通用多参考图：无角色槽位提示（REF_IMAGE_ROLES 空契约）
+    expect(screen.queryByText('编辑目标图')).not.toBeInTheDocument();
+    expect(screen.queryByText('模特图 + 衣服图')).not.toBeInTheDocument();
 
-    // 点击模特图槽位上传第 1 张（pendingRole=model）
-    await user.click(screen.getByLabelText('模特图（点击上传）'));
+    // 直接上传两张参考图（图一/图二 语义由 prompt 描述）
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    await user.upload(fileInput, new File(['a'], 'a.png', { type: 'image/png' }));
+    await user.upload(fileInput, [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]);
     await waitFor(() => {
-      expect(screen.getByLabelText('模特图（已上传，点击替换）')).toBeInTheDocument();
+      expect(screen.getByAltText('a.png')).toBeInTheDocument();
+      expect(screen.getByAltText('b.png')).toBeInTheDocument();
     });
 
-    // 点击衣服图槽位上传第 2 张（pendingRole=garment）
-    await user.click(screen.getByLabelText('衣服图（点击上传）'));
-    await user.upload(fileInput, new File(['b'], 'b.png', { type: 'image/png' }));
-    await waitFor(() => {
-      expect(screen.getByLabelText('衣服图（已上传，点击替换）')).toBeInTheDocument();
-    });
-
-    await user.type(screen.getByPlaceholderText(/输入提示词/), '模特换上新衣服');
+    await user.type(screen.getByPlaceholderText(/输入提示词/), '将图一的连衣裙换到图二，保持姿势不变');
     await user.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
       expect(requestBody).toBeTruthy();
       const input = (requestBody as { input: Record<string, unknown> }).input;
       expect(input.referenceImages).toEqual([
-        { role: 'model', fileId: 'uploaded-1' },
-        { role: 'garment', fileId: 'uploaded-2' },
+        { fileId: 'uploaded-1' },
+        { fileId: 'uploaded-2' },
       ]);
-      expect((requestBody as { capabilitySlug: string }).capabilitySlug).toBe('model-dressing');
+      expect((requestBody as { capabilitySlug: string }).capabilitySlug).toBe('image-editing');
     });
   });
 
@@ -1035,14 +1027,14 @@ describe('WorkspacePage', () => {
     });
   });
 
-  it('槽位替换：同一角色再次上传替换旧图，不追加（每槽 1 张）', async () => {
+  it('图片编辑：无角色槽位，多图堆叠提交为无 role 通用数组（替换/移除不改变契约）', async () => {
     let requestBody: Record<string, unknown> | undefined;
     let uploadSeq = 0;
     server.use(
       http.get('/api/gateway/models', ({ request }) => {
         const capability = new URL(request.url).searchParams.get('capability');
-        if (capability === 'model-dressing') {
-          return HttpResponse.json({ success: true, data: mockImageModels.filter((m) => m.capabilities.includes('model-dressing')) });
+        if (capability === 'image-editing') {
+          return HttpResponse.json({ success: true, data: mockImageModels.filter((m) => m.capabilities.includes('image-editing')) });
         }
         return HttpResponse.json({ success: true, data: mockImageModels });
       }),
@@ -1059,39 +1051,35 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByTitle('图片'));
 
     const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
-    await user.selectOptions(capSelect, 'model-dressing');
+    await user.selectOptions(capSelect, 'image-editing');
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 
-    // 第 1 次上传模特图
-    await user.click(screen.getByLabelText('模特图（点击上传）'));
+    // 上传第 1 张后，追加第 2 张（图片编辑为通用多图，不互斥）
     await user.upload(fileInput, new File(['a'], 'a.png', { type: 'image/png' }));
-    await waitFor(() => {
-      expect(screen.getByLabelText('模特图（已上传，点击替换）')).toBeInTheDocument();
-    });
+    await waitFor(() => expect(screen.getByAltText('a.png')).toBeInTheDocument());
+    await user.upload(fileInput, new File(['b'], 'b.png', { type: 'image/png' }));
+    await waitFor(() => expect(screen.getByAltText('b.png')).toBeInTheDocument());
 
-    // 再次点击模特图槽位上传新图（替换）
-    await user.click(screen.getByLabelText('模特图（已上传，点击替换）'));
-    await user.upload(fileInput, new File(['a2'], 'a2.png', { type: 'image/png' }));
+    // 移除第 1 张：仅剩第 2 张，无 role
+    await user.click(screen.getByLabelText('移除参考图 1'));
     await waitFor(() => {
-      // 替换后该槽仍只有一张（移除旧 + 落新）
-      expect(screen.getByAltText('a2.png')).toBeInTheDocument();
       expect(screen.queryByAltText('a.png')).not.toBeInTheDocument();
+      expect(screen.getByAltText('b.png')).toBeInTheDocument();
     });
 
-    await user.type(screen.getByPlaceholderText(/输入提示词/), '换上新衣服');
+    await user.type(screen.getByPlaceholderText(/输入提示词/), '保留图二模特姿势，换上图一衣服');
     await user.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
       expect(requestBody).toBeTruthy();
       const input = (requestBody as { input: Record<string, unknown> }).input;
-      expect(input.referenceImages).toEqual([
-        { role: 'model', fileId: 'uploaded-2' }, // 替换后的新图，只有一张 model
-      ]);
+      expect(input.referenceImages).toEqual([{ fileId: 'uploaded-2' }]);
+      expect((requestBody as { capabilitySlug: string }).capabilitySlug).toBe('image-editing');
     });
   });
 
-  it('基于此修改：带 role 快照恢复时能力选择器对齐 + 槽位呈现', async () => {
+  it('基于此修改：历史 model-dressing 快照（已屏蔽）恢复时回退自动识别 + 参考图通用呈现', async () => {
     const dressingWork = {
       id: 'create-dress', capabilitySlug: 'model-dressing', prompt: '模特换装测试', sourceCreateId: null,
       status: 'completed', output: { images: [{ url: 'https://img.example/out.png' }] },
@@ -1121,17 +1109,18 @@ describe('WorkspacePage', () => {
     await waitFor(() => { expect(screen.getByText('基于此修改')).toBeInTheDocument(); });
     await user.click(screen.getByText('基于此修改'));
 
-    // 能力选择器对齐 model-dressing
+    // 能力已被屏蔽：选择器回退自动识别（不残留 model-dressing 选项）
     const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
     await waitFor(() => {
-      expect(capSelect).toHaveValue('model-dressing');
+      expect(capSelect).toHaveValue('');
     });
-    // 槽位呈现：模特图 + 衣服图均已上传（快照 url 注入，不触发按需 GET）
+    // 快照参考图以通用方式呈现（无角色槽位 label；url 注入，不触发按需 GET）
     await waitFor(() => {
-      expect(screen.getByLabelText('模特图（已上传，点击替换）')).toBeInTheDocument();
-      expect(screen.getByLabelText('衣服图（已上传，点击替换）')).toBeInTheDocument();
+      expect(screen.queryByLabelText('模特图（已上传，点击替换）')).not.toBeInTheDocument();
+      // 历史快照 2 张（模特图/衣服图）都以通用名呈现，无角色槽位
+      expect(screen.getAllByAltText('原参考图')).toHaveLength(2);
     });
-    // 提交时保留 role
+    // 提交：有参考图 → 自动识别为图片编辑；role 元数据随快照保留
     await user.type(screen.getByPlaceholderText(/输入提示词/), ' 换个颜色');
     let requestBody: Record<string, unknown> | undefined;
     server.use(
@@ -1148,7 +1137,7 @@ describe('WorkspacePage', () => {
         { role: 'model', fileId: 'f-model' },
         { role: 'garment', fileId: 'f-garment' },
       ]);
-      expect((requestBody as { capabilitySlug: string }).capabilitySlug).toBe('model-dressing');
+      expect((requestBody as { capabilitySlug: string }).capabilitySlug).toBe('image-editing');
     });
   });
 

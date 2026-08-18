@@ -310,8 +310,17 @@ describe('Gateway Spec Tests', () => {
       }
     });
 
-    it('返回 9 个内置能力', () => {
-      expect(service.listCapabilities()).toHaveLength(9);
+    it('返回 6 个可新建能力（屏蔽 白底/场景/换装 后）', () => {
+      // 2026-08 产品决策：图片创作收敛为文生图/图片编辑双路，屏蔽 3 个能力的新建入口
+      expect(service.listCapabilities()).toHaveLength(6);
+      const slugs = service.listCapabilities().map((c) => c.slug);
+      expect(slugs).not.toContain('background-removal');
+      expect(slugs).not.toContain('scene-composition');
+      expect(slugs).not.toContain('model-dressing');
+    });
+
+    it('屏蔽的能力仍可通过 getCapability 读取（历史数据渲染/恢复兼容）', () => {
+      expect(service.getCapability('model-dressing')?.slug).toBe('model-dressing');
     });
   });
 

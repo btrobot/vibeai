@@ -938,19 +938,26 @@ seed_data:
   # 图片类能力参考图槽位权威清单（refImageRoles）
   # 前端 WorkspacePage REF_IMAGE_ROLES 必须与之双向一致（见 image-capability-consistency 测试）
   capabilities:
+    # 2026-08 产品决策：图片创作收敛为两条路 —— 无参考图 → 文生图（image-generation）、
+    # 有参考图 → 图片编辑（image-editing，多参考图无 role，语义由 prompt 描述）。
+    # 白底图/场景合成/模特换装 屏蔽新建入口（enabled: false），历史数据仍可读取渲染。
     - slug: image-generation
+      enabled: true
       refImageRoles: []
     - slug: image-editing
-      refImageRoles:
-        - { role: target, label: 编辑目标图, max: 1 }
+      enabled: true
+      refImageRoles: []
     - slug: background-removal
+      enabled: false
       refImageRoles:
         - { role: subject, label: 商品图, max: 1 }
     - slug: scene-composition
+      enabled: false
       refImageRoles:
         - { role: product, label: 商品图, max: 1 }
         - { role: scene, label: 场景图, max: 1 }
     - slug: model-dressing
+      enabled: false
       refImageRoles:
         - { role: model, label: 模特图, max: 1 }
         - { role: garment, label: 衣服图, max: 1 }

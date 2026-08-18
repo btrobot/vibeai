@@ -60,6 +60,13 @@ export interface GenerationTaskResponse {
   createdAt: string;
   estimatedCompletionAt?: string;
 }
+/**
+ * 全局屏蔽的能力 slug（2026-08 产品决策）：
+ * 图片创作仅保留 文生图（无参考图）与 图片编辑（有参考图）两条路。
+ * 被屏蔽能力仍可查询 getCapability（历史数据读取），但不对外暴露新建入口。
+ */
+const DISABLED_CAPABILITIES = new Set(['background-removal', 'scene-composition', 'model-dressing']);
+
 
 @Injectable()
 export class GatewayService {
@@ -114,7 +121,10 @@ export class GatewayService {
   // ===== Capabilities =====
 
   listCapabilities(): CapabilityDefinition[] {
-    return Array.from(builtInCapabilityMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+    // 2026-08 产品决策：屏蔽 白底图/场景合成/模特换装（图片创作收敛为 文生图/图片编辑 两条路）
+    return Array.from(builtInCapabilityMap.values())
+      .filter((c) => !DISABLED_CAPABILITIES.has(c.slug))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
   getCapability(slug: string): CapabilityDefinition | null {

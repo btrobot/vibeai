@@ -60,27 +60,34 @@ describe('GatewayService', () => {
   // ===== Capabilities =====
 
   describe('Capabilities', () => {
-    it('listCapabilities 返回所有能力并按 sortOrder 排序', () => {
+    it('listCapabilities 返回所有启用能力并按 sortOrder 排序（屏蔽能力除外）', () => {
       const capabilities = service.listCapabilities();
-      expect(capabilities).toHaveLength(builtInCapabilities.length);
+      // 屏蔽 白底/场景/模特换装 后 = 内置能力数 - 3
+      expect(capabilities).toHaveLength(builtInCapabilities.length - 3);
       for (let i = 1; i < capabilities.length; i++) {
         expect(capabilities[i].sortOrder).toBeGreaterThanOrEqual(capabilities[i - 1].sortOrder);
       }
     });
 
-    it('listCapabilities 返回 9 个内置能力', () => {
+    it('listCapabilities 返回 6 个启用能力，且屏蔽 白底/场景/模特换装', () => {
       const capabilities = service.listCapabilities();
-      expect(capabilities).toHaveLength(9);
+      expect(capabilities).toHaveLength(6);
       const slugs = capabilities.map((c) => c.slug);
       expect(slugs).toContain('text-generation');
       expect(slugs).toContain('image-generation');
       expect(slugs).toContain('video-generation');
       expect(slugs).toContain('image-editing');
-      expect(slugs).toContain('background-removal');
-      expect(slugs).toContain('scene-composition');
-      expect(slugs).toContain('model-dressing');
+      expect(slugs).not.toContain('background-removal');
+      expect(slugs).not.toContain('scene-composition');
+      expect(slugs).not.toContain('model-dressing');
       expect(slugs).toContain('detail-page-generation');
       expect(slugs).toContain('style-cloning');
+    });
+
+    it('getCapability 仍可读取被屏蔽能力（历史数据渲染用）', () => {
+      const capability = service.getCapability('model-dressing');
+      expect(capability).not.toBeNull();
+      expect(capability!.slug).toBe('model-dressing');
     });
 
     it('getCapability 按 slug 返回正确的能力', () => {
@@ -153,7 +160,14 @@ describe('GatewayService', () => {
     });
 
     it('每个模型的 capabilities 都引用已存在的能力 slug', async () => {
-      const capabilitySlugs = new Set(service.listCapabilities().map((c) => c.slug));
+      // 全量注册表校验（含屏蔽能力，避免模型 capabilities 引用被过滤后误判缺失）
+      const KNOWN_SLUGS = [
+        'text-generation', 'image-generation', 'video-generation', 'image-editing',
+        'background-removal', 'scene-composition', 'model-dressing',
+        'detail-page-generation', 'style-cloning',
+      ];
+      for (const c of KNOWN_SLUGS) expect(service.getCapability(c)).not.toBeNull();
+      const capabilitySlugs = new Set(KNOWN_SLUGS);
       mockMany(db, [dbModel(SEED_MODELS[0]), dbModel(SEED_MODELS[6])]);
       const models = await service.listModels();
       for (const model of models) {

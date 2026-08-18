@@ -128,14 +128,16 @@ const tabConfig = [
   { slug: 'detail-page-generation', label: '详情页', icon: FileText, color: 'text-foreground' },
 ];
 
+// 2026-08 产品决策：屏蔽 白底图/场景合成/模特换装 三个能力（含历史数据仅渲染、不可新建），
+// 图片创作收敛为两条路：无参考图 → 文生图（image-generation）；有参考图 → 图片编辑（image-editing）。
+// 屏蔽能力 slug 常量（历史 create 仍按 IMAGE_OUTPUT_CAPABILITIES 渲染/发布/恢复）
+const DISABLED_IMAGE_CAPABILITIES = ['background-removal', 'scene-composition', 'model-dressing'] as const;
+
 const capabilities = [
   { slug: 'text-generation', label: '文本生成', icon: MessageSquare, color: 'text-primary' },
   { slug: 'image-generation', label: '图像生成', icon: ImageIcon, color: 'text-brand' },
   { slug: 'video-generation', label: '视频生成', icon: Video, color: 'text-foreground' },
   { slug: 'image-editing', label: '图片编辑', icon: Wand2, color: 'text-brand' },
-  { slug: 'background-removal', label: '白底图', icon: ImageIcon, color: 'text-muted-foreground' },
-  { slug: 'scene-composition', label: '场景合成', icon: ImageIcon, color: 'text-brand' },
-  { slug: 'model-dressing', label: '模特换装', icon: ImageIcon, color: 'text-primary' },
   { slug: 'detail-page-generation', label: '详情页', icon: FileText, color: 'text-foreground' },
   { slug: 'style-cloning', label: '风格克隆', icon: Clapperboard, color: 'text-foreground' },
 ];
@@ -149,13 +151,19 @@ export const IMAGE_OUTPUT_CAPABILITIES = [
   'model-dressing',
 ];
 
+// 能力选择器可选项：屏蔽能力不提供新建入口（历史数据渲染/恢复不受影响）
+export const SELECTABLE_IMAGE_CAPABILITIES = IMAGE_OUTPUT_CAPABILITIES.filter(
+  (slug) => !(DISABLED_IMAGE_CAPABILITIES as readonly string[]).includes(slug),
+);
+
 // 图片能力参考图槽位语义（对齐 specs/gateway.spec.yaml AICapability.inputSchema.refImageRoles）
 // 用户在图片 Tab 手动选择能力时，上传参考图按槽位顺序分配 role；
 // 自动识别模式不分配 role（系统猜测的能力不标记用户图片，保持无 role 通用数组契约）
 interface RefImageRole { role: string; label: string; max: number }
 export const REF_IMAGE_ROLES: Record<string, RefImageRole[]> = {
   'image-generation': [],
-  'image-editing': [{ role: 'target', label: '编辑目标图', max: 1 }],
+  // 图片编辑 = 通用多参考图（图一换到图二 等语义由 prompt 描述，不分配 role）
+  'image-editing': [],
   'background-removal': [{ role: 'subject', label: '商品图', max: 1 }],
   'scene-composition': [
     { role: 'product', label: '商品图', max: 1 },
@@ -168,23 +176,14 @@ export const REF_IMAGE_ROLES: Record<string, RefImageRole[]> = {
 };
 
 
-// Auto-detect image capability from prompt + reference + model support
-function detectImageCapability(prompt: string, hasReferenceImage: boolean, modelCapabilities: string[]): string {
-  const supported = modelCapabilities.length > 0 ? modelCapabilities : ['image-generation'];
-  if (!hasReferenceImage) {
-    return supported.includes('image-generation') ? 'image-generation' : supported[0];
+// 图片能力判定（2026-08 简化，无正则）：
+//   无参考图 + 提示词 → 文生图（image-generation）
+//   有参考图 + 提示词 → 图片编辑（image-editing）
+function detectImageCapability(_prompt: string, hasReferenceImage: boolean, modelCapabilities: string[]): string {
+  const supported = modelCapabilities.length > 0 ? modelCapabilities : ['image-generation', 'image-editing'];
+  if (hasReferenceImage) {
+    return supported.includes('image-editing') ? 'image-editing' : supported[0];
   }
-  const p = prompt.toLowerCase();
-  if (supported.includes('background-removal') && /换背景|白底|移除背景|去背景|抠图|去除背景/.test(p)) {
-    return 'background-removal';
-  }
-  if (supported.includes('model-dressing') && /换装|换衣|穿衣|试穿|模特|穿衣服/.test(p)) {
-    return 'model-dressing';
-  }
-  if (supported.includes('scene-composition') && /场景|合成|融合|合并|组合/.test(p)) {
-    return 'scene-composition';
-  }
-  if (supported.includes('image-editing')) return 'image-editing';
   return supported.includes('image-generation') ? 'image-generation' : supported[0];
 }
 
@@ -666,8 +665,13 @@ export default function WorkspacePage() {
     // 修改时切换到对应 tab
     const isImage = IMAGE_OUTPUT_CAPABILITIES.includes(create.capabilitySlug);
     setActiveTab(isImage ? 'image' : create.capabilitySlug);
-    // 图片创作修改：能力选择器对齐快照能力（模型列表按能力过滤 + 参考图槽位呈现）
-    if (isImage) setSelectedCapability(create.capabilitySlug);
+    // 图片创作修改：能力选择器对齐快照能力（模型列表按能力过滤 + 参考图槽位呈现）；
+    // 被屏蔽的历史能力（白底/场景/换装）回退自动识别，避免下拉无对应选项
+    if (isImage) {
+      setSelectedCapability(
+        (SELECTABLE_IMAGE_CAPABILITIES as readonly string[]).includes(create.capabilitySlug) ? create.capabilitySlug : null,
+      );
+    }
     // 恢复参考图：新快照 referenceImages 数组优先（服务端 resolveMediaUrls 已注入 url），
     // 遗留单图 referenceImage 快照回退按需 GET（与改造前行为一致）
     const refInput = create.input as {
@@ -1392,7 +1396,7 @@ export default function WorkspacePage() {
                       className="h-9 shrink-0 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
                     >
                       <option value="">自动识别（{capabilities.find((c) => c.slug === resolvedCapability)?.name || '图片'}）</option>
-                      {IMAGE_OUTPUT_CAPABILITIES.map((slug) => (
+                      {SELECTABLE_IMAGE_CAPABILITIES.map((slug) => (
                         <option key={slug} value={slug}>
                           {capabilities.find((c) => c.slug === slug)?.name || slug}
                         </option>
