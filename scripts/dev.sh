@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 # ── Configuration ──
-FRONTEND_PORT="${DEPLOY_RUN_PORT:-5000}"
+FRONTEND_PORT="${DEPLOY_RUN_PORT:-5001}"  # 5000 被 Forge registry 占用
 BACKEND_PORT=3001
 COZE_WORKSPACE_PATH="${COZE_WORKSPACE_PATH:-$(pwd)}"
 

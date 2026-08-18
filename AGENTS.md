@@ -256,7 +256,7 @@ AI 视频/图片生成 + 电商内容工具 + 后台管理的多业务域平台�
 
 ## 关键架构决策
 
-- 前后端分离，独立端口运行（Vite 5000 / NestJS 3001）
+- 前后端分离，独立端口运行（Vite 5001 / NestJS 3001；本地 5000 被 Forge registry 占用）
 - Vite 代理 /api/* → NestJS backend
 - NestJS 模块化架构，每个业务域独立 Module
 - 异步任务模式，WebSocket 实时进度

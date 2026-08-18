@@ -12,7 +12,7 @@ Phase 1-6 全部完成，前后端全功能已就绪。**564 个测试，563/564
 │   ├── src/db/schema/    # Drizzle 数据表定义
 │   ├── src/test/         # 测试基础设施 (mock 工厂/工具)
 │   └── drizzle/          # 迁移文件 (0000-0004)
-├── src/                  # Vite 7 + React 19 前端 (port 5000)
+├── src/                  # Vite 7 + React 19 前端 (port 5001)
 │   ├── pages/            # 页面组件
 │   └── components/ui/    # shadcn/ui 标准组件库
 ├── specs/                # 六域规范 (.spec.yaml)
@@ -27,8 +27,8 @@ Phase 1-6 全部完成，前后端全功能已就绪。**564 个测试，563/564
 - 前端: Vite 7 + React 19 + shadcn/ui + Tailwind CSS v4
 - 认证: JWT (access 15min + refresh 7d) + HttpOnly Cookie
 - 包管理: pnpm 仅允许
-- 端口: 前端 5000 / 后端 3001（Vite 代理 /api/* → 后端）
-- 预览: 主仓 5000 端口常驻，HMR 自动热更
+- 端口: 前端 5001 / 后端 3001（Vite 代理 /api/* → 后端）
+- 预览: 主仓 5001 端口常驻，HMR 自动热更
 
 ## 已实现功能
 
@@ -71,6 +71,6 @@ Phase 1-6 全部完成，前后端全功能已就绪。**564 个测试，563/564
 ## 进入新会话后的建议操作
 
 1. 先读 `AGENTS.md` 和 `DESIGN.md` 获取项目全景
-2. 确认预览服务是否运行（主仓 5000 端口常驻，HMR 自动热更）
+2. 确认预览服务是否运行（主仓 5001 端口常驻，HMR 自动热更）
 3. 如需验证后端，先读 `AGENTS.md` 中的测试进展和已知问题
 4. 数据库迁移验证：`server/drizzle/meta/_journal.json` 应包含 0000-0004 条目

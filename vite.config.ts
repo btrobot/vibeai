@@ -15,13 +15,13 @@ export default defineConfig({
     },
   },
   server: {
-    port: Number(env.VITE_PORT) || 5000,
+    port: Number(env.VITE_PORT) || 5001,
     host: '0.0.0.0',
     allowedHosts: true,
     hmr: {
       overlay: true,
       path: '/hot/vite-hmr',
-      port: Number(env.VITE_PORT) || 5000,
+      port: Number(env.VITE_PORT) || 5001,
       // Sandbox (COZE_PROJECT_ENV=DEV): HTTPS passthrough on 443
       // Test machine / direct access: use server port (no clientPort override)
       // Override: set HMR_CLIENT_PORT in .env.local

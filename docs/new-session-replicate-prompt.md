@@ -28,7 +28,7 @@
 4. **Spec SOT**：先更新 `specs/gateway.spec.yaml`，再写代码，最后跑 `spec-compliance.test.ts`
 5. **测试覆盖**：新增约 37 个测试（replicate.adapter / provider.service / adapter-registry / task-execution / gateway.service / spec-compliance）
 6. **包管理**：仅允许 pnpm
-7. **端口**：前端 5000 / 后端 3001（Vite 代理 /api/* → 后端）
+7. **端口**：前端 5001 / 后端 3001（Vite 代理 /api/* → 后端；本地 5000 被 Forge registry 占用）
 
 ## 技术栈
 
