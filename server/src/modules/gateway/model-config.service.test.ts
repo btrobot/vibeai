@@ -122,17 +122,17 @@ describe('ModelConfigService', () => {
     expect(db.set).toHaveBeenCalledWith(expect.not.objectContaining({ slug: expect.anything() }));
   });
 
-  it('更新模型时合并 defaultParams：保留旧 apiKey，仅覆盖传入字段', async () => {
-    const existing = modelRow({ defaultParams: { apiKey: 'sk-old', baseUrl: 'https://old.example.com', watermark: true } });
-    const updated = modelRow({ defaultParams: { apiKey: 'sk-old', baseUrl: 'https://new.example.com', watermark: true, size: '2K' } });
+  it('更新模型时合并 defaultParams：仅业务参数（模型不再配置 key）', async () => {
+    const existing = modelRow({ defaultParams: { temperature: 0.7, watermark: true } });
+    const updated = modelRow({ defaultParams: { temperature: 0.8, watermark: true, size: '2K' } });
     db._resultQueue = [[existing], [updated]];
 
     await expect(service.updateModel('doubao-seedream-5-0', {
-      defaultParams: { baseUrl: 'https://new.example.com', size: '2K' },
+      defaultParams: { temperature: 0.8, size: '2K' },
     })).resolves.toEqual(updated);
 
     expect(db.set).toHaveBeenCalledWith(expect.objectContaining({
-      defaultParams: { apiKey: 'sk-old', baseUrl: 'https://new.example.com', watermark: true, size: '2K' },
+      defaultParams: { temperature: 0.8, watermark: true, size: '2K' },
     }));
   });
 
@@ -529,7 +529,6 @@ describe('ModelConfigService', () => {
 
     const result = await service.getConfiguration();
 
-    expect(result.models[0].apiKeyConfigured).toBe(true);
     expect(result.models[0].defaultParams).toEqual({ temperature: 0.7 });
     expect(result.channels[0].apiKeyConfigured).toBe(true);
     expect(result.channels[0].config).toEqual({ baseUrl: 'https://cn.pptoken.cc/v1' });
@@ -545,7 +544,6 @@ describe('ModelConfigService', () => {
 
     const result = await service.getConfiguration();
 
-    expect(result.models[0].apiKeyConfigured).toBe(false);
     expect(result.platforms[0].apiKeyConfigured).toBe(false);
     expect(result.channels[0].apiKeyConfigured).toBe(false);
   });

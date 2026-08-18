@@ -11,8 +11,8 @@
  * 2. config 合并：平台 baseUrl/apiKey 为默认值，渠道 config（仅 baseUrl/apiKey）覆盖
  * 3. 无记录 → 返回空列表，由任务执行层给出明确错误
  *
- * 三级 key 解析（最终在 TaskExecutionService 完成）：
- *   模型 defaultParams.apiKey（最高，向后兼容例外）> 渠道 config.apiKey > 平台 apiKey > 显性报错
+ * 二级 key 解析（最终在 TaskExecutionService 合并渠道覆盖）：
+ *   渠道 config.apiKey（覆盖平台默认）> 平台 apiKey > 显性报错（模型不参与 key 配置）
  */
 
 import { Injectable, Logger, Inject } from '@nestjs/common';

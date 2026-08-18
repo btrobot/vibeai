@@ -85,7 +85,6 @@ export class ModelConfigService {
       models: models.map((m) => ({
         ...m,
         defaultParams: omitSensitiveConfig(m.defaultParams) as Record<string, unknown>,
-        apiKeyConfigured: hasApiKeyConfigured(m.defaultParams),
       })),
       platforms: platforms.map(sanitizePlatform),
       channels: channelsRows.map(({ channel, platformName }) => ({
@@ -136,8 +135,8 @@ export class ModelConfigService {
       }
     }
 
-    // defaultParams 合并语义：只覆盖传入字段，保留模型已有参数（含 apiKey）。
-    // 前端经脱敏后无法回显 apiKey，留空不传即保留旧 key。
+    // defaultParams 合并语义：只覆盖传入字段，保留模型已有业务参数。
+    // 模型不再参与 key 配置，key 只存平台/渠道两级。
     const mergedDefaultParams = input.defaultParams
       ? { ...(model.defaultParams ?? {}), ...input.defaultParams }
       : undefined;

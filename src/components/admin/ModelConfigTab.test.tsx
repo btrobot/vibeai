@@ -20,8 +20,7 @@ const configuration = {
       isActive: true,
       isFeatured: true,
       sortOrder: 10,
-      defaultParams: { apiKey: 'sk-model-secret', baseUrl: 'https://model.example.com', size: '1024x1024' },
-      apiKeyConfigured: true,
+      defaultParams: { temperature: 0.7, size: '1024x1024' },
     },
     {
       id: 'model-2',
@@ -37,7 +36,6 @@ const configuration = {
       isFeatured: false,
       sortOrder: 20,
       defaultParams: {},
-      apiKeyConfigured: false,
     },
   ],
   platforms: [
@@ -227,13 +225,11 @@ describe('ModelConfigTab', () => {
     }));
   });
 
-  it('显示模型级/平台级/渠道级 Key 配置状态徽章', async () => {
+  it('显示平台级/渠道级 Key 配置状态徽章（模型视图不再显示密钥状态）', async () => {
     render(<ModelConfigTab />);
 
     expect(await screen.findByText('Doubao SeeDream 5.0')).toBeInTheDocument();
-    // 模型视图：model-1 已配置模型级 key，sdxl 未配置
-    expect(screen.getAllByText('已配置').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('未配置')).toBeInTheDocument();
+    // 模型视图不再有密钥徽章列
 
     await userEvent.click(screen.getByRole('button', { name: '平台' }));
     expect(await screen.findAllByText('未配置')).not.toHaveLength(0);
@@ -243,7 +239,7 @@ describe('ModelConfigTab', () => {
     expect((await screen.findAllByText('已配置')).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('编辑模型时填写网关参数并提交 defaultParams（含 apiKey）', async () => {
+  it('编辑模型时填写网关参数并提交 defaultParams（业务参数，不含密钥）', async () => {
     let requestBody: unknown;
     server.use(
       http.patch('/api/admin/model-config/models/:slug', async ({ request }) => {
@@ -256,13 +252,16 @@ describe('ModelConfigTab', () => {
 
     await user.click(await screen.findByRole('button', { name: '编辑 SDXL' }));
     await user.type(screen.getByLabelText('Base URL'), 'https://cn.pptoken.cc/v1');
-    await user.type(screen.getByLabelText('API Key（模型级）'), 'sk-new-model-key');
     await user.type(screen.getByLabelText('超时（毫秒）'), '120000');
+    await user.type(screen.getByLabelText('温度'), '0.8');
     await user.click(screen.getByRole('button', { name: '保存模型' }));
 
     await waitFor(() => expect(requestBody).toMatchObject({
-      defaultParams: { baseUrl: 'https://cn.pptoken.cc/v1', apiKey: 'sk-new-model-key', timeoutMs: 120000 },
+      defaultParams: { baseUrl: 'https://cn.pptoken.cc/v1', timeoutMs: 120000, temperature: 0.8 },
     }));
+    // 模型 defaultParams 不应包含任何密钥字段
+    const params = (requestBody as { defaultParams: Record<string, unknown> }).defaultParams;
+    expect(params.apiKey).toBeUndefined();
   });
 
   it('编辑渠道时填写渠道 apiKey 并提交 config', async () => {
@@ -292,7 +291,7 @@ describe('ModelConfigTab', () => {
     server.use(
       http.post('/api/admin/model-config/platforms', async ({ request }) => {
         requestBody = await request.json();
-        return HttpResponse.json({ success: true, data: { id: 'platform-new', ...configuration.platforms[0] } });
+        return HttpResponse.json({ success: true, data: configuration.platforms[0] });
       }),
     );
     render(<ModelConfigTab />);
@@ -313,7 +312,7 @@ describe('ModelConfigTab', () => {
     }));
   });
 
-  it('编辑模型时 apiKey 留空则不提交 defaultParams 中的 key 字段', async () => {
+  it('编辑模型不填网关参数时 defaultParams 不含密钥', async () => {
     let requestBody: unknown;
     server.use(
       http.patch('/api/admin/model-config/models/:slug', async ({ request }) => {
@@ -328,6 +327,7 @@ describe('ModelConfigTab', () => {
     await user.click(screen.getByRole('button', { name: '保存模型' }));
 
     await waitFor(() => expect(requestBody).not.toHaveProperty('defaultParams.apiKey'));
+    await waitFor(() => expect(requestBody).not.toHaveProperty('defaultParams.baseUrl'));
   });
 
   it('渠道列表按平台分组显示组头（平台名 + 渠道数 + Key 状态 + Base URL）', async () => {

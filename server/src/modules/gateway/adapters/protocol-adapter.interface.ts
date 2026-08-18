@@ -25,14 +25,12 @@
  *   - 同一个协议可被多个供应商复用（如 gpt-image-2 渠道① sdkClient=replicate 走
  *     Replicate，渠道② sdkClient=openai 走 ppToken——协议与供应商解耦）
  *
- * ── API key 二级解析（模型 > 渠道）──
- *   适配器统一从 merge 后的 model.defaultParams 读取 apiKey/baseUrl：
- *     defaultParams = { ...provider.config, ...model.defaultParams }   // 模型优先
- *   因此 key 可配在两个层级，模型指定的 key 覆盖渠道 key：
- *     ① 模型级：ai_models.defaultParams.{ apiKey, baseUrl }（强制指定走哪个账号）
- *     ② 渠道级：model_channels.config.{ apiKey, baseUrl }（覆盖平台默认）
- *   适配器读取到的 defaultParams 是两者合并后的最终值；未配置任何 key 时显式报错（生产模式不 Mock）。
- *   安全：模型/渠道的 key 在 HTTP 出口（/gateway/models、/admin/model-config）均被脱敏，
+ * ── API key 二级解析（渠道 > 平台）──
+ *   适配器最终读取的 defaultParams 是 ProviderService 合并后的配置：
+ *     defaultParams = { ...stripKeys(model.defaultParams), ...provider.config }
+ *     渠道 config 覆盖平台默认值，模型只保留业务参数（temperature/size/duration 等），
+ *     模型层不再参与 key 配置 —— key 只存平台/渠道两级。
+ *   安全：渠道/平台 key 在 HTTP 出口（/admin/model-config）均被脱敏，
  *   只有任务执行链路（TaskExecutionService → Adapter）能看到明文 key。
  *   - 新增协议 = 新 ProtocolAdapter + AdapterRegistry 注册 + DTO sdkClient 枚举，
  *     模型/供应商数据层零改动（如 Anthropic /v1/messages 协议）

@@ -94,7 +94,7 @@ export const aiPlatforms = pgTable('ai_platforms', {
 ]);
 
 // ===== Model Channels Table (平台 × 逻辑模型 × 协议的渠道实例) =====
-// key 解析顺序：模型 defaultParams.apiKey > 渠道 config.apiKey > 平台 apiKey > 报错。
+// key 解析顺序：渠道 config.apiKey > 平台 apiKey > 报错（模型不参与 key 配置）。
 // 渠道 config 仅 baseUrl/apiKey（可覆盖平台），留空继承平台。
 export const modelChannels = pgTable('model_channels', {
   id: uuid('id').defaultRandom().primaryKey(),

@@ -21,6 +21,16 @@ export class TaskCancelledError extends Error {
   }
 }
 
+
+/** 剔除模型 defaultParams 中的密钥字段（模型层不再允许配置 key；仅保留业务参数） */
+function stripKeysFromDefaultParams(params: Record<string, unknown>): Record<string, unknown> {
+  if (!params || typeof params !== 'object') return {};
+  const sensitive = /(api[-_]?key|token|secret|password|authorization|credential|baseurl)/i;
+  return Object.fromEntries(
+    Object.entries(params).filter(([key]) => !sensitive.test(key)),
+  );
+}
+
 @Injectable()
 export class TaskExecutionService {
   private readonly logger = new Logger(TaskExecutionService.name);
@@ -158,8 +168,13 @@ export class TaskExecutionService {
             ...model,
             sdkModelId: provider.sdkModelId,
             providerName: provider.platformName,
-            // 三级 key：模型 defaultParams 最高 > 渠道 config（覆盖平台）> 平台默认（ProviderService 已合并）
-            defaultParams: { ...provider.config, ...model.defaultParams },
+            // 二级 key：渠道 config（覆盖平台）> 平台默认（ProviderService 已合并渠道覆盖）。
+            // 模型不再参与 key 配置 —— 模型必然基于某个渠道，key 只存平台/渠道两级。
+            // 保留模型 defaultParams 的业务参数（temperature/size/duration 等），但剔除其内嵌的密钥字段。
+            defaultParams: {
+              ...stripKeysFromDefaultParams(model.defaultParams),
+              ...provider.config,
+            },
           };
 
           this.logger.log(

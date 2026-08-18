@@ -42,7 +42,6 @@ interface ConfiguredModel {
   isFeatured: boolean;
   sortOrder: number;
   defaultParams?: Record<string, unknown>;
-  apiKeyConfigured: boolean;
 }
 
 interface ConfiguredPlatform {
@@ -100,13 +99,11 @@ interface ModelForm {
   costCredits: string;
   sortOrder: string;
   baseUrl: string;
-  apiKey: string;
   timeoutMs: string;
   size: string;
   n: string;
   temperature: string;
   maxTokens: string;
-  apiKeyConfigured: boolean;
 }
 
 interface PlatformForm {
@@ -149,13 +146,11 @@ const emptyModelForm: ModelForm = {
   costCredits: '1',
   sortOrder: '0',
   baseUrl: '',
-  apiKey: '',
   timeoutMs: '',
   size: '',
   n: '',
   temperature: '',
   maxTokens: '',
-  apiKeyConfigured: false,
 };
 
 const emptyPlatformForm: PlatformForm = {
@@ -308,20 +303,17 @@ export default function ModelConfigTab() {
       costCredits: String(model.costCredits),
       sortOrder: String(model.sortOrder),
       baseUrl: typeof params.baseUrl === 'string' ? params.baseUrl : '',
-      apiKey: '',
       timeoutMs: typeof params.timeoutMs === 'number' ? String(params.timeoutMs) : '',
       size: typeof params.size === 'string' ? params.size : '',
       n: typeof params.n === 'number' ? String(params.n) : '',
       temperature: typeof params.temperature === 'number' ? String(params.temperature) : '',
       maxTokens: typeof params.maxTokens === 'number' ? String(params.maxTokens) : '',
-      apiKeyConfigured: model.apiKeyConfigured,
     });
     setModelDialogOpen(true);
   };
 
   const saveModel = async () => {
     const capabilities = modelForm.capabilities.split(',').map((value) => value.trim()).filter(Boolean);
-    // defaultParams 合并语义：只提交用户填写的字段；后端保留未传字段（含 apiKey）。
     const defaultParams: Record<string, unknown> = {};
     if (modelForm.baseUrl.trim()) defaultParams.baseUrl = modelForm.baseUrl.trim();
     if (modelForm.timeoutMs.trim()) defaultParams.timeoutMs = Number(modelForm.timeoutMs);
@@ -329,7 +321,6 @@ export default function ModelConfigTab() {
     if (modelForm.n.trim()) defaultParams.n = Number(modelForm.n);
     if (modelForm.temperature.trim()) defaultParams.temperature = Number(modelForm.temperature);
     if (modelForm.maxTokens.trim()) defaultParams.maxTokens = Number(modelForm.maxTokens);
-    if (modelForm.apiKey.trim()) defaultParams.apiKey = modelForm.apiKey.trim();
     const body: Record<string, unknown> = {
       ...(!editingModelSlug && { slug: modelForm.slug.trim() }),
       name: modelForm.name.trim(),
@@ -548,7 +539,6 @@ export default function ModelConfigTab() {
               <tr>
                 <th className="p-3 text-left font-medium text-muted-foreground">模型</th>
                 <th className="p-3 text-left font-medium text-muted-foreground">能力</th>
-                <th className="p-3 text-left font-medium text-muted-foreground">模型级 Key</th>
                 <th className="p-3 text-right font-medium text-muted-foreground">积分成本</th>
                 <th className="p-3 text-left font-medium text-muted-foreground">状态</th>
                 <th className="p-3 text-right font-medium text-muted-foreground">操作</th>
@@ -562,7 +552,6 @@ export default function ModelConfigTab() {
                     <p className="font-mono text-xs text-muted-foreground">{model.slug}</p>
                   </td>
                   <td className="p-3 text-xs text-muted-foreground">{model.capabilities.join(', ')}</td>
-                  <td className="p-3"><KeyBadge configured={model.apiKeyConfigured} /></td>
                   <td className="p-3 text-right font-mono text-foreground">{model.costCredits}</td>
                   <td className="p-3"><Badge variant={model.isActive ? 'brand' : 'default'}>{model.isActive ? '启用' : '停用'}</Badge></td>
                   <td className="p-3">
@@ -765,7 +754,6 @@ export default function ModelConfigTab() {
       <Dialog open={modelDialogOpen} onOpenChange={setModelDialogOpen}>
         <DialogContent showCloseButton>
           <DialogHeader><DialogTitle>{editingModelSlug ? '编辑模型' : '新增模型'}</DialogTitle><DialogDescription>
-            模型级 baseUrl/apiKey 优先于渠道级与平台级配置；留空不覆盖已有值。
           </DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5"><Label htmlFor="model-slug">Slug</Label><Input id="model-slug" disabled={Boolean(editingModelSlug)} placeholder="my-model" value={modelForm.slug} onChange={(event) => setModelForm((current) => ({ ...current, slug: event.target.value }))} /></div>
@@ -781,10 +769,9 @@ export default function ModelConfigTab() {
             </div>
             <div className="space-y-1.5"><Label htmlFor="model-description">描述</Label><Input id="model-description" value={modelForm.description} onChange={(event) => setModelForm((current) => ({ ...current, description: event.target.value }))} /></div>
             <div className="rounded-lg border border-border bg-surface-hover/40 p-3">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">模型级网关参数（defaultParams，优先级最高）</p>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">模型级网关参数（defaultParams，仅业务参数，不含密钥）</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5"><Label htmlFor="model-base-url">Base URL</Label><Input id="model-base-url" placeholder="https://api.openai.com/v1" value={modelForm.baseUrl} onChange={(event) => setModelForm((current) => ({ ...current, baseUrl: event.target.value }))} /></div>
-                <div className="space-y-1.5"><Label htmlFor="model-api-key">API Key（模型级）</Label><Input id="model-api-key" type="password" autoComplete="new-password" placeholder={modelForm.apiKeyConfigured ? '已配置，留空保持不变' : '未配置，填入后启用'} value={modelForm.apiKey} onChange={(event) => setModelForm((current) => ({ ...current, apiKey: event.target.value }))} /></div>
                 <div className="space-y-1.5"><Label htmlFor="model-timeout">超时（毫秒）</Label><Input id="model-timeout" type="number" min="0" value={modelForm.timeoutMs} onChange={(event) => setModelForm((current) => ({ ...current, timeoutMs: event.target.value }))} /></div>
                 <div className="space-y-1.5"><Label htmlFor="model-temperature">温度</Label><Input id="model-temperature" type="number" step="0.1" value={modelForm.temperature} onChange={(event) => setModelForm((current) => ({ ...current, temperature: event.target.value }))} /></div>
               </div>
@@ -813,7 +800,7 @@ export default function ModelConfigTab() {
       <Dialog open={channelDialogOpen} onOpenChange={setChannelDialogOpen}>
         <DialogContent showCloseButton>
           <DialogHeader><DialogTitle>{editingChannelId ? '编辑渠道' : '新增渠道'}</DialogTitle><DialogDescription>
-            Key 解析：模型级 &gt; 渠道级 &gt; 平台级；均未配置时调用将报错。渠道 baseUrl/apiKey 留空 = 继承平台，留空不覆盖已有值。
+            Key 解析：渠道级 &gt; 平台级；均未配置时调用将报错（模型不参与 key 配置）。渠道 baseUrl/apiKey 留空 = 继承平台，留空不覆盖已有值。
             {editingChannelId === null && channelForm.copyFromId && ` 将复制 ${channelForm.copyFromName} 的渠道配置（含 Key）。`}
           </DialogDescription></DialogHeader>
           <div className="space-y-4">

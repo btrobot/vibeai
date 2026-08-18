@@ -28,8 +28,8 @@ import { toAdapterModel } from './model-mapper';
 const sensitiveKeyPattern = /(api[-_]?key|token|secret|password|authorization|credential)/i;
 
 /**
- * 模型 HTTP 出口脱敏：移除 defaultParams 中的密钥字段（apiKey/token 等），
- * 避免模型级 key 通过 /gateway/models 泄露给前端。
+ * 模型 HTTP 出口脱敏：移除 defaultParams 中的密钥字段（token/secret 等）。
+ * 模型层不再配置 key（key 仅存平台/渠道两级），此函数仅作为安全兜底。
  * 注意：getModel/listModels 内部返回仍含完整 defaultParams（chat 等内部链路需要）。
  */
 export function sanitizeModelForClient<T extends { defaultParams?: Record<string, unknown> }>(model: T): T {

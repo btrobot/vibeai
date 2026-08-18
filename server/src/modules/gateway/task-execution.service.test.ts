@@ -455,7 +455,7 @@ describe('TaskExecutionService', () => {
       expect(mockBillingService.refundCredits).toHaveBeenCalledWith('user-1', 'task-1', 10, '任务失败退款');
     });
 
-    it('模型 defaultParams 覆盖渠道 config（二级 key：模型 > 渠道）', async () => {
+    it('模型 defaultParams 中的密钥被剥离，渠道 config 优先（模型不参与 key 配置）', async () => {
       const provider = {
         platformName: 'pptoken', sdkModelId: 'gpt-image-2', sdkClient: 'openai',
         priority: 1, costPerCall: 0.05,
@@ -465,7 +465,7 @@ describe('TaskExecutionService', () => {
       const modelWithKey: AdapterModel = {
         ...mockModel,
         sdkClient: 'openai',
-        defaultParams: { apiKey: 'model-key', baseUrl: 'https://model.example/v1' },
+        defaultParams: { apiKey: 'model-key', baseUrl: 'https://model.example/v1', temperature: 0.9 },
       };
 
       mockAdapter.execute.mockResolvedValue({ output: { images: [{ url: 'https://cdn.example.com/a.png' }] } });
@@ -474,11 +474,14 @@ describe('TaskExecutionService', () => {
       await service.executeTask('task-1', 'user-1', 'image-generation', { prompt: 'test' }, modelWithKey);
 
       const passedModel = mockAdapter.execute.mock.calls[0][1] as AdapterModel;
-      expect(passedModel.defaultParams.apiKey).toBe('model-key');
-      expect(passedModel.defaultParams.baseUrl).toBe('https://model.example/v1');
+      // 模型级 key/baseUrl 被剥离，不覆盖渠道配置
+      expect(passedModel.defaultParams.apiKey).toBe('channel-key');
+      expect(passedModel.defaultParams.baseUrl).toBe('https://channel.example/v1');
+      // 模型业务参数仍保留
+      expect(passedModel.defaultParams.temperature).toBe(0.9);
     });
 
-    it('渠道 config 提供默认 key（模型未指定时）', async () => {
+    it('渠道 config 提供 key（模型业务参数保留）', async () => {
       const provider = {
         platformName: 'pptoken', sdkModelId: 'gpt-image-2', sdkClient: 'openai',
         priority: 1, costPerCall: 0.05,
