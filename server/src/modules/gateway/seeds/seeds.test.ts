@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import * as yaml from 'js-yaml';
 import {
   SEED_MODELS,
   SEED_PLATFORMS,
@@ -363,6 +364,57 @@ describe('Seeds Data Integrity', () => {
 
       const platform = SEED_PLATFORMS.find((p) => p.name === 'pptoken');
       expect(platform!.apiKey).toBeUndefined();
+    });
+  });
+
+  // ===== Spec 一致性（gateway.spec.yaml 是 SOT，防种子漂移） =====
+
+  describe('Spec 一致性（gateway.spec.yaml = SOT）', () => {
+    interface SpecModelSeed { slug: string }
+    interface SpecRouteSeed { capabilitySlug: string; modelSlug: string; priority: number }
+    interface SpecChannelSeed { platformName: string; modelSlug: string; sdkModelId: string; sdkClient: string; priority: number }
+
+    let spec: Record<string, unknown>;
+    let seedData: {
+      models: SpecModelSeed[];
+      routes: SpecRouteSeed[];
+      channels: SpecChannelSeed[];
+    };
+
+    beforeAll(() => {
+      const specPath = path.resolve(__dirname, '../../../../../specs/gateway.spec.yaml');
+      spec = yaml.load(fs.readFileSync(specPath, 'utf8')) as Record<string, unknown>;
+      seedData = spec.seed_data as {
+        models: SpecModelSeed[];
+        routes: SpecRouteSeed[];
+        channels: SpecChannelSeed[];
+      };
+    });
+
+    it('SEED_MODELS 与 spec models 列表一一对应（双向，防再漏模型）', () => {
+      const codeSlugs = SEED_MODELS.map((m) => m.slug as string).sort();
+      const specSlugs = seedData.models.map((m) => m.slug).sort();
+      expect(specSlugs).toEqual(codeSlugs);
+    });
+
+    it('SEED_MODEL_ROUTES 与 spec routes 一一对应（capability+model+priority 元组）', () => {
+      const codeRoutes = SEED_MODEL_ROUTES
+        .map((r) => `${r.capabilitySlug}|${r.modelSlug}|${r.priority}`)
+        .sort();
+      const specRoutes = seedData.routes
+        .map((r) => `${r.capabilitySlug}|${r.modelSlug}|${r.priority}`)
+        .sort();
+      expect(specRoutes).toEqual(codeRoutes);
+    });
+
+    it('SEED_CHANNELS 与 spec channels 一一对应（platform+model+sdkModelId+sdkClient+priority 元组）', () => {
+      const codeChannels = SEED_CHANNELS
+        .map((c) => `${c.platformName}|${c.modelSlug}|${c.sdkModelId}|${c.sdkClient}|${c.priority}`)
+        .sort();
+      const specChannels = seedData.channels
+        .map((c) => `${c.platformName}|${c.modelSlug}|${c.sdkModelId}|${c.sdkClient}|${c.priority}`)
+        .sort();
+      expect(specChannels).toEqual(codeChannels);
     });
   });
 });

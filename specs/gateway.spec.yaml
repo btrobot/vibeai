@@ -1,5 +1,5 @@
 domain: gateway
-version: '4.2'
+version: '4.3'
 last_updated: '2026-08-18'
 entities:
   - name: AICapability
@@ -1465,6 +1465,45 @@ seed_data:
       isActive: true
       isFeatured: false
       sortOrder: 11
+    - slug: gpt-5.6-sol
+      name: GPT-5.6 Sol
+      providerName: pptoken
+      description: GPT-5.6 Sol 旗舰推理模型（pptoken OpenAI 兼容网关，key 配置在平台/渠道）
+      capabilities:
+        - text-generation
+        - detail-page-generation
+      inputModes:
+        - text
+      outputType: text
+      modality: llm
+      sdkModelId: gpt-5.6-sol
+      sdkClient: openai
+      constraints:
+        supportsThinking: true
+        supportsCaching: false
+        maxTokens: 32768
+      inputSchema:
+        type: object
+        properties:
+          prompt:
+            type: string
+            description: 用户输入
+          systemPrompt:
+            type: string
+            description: 系统提示词
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            default: 0.7
+        required:
+          - prompt
+      defaultParams:
+        temperature: 0.7
+      costCredits: 10
+      isActive: true
+      isFeatured: false
+      sortOrder: 15
     - slug: doubao-seedance-1-5-pro
       name: Doubao Seedance 1.5 Pro
       providerName: doubao
@@ -1920,12 +1959,16 @@ seed_data:
       isActive: true
   routes:
     - capabilitySlug: text-generation
-      modelSlug: doubao-seed-2-0-pro
+      modelSlug: gpt-5.6-sol
       priority: 1
       isActive: true
     - capabilitySlug: text-generation
-      modelSlug: doubao-seed-2-0-lite
+      modelSlug: doubao-seed-2-0-pro
       priority: 2
+      isActive: true
+    - capabilitySlug: text-generation
+      modelSlug: doubao-seed-2-0-lite
+      priority: 3
       isActive: true
     - capabilitySlug: image-generation
       modelSlug: doubao-seedream-5-0

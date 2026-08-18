@@ -81,10 +81,12 @@ const fallbackCapabilities: CapabilityInfo[] = [
   { slug: 'text-generation', name: '文本生成', icon: 'message-square', category: 'text' },
   { slug: 'image-generation', name: '图像生成', icon: 'image', category: 'image' },
   { slug: 'video-generation', name: '视频生成', icon: 'video', category: 'video' },
+  { slug: 'image-editing', name: '图片编辑', icon: 'wand-2', category: 'image' },
   { slug: 'background-removal', name: '白底图', icon: 'crop', category: 'image' },
   { slug: 'scene-composition', name: '场景合成', icon: 'layers', category: 'image' },
   { slug: 'model-dressing', name: '模特换装', icon: 'shirt', category: 'image' },
   { slug: 'detail-page-generation', name: '详情页', icon: 'file-text', category: 'text' },
+  { slug: 'style-cloning', name: '风格克隆', icon: 'clapperboard', category: 'video' },
 ];
 
 interface ProjectDetail {
