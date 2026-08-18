@@ -61,8 +61,8 @@ const SEED_SYSTEM_SETTINGS: Array<{
 ];
 
 // Load .env.local > .env
-config({ path: path.resolve(__dirname, '..', '.env.local'), override: false });
-config({ path: path.resolve(__dirname, '..', '.env'), override: false });
+config({ path: path.resolve(__dirname, '..', '..', '.env.local'), override: false });
+config({ path: path.resolve(__dirname, '..', '..', '.env'), override: false });
 
 // ===== Subscription Plan Seed Data =====
 // Source: specs/billing.spec.yaml → seed_data

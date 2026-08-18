@@ -19,8 +19,8 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 
 // Load .env.local > .env
-config({ path: path.resolve(__dirname, '..', '.env.local'), override: false });
-config({ path: path.resolve(__dirname, '..', '.env'), override: false });
+config({ path: path.resolve(__dirname, '..', '..', '.env.local'), override: false });
+config({ path: path.resolve(__dirname, '..', '..', '.env'), override: false });
 
 async function main(): Promise<void> {
   const databaseUrl = process.env.PGDATABASE_URL || process.env.DATABASE_URL;
