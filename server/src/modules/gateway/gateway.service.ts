@@ -16,7 +16,9 @@ import { aiModels, aiPlatforms, capabilityModelRoutes, modelChannels } from '../
 import { builtInCapabilityMap } from './capabilities/index';
 import type { CapabilityDefinition } from './capabilities/index';
 import { eq, and, inArray, sql } from 'drizzle-orm';
-import { TaskExecutionService } from './task-execution.service';
+import { TaskExecutionService, stripKeysFromDefaultParams } from './task-execution.service';
+import { ProviderService } from './provider.service';
+import { AdapterRegistry } from './adapters/adapter-registry';
 import { BillingService } from '../billing/billing.service';
 import { CreateService } from '../create/create.service';
 import { StorageService } from '../storage/storage.service';
@@ -70,6 +72,8 @@ export class GatewayService {
     @Inject('CREATE_SERVICE') private readonly createService: CreateService,
     @Inject('STORAGE_SERVICE') private readonly storageService: StorageService,
     @Optional() @Inject('MODEL_ROUTING_SERVICE') modelRoutingService?: ModelRoutingService,
+    @Optional() @Inject('PROVIDER_SERVICE') private readonly providerService?: ProviderService,
+    @Optional() @Inject('ADAPTER_REGISTRY') private readonly adapterRegistry?: AdapterRegistry,
   ) {
     this.modelRoutingService = modelRoutingService ?? new ModelRoutingService(db);
   }
@@ -205,6 +209,83 @@ export class GatewayService {
 
   async getDefaultModel(capabilitySlug: string): Promise<AdapterModel | null> {
     return this.modelRoutingService.getDefaultModel(capabilitySlug);
+  }
+
+  /**
+   * chat（LLM SSE）渠道解析执行——与 generate 对齐（P0 修复）：
+   * 1. 解析模型（显式或 text-generation 默认路由）
+   * 2. ProviderService 获取启用渠道列表（平台默认 + 渠道覆盖合并，按 priority 排序）
+   * 3. 逐个渠道 fallback：key 合并 = stripKeys(模型 defaultParams) + provider.config（渠道 > 平台）
+   * 4. 流式期间（已推送内容后）失败不 fallback，直接抛错由 controller 以 SSE error 返回
+   * 5. 成功后返回模型信息供 controller 结算信用（LLM 后扣）
+   */
+  async chatStream(
+    userId: string,
+    input: Record<string, unknown>,
+    preferredModel?: string,
+    onProgress?: (progress: number, text: string) => void,
+  ): Promise<{ modelUsed: string; modelName: string; costCredits: number; content: string }> {
+    const model = preferredModel
+      ? await this.getModel(preferredModel)
+      : await this.getDefaultModel('text-generation');
+
+    if (!model) {
+      throw new NotFoundException('没有可用的文本生成模型');
+    }
+
+    if (!this.providerService || !this.adapterRegistry) {
+      throw new Error('ProviderService/AdapterRegistry 未注入，无法解析渠道');
+    }
+
+    const providers = await this.providerService.getAvailableProviders(model.slug);
+    if (providers.length === 0) {
+      throw new NotFoundException(`模型 "${model.slug}" 没有可用的渠道`);
+    }
+
+    let lastError: Error | null = null;
+    let hasStreamed = false;
+    for (const provider of providers) {
+      try {
+        const adapter = this.adapterRegistry.getAdapter(provider.sdkClient);
+        const providerModel: AdapterModel = {
+          ...model,
+          sdkModelId: provider.sdkModelId,
+          providerName: provider.platformName,
+          // 与 TaskExecutionService 一致的 key 合并：渠道 config（覆盖平台）> 平台默认，模型不参与 key
+          defaultParams: {
+            ...stripKeysFromDefaultParams(model.defaultParams),
+            ...provider.config,
+          },
+        };
+        this.logger.log(
+          `Chat: trying provider "${provider.platformName}" (sdkClient=${provider.sdkClient}, priority=${provider.priority})`,
+        );
+        const result = await adapter.execute(input, providerModel, {
+          taskId: `llm-${Date.now()}`,
+          userId,
+          onProgress: (progress: number, text: string) => {
+            hasStreamed = true;
+            onProgress?.(progress, text);
+          },
+        });
+        const content = (result.output as { content?: string } | undefined)?.content ?? '';
+        return {
+          modelUsed: model.slug,
+          modelName: model.name,
+          costCredits: model.costCredits,
+          content,
+        };
+      } catch (e) {
+        lastError = e as Error;
+        if (hasStreamed) {
+          // 已推送内容，无法安全切换渠道（会导致内容拼接混乱），直接抛错
+          throw lastError;
+        }
+        this.logger.warn(`Chat: provider "${provider.platformName}" failed: ${lastError.message}`);
+      }
+    }
+
+    throw new Error(`所有渠道均失败: ${lastError?.message || '未知错误'}`);
   }
 
   // ===== Model Resolution Helpers =====

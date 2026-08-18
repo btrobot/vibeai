@@ -23,7 +23,7 @@ export class TaskCancelledError extends Error {
 
 
 /** 剔除模型 defaultParams 中的密钥字段（模型层不再允许配置 key；仅保留业务参数） */
-function stripKeysFromDefaultParams(params: Record<string, unknown>): Record<string, unknown> {
+export function stripKeysFromDefaultParams(params: Record<string, unknown>): Record<string, unknown> {
   if (!params || typeof params !== 'object') return {};
   const sensitive = /(api[-_]?key|token|secret|password|authorization|credential|baseurl)/i;
   return Object.fromEntries(

@@ -356,4 +356,159 @@ describe('GatewayService', () => {
       expect(result).toBeNull();
     });
   });
+
+  // ===== chatStream（P0：chat 走渠道解析 + fallback） =====
+
+  describe('chatStream — 渠道解析与 fallback', () => {
+    const llmModel = {
+      ...dbModel(SEED_MODELS[0]),
+      slug: 'gpt-4o',
+      name: 'GPT-4o',
+      modality: 'llm',
+      outputType: 'text',
+      sdkClient: 'openai',
+      sdkModelId: 'gpt-4o',
+      costCredits: 3,
+      defaultParams: { temperature: 0.7, apiKey: 'sk-model-stale' },
+    };
+
+    function buildChatService(providers: any[], adapterImpl?: any) {
+      const providerService = {
+        getAvailableProviders: vi.fn().mockResolvedValue(providers),
+      };
+      const adapterRegistry = {
+        getAdapter: vi.fn().mockReturnValue({
+          execute: adapterImpl ?? vi.fn().mockResolvedValue({ output: { content: 'OK' } }),
+        }),
+      };
+      const chatService = new GatewayService(
+        db as any,
+        { executeTask: vi.fn() } as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        undefined as any,
+        providerService as any,
+        adapterRegistry as any,
+      );
+      // 显式模型走 getModel（spy 避免依赖 db mock），默认模型走 modelRoutingService
+      vi.spyOn(chatService, 'getModel').mockResolvedValue(llmModel as any);
+      return { chatService, providerService, adapterRegistry };
+    }
+
+    it('按优先级遍历渠道并合并 key（渠道 config 覆盖平台，剔除模型层内嵌 key）', async () => {
+      const { chatService, providerService, adapterRegistry } = buildChatService([
+        {
+          channelId: 'c1',
+          platformName: 'pptoken',
+          sdkModelId: 'gpt-4o',
+          sdkClient: 'openai',
+          priority: 1,
+          costPerCall: 0.05,
+          costPerSecond: null,
+          config: { apiKey: 'sk-channel', baseUrl: 'https://cn.pptoken.cc/v1' },
+        },
+      ]);
+      const adapter = adapterRegistry.getAdapter();
+      adapter.execute.mockImplementation(async (_i: any, model: any) => {
+        expect(model.sdkModelId).toBe('gpt-4o');
+        expect(model.providerName).toBe('pptoken');
+        // 模型层内嵌 apiKey 被剔除，渠道 config 的 key/baseUrl 合并进来
+        expect(model.defaultParams.apiKey).toBe('sk-channel');
+        expect(model.defaultParams.baseUrl).toBe('https://cn.pptoken.cc/v1');
+        expect(model.defaultParams.temperature).toBe(0.7); // 业务参数保留
+        return { output: { content: 'OK' } };
+      });
+
+      const result = await chatService.chatStream('user-1', { prompt: '你好' }, 'gpt-4o');
+
+      expect(providerService.getAvailableProviders).toHaveBeenCalledWith('gpt-4o');
+      expect(result).toMatchObject({ modelUsed: 'gpt-4o', modelName: 'GPT-4o', costCredits: 3, content: 'OK' });
+    });
+
+    it('首个渠道失败（未流式）时 fallback 到下一渠道', async () => {
+      const { chatService, adapterRegistry } = buildChatService([
+        {
+          channelId: 'c1', platformName: 'pptoken', sdkModelId: 'gpt-4o',
+          sdkClient: 'openai', priority: 1, costPerCall: null, costPerSecond: null, config: {},
+        },
+        {
+          channelId: 'c2', platformName: 'replicate', sdkModelId: 'gpt-4o',
+          sdkClient: 'replicate', priority: 2, costPerCall: null, costPerSecond: null, config: {},
+        },
+      ]);
+      const adapter = adapterRegistry.getAdapter();
+      adapter.execute
+        .mockRejectedValueOnce(new Error('OpenAI 兼容网关渠道配置不完整：未设置 apiKey'))
+        .mockResolvedValueOnce({ output: { content: 'fallback OK' } });
+
+      const result = await chatService.chatStream('user-1', { prompt: '你好' }, 'gpt-4o');
+
+      expect(adapter.execute).toHaveBeenCalledTimes(2);
+      expect(result.content).toBe('fallback OK');
+    });
+
+    it('已开始流式后失败不 fallback，直接抛出原错误', async () => {
+      const { chatService, adapterRegistry } = buildChatService([
+        {
+          channelId: 'c1', platformName: 'pptoken', sdkModelId: 'gpt-4o',
+          sdkClient: 'openai', priority: 1, costPerCall: null, costPerSecond: null, config: {},
+        },
+        {
+          channelId: 'c2', platformName: 'replicate', sdkModelId: 'gpt-4o',
+          sdkClient: 'replicate', priority: 2, costPerCall: null, costPerSecond: null, config: {},
+        },
+      ]);
+      const adapter = adapterRegistry.getAdapter();
+      adapter.execute.mockImplementation(async (_i: any, _m: any, ctx: any) => {
+        ctx.onProgress(10, '正在连接...');
+        throw new Error('连接中断');
+      });
+
+      await expect(chatService.chatStream('user-1', { prompt: '你好' }, 'gpt-4o'))
+        .rejects.toThrow('连接中断');
+      expect(adapter.execute).toHaveBeenCalledTimes(1); // 只尝试第一个渠道
+    });
+
+    it('全部渠道失败时抛出聚合错误', async () => {
+      const { chatService, adapterRegistry } = buildChatService([
+        {
+          channelId: 'c1', platformName: 'pptoken', sdkModelId: 'gpt-4o',
+          sdkClient: 'openai', priority: 1, costPerCall: null, costPerSecond: null, config: {},
+        },
+      ]);
+      adapterRegistry.getAdapter().execute.mockRejectedValue(new Error('超时'));
+
+      await expect(chatService.chatStream('user-1', { prompt: '你好' }, 'gpt-4o'))
+        .rejects.toThrow('所有渠道均失败: 超时');
+    });
+
+    it('模型无可用渠道时抛出明确错误', async () => {
+      const { chatService } = buildChatService([]);
+
+      await expect(chatService.chatStream('user-1', { prompt: '你好' }, 'gpt-4o'))
+        .rejects.toThrow('没有可用的渠道');
+    });
+
+    it('无显式模型时使用 text-generation 默认模型', async () => {
+      const { chatService } = buildChatService([{
+        channelId: 'c1', platformName: 'doubao', sdkModelId: 'x', sdkClient: 'llm',
+        priority: 1, costPerCall: null, costPerSecond: null, config: {},
+      }]);
+      vi.spyOn(chatService, 'getDefaultModel').mockResolvedValue(llmModel as any);
+
+      await chatService.chatStream('user-1', { prompt: '你好' });
+      expect(chatService.getDefaultModel).toHaveBeenCalledWith('text-generation');
+    });
+
+    it('未解析到模型时抛出 NotFoundException', async () => {
+      const { chatService } = buildChatService([]);
+      vi.spyOn(chatService, 'getModel').mockResolvedValue(null as any);
+      vi.spyOn(chatService, 'getDefaultModel').mockResolvedValue(null as any);
+
+      await expect(chatService.chatStream('user-1', { prompt: '你好' }, 'gpt-4o'))
+        .rejects.toThrow('没有可用的文本生成模型');
+    });
+  });
 });
+

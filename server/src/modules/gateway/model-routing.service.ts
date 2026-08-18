@@ -1,9 +1,9 @@
 import { Injectable, Logger, Inject, ServiceUnavailableException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, exists, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../common/drizzle.constants';
 import * as schema from '../../db/schema';
-import { aiModels, capabilityModelRoutes } from '../../db/schema/gateway';
+import { aiModels, aiPlatforms, capabilityModelRoutes, modelChannels } from '../../db/schema/gateway';
 import type { AdapterModel } from './adapters/protocol-adapter.interface';
 import { toAdapterModel } from './model-mapper';
 
@@ -26,6 +26,17 @@ export class ModelRoutingService {
           eq(capabilityModelRoutes.isActive, true),
           eq(aiModels.isActive, true),
           sql`${aiModels.capabilities} @> ARRAY[${capabilitySlug}]::text[]`,
+          // 路由级 fallback：跳过没有启用渠道（或渠道所属平台停用）的模型
+          exists(
+            this.db.select({ id: modelChannels.id })
+              .from(modelChannels)
+              .innerJoin(aiPlatforms, eq(modelChannels.platformId, aiPlatforms.id))
+              .where(and(
+                eq(modelChannels.modelSlug, aiModels.slug),
+                eq(modelChannels.isActive, true),
+                eq(aiPlatforms.isActive, true),
+              )),
+          ),
         ))
         .orderBy(asc(capabilityModelRoutes.priority), asc(aiModels.sortOrder))
         .limit(1);

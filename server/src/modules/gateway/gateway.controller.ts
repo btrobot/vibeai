@@ -121,15 +121,6 @@ export class GatewayController {
   async chat(@Req() req: any, @Body() body: ChatInput, @Res() res: Response) {
     const userId = req.user.userId;
 
-    // Resolve model
-    const model = body.modelSlug
-      ? await this.gatewayService.getModel(body.modelSlug)
-      : await this.gatewayService.getDefaultModel('text-generation');
-
-    if (!model) {
-      throw new NotFoundException('没有可用的文本生成模型');
-    }
-
     // SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -138,25 +129,25 @@ export class GatewayController {
     res.flushHeaders();
 
     try {
-      // 按模型的 sdkClient 选择适配器（Coze 'llm' 或 OpenAI 兼容 'openai' 等）
-      const adapter = this.adapterRegistry.getAdapter(model.sdkClient || 'llm');
-      const result = await adapter.execute(body, model, {
-        taskId: `llm-${Date.now()}`,
+      // 渠道解析 + fallback 在 GatewayService.chatStream 内完成（与 generate 对齐的 key 合并）
+      const result = await this.gatewayService.chatStream(
         userId,
-        onProgress: (_progress: number, text: string) => {
+        body,
+        body.modelSlug,
+        (_progress: number, text: string) => {
           res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
         },
-      });
+      );
 
       // Credit deduction (LLM doesn't pre-deduct, charges after completion)
       await this.billingService.deductCredits(
         userId,
         null,
-        model.costCredits,
-        `LLM 对话: ${model.name}`,
+        result.costCredits,
+        `LLM 对话: ${result.modelName}`,
       );
 
-      res.write(`data: ${JSON.stringify({ done: true, modelUsed: model.slug })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, modelUsed: result.modelUsed })}\n\n`);
     } catch (e: any) {
       res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
     } finally {

@@ -1,5 +1,5 @@
 domain: gateway
-version: '4.1'
+version: '4.2'
 last_updated: '2026-08-18'
 entities:
   - name: AICapability
@@ -849,9 +849,8 @@ rules:
     severity: error
     level: error
     description: key 二级解析：渠道 config.apiKey > 平台 apiKey；模型不参与 key 配置（模型 defaultParams 仅业务参数，内嵌密钥在执行时被剔除）；两级均未配置时适配器直接报错，不得 Mock
-    enforcement: TaskExecutionService 合并 { ...stripKeys(模型 defaultParams), ...provider.config } 后传给适配器，其中 provider.config 由 ProviderService 以平台默认 + 渠道覆盖合并；OpenAIAdapter/ReplicateAdapter/Coze 适配器在未配置 apiKey 时抛「配置不完整」异常
+    enforcement: 任务执行与 chat 流式链路（chatStream 与 TaskExecutionService）合并 { ...stripKeys(模型 defaultParams), ...provider.config } 后传给适配器，其中 provider.config 由 ProviderService 以平台默认 + 渠道覆盖合并；OpenAIAdapter/ReplicateAdapter/Coze 适配器在未配置 apiKey 时抛「配置不完整」异常
     test: 平台级 key 作为默认传给适配器
-    known_gap: chat（LLM SSE）当前直接使用 ai_models.defaultParams 调用适配器，未接入渠道解析；openai 协议模型在模型层不配 key 时必然报「配置不完整」。目标：chat 与 generate 一致，经 ProviderService 渠道解析合并 key
   - name: channel_identity_unique
     id: GTW-018
     severity: error
@@ -882,11 +881,11 @@ rules:
     test: 删除平台
   - name: route_model_channel_available
     id: GTW-022
-    severity: warning
-    level: warning
-    description: 默认路由解析应跳过无启用渠道的模型并继续下一路由（路由级 fallback）；当前仅实现渠道级 fallback，首选路由模型无渠道时直接报错
-    enforcement: ModelRoutingService.getDefaultModel 应 join model_channels 校验模型存在启用渠道（目标），当前实现仅校验路由与模型 isActive
-    test: model-routing.service.test.ts 返回首个启用路由模型及数据库 costCredits
+    severity: error
+    level: error
+    description: 默认路由解析跳过无启用渠道（或其平台停用）的模型并继续下一路由（路由级 fallback）；渠道级 fallback 在任务执行/chat 层继续生效
+    enforcement: ModelRoutingService.getDefaultModel 通过 exists 子查询校验模型存在启用渠道，按路由 priority 顺序返回首个可用模型
+    test: model-routing.service.test.ts 首选路由模型没有启用渠道时跳过该模型（路由级 fallback）
   - name: cost_dual_track
     id: GTW-023
     severity: error

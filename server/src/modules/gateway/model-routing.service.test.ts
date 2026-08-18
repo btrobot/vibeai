@@ -49,4 +49,60 @@ describe('ModelRoutingService', () => {
 
     await expect(service.getDefaultModel('unknown-capability')).resolves.toBeNull();
   });
+  it('无有效路由时返回 null', async () => {
+    const db = createDrizzleMockForNestJS();
+    const service = new ModelRoutingService(db as never);
+
+    await expect(service.getDefaultModel('unknown-capability')).resolves.toBeNull();
+  });
+
+  it('首选路由模型没有启用渠道时跳过该模型（路由级 fallback）', async () => {
+    const db = createDrizzleMockForNestJS();
+    // 主查询返回第二条路由模型（第一条无渠道被 exists 子查询过滤）
+    mockSingle(db, {
+      model: {
+        id: 'model-2',
+        slug: 'doubao-seedream-4-5',
+        name: 'Doubao Seedream 4.5',
+        providerName: 'doubao',
+        modality: 'image',
+        sdkModelId: 'doubao-seedream-4-5-251128',
+        sdkClient: 'image',
+        capabilities: ['image-generation'],
+        description: null,
+        avatar: null,
+        contextWindow: null,
+        maxOutputTokens: null,
+        inputModes: ['text'],
+        outputType: 'image',
+        constraints: {},
+        inputSchema: {},
+        defaultParams: {},
+        costCredits: 8,
+        tags: [],
+        isActive: true,
+        isFeatured: false,
+        sortOrder: 20,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const service2 = new ModelRoutingService(db as never);
+    await expect(service2.getDefaultModel('image-generation')).resolves.toMatchObject({
+      slug: 'doubao-seedream-4-5',
+      costCredits: 8,
+    });
+  });
+
+  it('查询异常时抛出 ServiceUnavailableException（不返回内存模型）', async () => {
+    const db = createDrizzleMockForNestJS();
+    db.select.mockImplementationOnce(() => {
+      throw new Error('DB error');
+    });
+    const service = new ModelRoutingService(db as never);
+
+    await expect(service.getDefaultModel('image-generation')).rejects.toThrow('模型路由配置暂时不可用');
+  });
 });
+

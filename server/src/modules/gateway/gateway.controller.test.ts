@@ -16,6 +16,7 @@ const mockGatewayService = {
   listRecipes: vi.fn(),
   submitGeneration: vi.fn(),
   quickCreate: vi.fn(),
+  chatStream: vi.fn(),
 };
 
 const mockAdapterRegistry = {
@@ -284,18 +285,21 @@ describe('GatewayController', () => {
   // ===== chat (SSE) =====
 
   describe('POST /gateway/chat (SSE)', () => {
-    it('应设置 SSE 响应头并流式输出 LLM 内容', async () => {
-      const model = { slug: 'doubao-seed-2-0-pro', name: 'Doubao Pro', costCredits: 1, modality: 'llm' as const, sdkModelId: 'doubao-seed-2-0-pro-260215', constraints: {}, defaultParams: {}, sortOrder: 0 };
-      mockGatewayService.getModel.mockResolvedValue(model);
+    const modelResult = {
+      modelUsed: 'doubao-seed-2-0-pro',
+      modelName: 'Doubao Pro',
+      costCredits: 1,
+      content: 'Hello, world',
+    };
 
-      const mockAdapter = {
-        execute: vi.fn().mockImplementation((_input, _model, ctx) => {
-          ctx.onProgress(0, 'Hello');
-          ctx.onProgress(50, 'Hello, world');
-          return Promise.resolve({ output: { type: 'text', content: 'Hello, world' } });
-        }),
-      };
-      mockAdapterRegistry.getAdapter.mockReturnValue(mockAdapter);
+    it('应设置 SSE 响应头并流式输出 LLM 内容', async () => {
+      mockGatewayService.chatStream.mockImplementation(
+        async (_userId, _body, _preferred, onProgress) => {
+          onProgress?.(0, 'Hello');
+          onProgress?.(50, 'Hello, world');
+          return modelResult;
+        },
+      );
       mockBillingService.deductCredits.mockResolvedValue(true);
 
       const res = createMockResponse();
@@ -311,6 +315,14 @@ describe('GatewayController', () => {
       expect(res.setHeader).toHaveBeenCalledWith('Connection', 'keep-alive');
       expect(res.setHeader).toHaveBeenCalledWith('Transfer-Encoding', 'chunked');
       expect(res.flushHeaders).toHaveBeenCalled();
+
+      // 渠道解析在 GatewayService.chatStream 内完成，controller 只转发 onProgress
+      expect(mockGatewayService.chatStream).toHaveBeenCalledWith(
+        'user-1',
+        { prompt: '你好', modelSlug: 'doubao-seed-2-0-pro' },
+        'doubao-seed-2-0-pro',
+        expect.any(Function),
+      );
 
       // Verify streaming output
       expect(res.write).toHaveBeenCalled();
@@ -334,44 +346,8 @@ describe('GatewayController', () => {
       expect(res.end).toHaveBeenCalled();
     });
 
-    it('按模型的 sdkClient 选择适配器（openai 协议模型）', async () => {
-      const model = {
-        slug: 'gpt-4o',
-        name: 'GPT-4o (ppToken)',
-        costCredits: 3,
-        modality: 'llm' as const,
-        sdkModelId: 'gpt-4o',
-        sdkClient: 'openai',
-        constraints: {},
-        defaultParams: { baseUrl: 'https://cn.pptoken.cc/v1' },
-        sortOrder: 0,
-      };
-      mockGatewayService.getModel.mockResolvedValue(model);
-      const mockAdapter = {
-        execute: vi.fn().mockImplementation((_i, _m, c) => {
-          c.onProgress(0, 'ok');
-          return Promise.resolve({ output: { content: 'ok' } });
-        }),
-      };
-      mockAdapterRegistry.getAdapter.mockReturnValue(mockAdapter);
-      mockBillingService.deductCredits.mockResolvedValue(true);
-
-      const res = createMockResponse();
-      await controller.chat(createMockRequest(), { prompt: '你好', modelSlug: 'gpt-4o' }, res);
-
-      expect(mockAdapterRegistry.getAdapter).toHaveBeenCalledWith('openai');
-      expect(mockAdapter.execute).toHaveBeenCalledTimes(1);
-      expect(res.end).toHaveBeenCalled();
-    });
-
-    it('无 modelSlug 时应使用默认文本生成模型', async () => {
-      const model = { slug: 'doubao-seed-2-0-pro', name: 'Doubao Pro', costCredits: 1, modality: 'llm' as const, sdkModelId: 'doubao-seed-2-0-pro-260215', constraints: {}, defaultParams: {}, sortOrder: 0 };
-      mockGatewayService.getDefaultModel.mockResolvedValue(model);
-
-      const mockAdapter = {
-        execute: vi.fn().mockResolvedValue({ output: { type: 'text', content: 'OK' } }),
-      };
-      mockAdapterRegistry.getAdapter.mockReturnValue(mockAdapter);
+    it('无 modelSlug 时使用默认文本生成模型（chatStream 不传 preferredModel）', async () => {
+      mockGatewayService.chatStream.mockResolvedValue(modelResult);
       mockBillingService.deductCredits.mockResolvedValue(true);
 
       const res = createMockResponse();
@@ -381,29 +357,33 @@ describe('GatewayController', () => {
         res,
       );
 
-      expect(mockGatewayService.getDefaultModel).toHaveBeenCalledWith('text-generation');
-      expect(mockGatewayService.getModel).not.toHaveBeenCalled();
+      expect(mockGatewayService.chatStream).toHaveBeenCalledWith(
+        'user-1',
+        { prompt: '你好' },
+        undefined,
+        expect.any(Function),
+      );
+      expect(res.end).toHaveBeenCalled();
     });
 
-    it('没有可用模型时应抛出 NotFoundException', async () => {
-      mockGatewayService.getModel.mockResolvedValue(null);
-      mockGatewayService.getDefaultModel.mockResolvedValue(null);
+    it('渠道解析失败（无可用模型）时通过 SSE 返回错误信息', async () => {
+      mockGatewayService.chatStream.mockRejectedValue(new Error('没有可用的文本生成模型'));
 
       const res = createMockResponse();
+      await controller.chat(
+        createMockRequest(),
+        { prompt: '你好' },
+        res,
+      );
 
-      await expect(
-        controller.chat(createMockRequest(), { prompt: '你好' }, res),
-      ).rejects.toThrow('没有可用的文本生成模型');
+      const writes = (res as any)._data as string[];
+      expect(writes.some((w) => w.includes('"error"') && w.includes('没有可用的文本生成模型'))).toBe(true);
+      expect(mockBillingService.deductCredits).not.toHaveBeenCalled();
+      expect(res.end).toHaveBeenCalled();
     });
 
-    it('适配器执行失败时应通过 SSE 返回错误信息', async () => {
-      const model = { slug: 'doubao-seed-2-0-pro', name: 'Doubao Pro', costCredits: 1, modality: 'llm' as const, sdkModelId: 'doubao-seed-2-0-pro-260215', constraints: {}, defaultParams: {}, sortOrder: 0 };
-      mockGatewayService.getModel.mockResolvedValue(model);
-
-      const mockAdapter = {
-        execute: vi.fn().mockRejectedValue(new Error('LLM 服务不可用')),
-      };
-      mockAdapterRegistry.getAdapter.mockReturnValue(mockAdapter);
+    it('适配器执行失败时应通过 SSE 返回错误信息且不扣信用', async () => {
+      mockGatewayService.chatStream.mockRejectedValue(new Error('所有渠道均失败: LLM 服务不可用'));
 
       const res = createMockResponse();
       await controller.chat(
@@ -424,17 +404,13 @@ describe('GatewayController', () => {
     });
 
     it('流式过程中应通过 onProgress 推送每个 chunk', async () => {
-      const model = { slug: 'doubao-seed-2-0-pro', name: 'Doubao Pro', costCredits: 1, modality: 'llm' as const, sdkModelId: 'doubao-seed-2-0-pro-260215', constraints: {}, defaultParams: {}, sortOrder: 0 };
-      mockGatewayService.getDefaultModel.mockResolvedValue(model);
-
       const chunks = ['你', '好', '世界'];
-      const mockAdapter = {
-        execute: vi.fn().mockImplementation((_input, _model, ctx) => {
-          chunks.forEach((c, i) => ctx.onProgress((i + 1) * 33, c));
-          return Promise.resolve({ output: { type: 'text', content: chunks.join('') } });
-        }),
-      };
-      mockAdapterRegistry.getAdapter.mockReturnValue(mockAdapter);
+      mockGatewayService.chatStream.mockImplementation(
+        async (_userId, _body, _preferred, onProgress) => {
+          chunks.forEach((c, i) => onProgress?.((i + 1) * 33, c));
+          return modelResult;
+        },
+      );
       mockBillingService.deductCredits.mockResolvedValue(true);
 
       const res = createMockResponse();
