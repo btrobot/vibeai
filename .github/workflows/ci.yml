@@ -91,6 +91,29 @@ jobs:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
     needs: build
+    # 自包含：Postgres 16 service container，前端/后端由 Playwright webServer 托管
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vibeai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d vibeai"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # 与 e2e spec 内注入 token 的硬编码密钥保持一致（见 workspace-ui.spec.ts）
+      JWT_SECRET: Z/lme83PlgUpglGV6Ha8qifMhVZkGvNhuk0VTbT4nFM=
+      JWT_REFRESH_SECRET: Z/lme83PlgUpglGV6Ha8qifMhVZkGvNhuk0VTbT4nFM=
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/vibeai
+      INTEGRATION_TEST: "true"
+      STORAGE_PROVIDER: local
+      E2E_CI_SERVERS: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -103,14 +126,17 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Install dependencies
+      - name: Install root dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install backend dependencies
+        run: cd server && pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Build
-        run: pnpm run build
+      - name: Build backend (webServer 运行 dist/main.js，启动即迁移+种子)
+        run: cd server && pnpm build
 
       - name: Run E2E tests
         run: pnpm test:e2e
