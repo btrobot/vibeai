@@ -390,6 +390,31 @@ describe('GatewayService', () => {
       expect(resolved.referenceImages).toEqual([]);
     });
 
+    it('带 role 的 referenceImages（{role,fileId}）按序解析为 URL 数组（role 契约兼容）', async () => {
+      const urlMap = new Map<string, string>([
+        ['file-a', 'https://cdn.example.com/a.png'],
+        ['file-b', 'https://cdn.example.com/b.png'],
+      ]);
+      vi.spyOn(service['storageService'], 'resolveUrls').mockResolvedValue(urlMap);
+
+      const input = {
+        prompt: '模特换装',
+        referenceImages: [
+          { role: 'model', fileId: 'file-a' },
+          { role: 'garment', fileId: 'file-b' },
+        ],
+      };
+
+      const resolved = await (service as any).resolveInputForAdapter(input);
+
+      // 适配器消费侧：按槽位顺序的纯 URL 数组（当前模型接口无需角色化输入，role 保留在快照 creates.input/tasks.input）
+      expect(service['storageService'].resolveUrls).toHaveBeenCalledWith(['file-a', 'file-b']);
+      expect(resolved.referenceImages).toEqual([
+        'https://cdn.example.com/a.png',
+        'https://cdn.example.com/b.png',
+      ]);
+    });
+
     it('遗留单图 referenceImage {fileId} 应解析为 URL（兼容路径）', async () => {
       const urlMap = new Map<string, string>([['file-a', 'https://cdn.example.com/a.png']]);
       vi.spyOn(service['storageService'], 'resolveUrls').mockResolvedValue(urlMap);

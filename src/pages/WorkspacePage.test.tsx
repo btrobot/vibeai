@@ -88,6 +88,31 @@ const mockImageModels = [
   },
 ];
 
+const mockVideoModels = [
+  {
+    slug: 'doubao-seedance-1-5-pro',
+    name: 'Doubao Seedance 1.5 Pro',
+    description: '专业视频模型',
+    costCredits: 20,
+    tags: [],
+    isDefault: true,
+    sortOrder: 1,
+    capabilities: ['video-generation'],
+    modality: 'video',
+  },
+  {
+    slug: 'doubao-seedance-2-0',
+    name: 'Doubao Seedance 2.0',
+    description: '新一代视频模型（支持风格克隆）',
+    costCredits: 25,
+    tags: [],
+    isDefault: false,
+    sortOrder: 2,
+    capabilities: ['video-generation', 'style-cloning'],
+    modality: 'video',
+  },
+];
+
 function renderWorkspace(projectId = 'proj-1') {
   localStorage.setItem('auth_tokens', JSON.stringify({
     accessToken: 'mock-token',
@@ -1124,6 +1149,62 @@ describe('WorkspacePage', () => {
         { role: 'garment', fileId: 'f-garment' },
       ]);
       expect((requestBody as { capabilitySlug: string }).capabilitySlug).toBe('model-dressing');
+    });
+  });
+
+  it('视频 Tab 选风格克隆：参考视频槽上传后提交 referenceVideos（含能力过滤）', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    let requestedCapability = '';
+    server.use(
+      http.get('/api/gateway/models', ({ request }) => {
+        const capability = new URL(request.url).searchParams.get('capability');
+        requestedCapability = capability ?? '';
+        if (capability === 'style-cloning') {
+          return HttpResponse.json({ success: true, data: [mockVideoModels.find((m) => m.slug === 'doubao-seedance-2-0')].filter(Boolean) });
+        }
+        return HttpResponse.json({ success: true, data: mockVideoModels });
+      }),
+      http.post('/api/gateway/generate', async ({ request }) => {
+        requestBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { createId: 'create-v', modelSlug: 'doubao-seedance-2-0' } });
+      }),
+      http.post('/api/storage/upload', () => HttpResponse.json({ success: true, data: { id: 'video-1' } })),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+    await waitFor(() => { expect(screen.getByTitle('视频生成')).toBeInTheDocument(); });
+    await user.click(screen.getByTitle('视频生成'));
+
+    // 默认视频 tab：capability=video-generation
+    await waitFor(() => {
+      expect(requestedCapability).toBe('video-generation');
+    });
+
+    // 选风格克隆 → 模型按 capability=style-cloning 过滤 + 参考视频槽出现
+    const capSelect = await screen.findByRole('combobox', { name: '视频能力' });
+    await user.selectOptions(capSelect, 'style-cloning');
+    await waitFor(() => {
+      expect(requestedCapability).toBe('style-cloning');
+      expect(screen.getByLabelText('参考视频（点击上传）')).toBeInTheDocument();
+    });
+
+    // 上传参考视频
+    await user.click(screen.getByLabelText('参考视频（点击上传）'));
+    const videoInput = document.querySelectorAll('input[type="file"]')[1] as HTMLInputElement;
+    await user.upload(videoInput, new File(['v'], 'style.mp4', { type: 'video/mp4' }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('参考视频（已上传，点击替换）')).toBeInTheDocument();
+    });
+
+    // 提交：capabilitySlug=style-cloning + referenceVideos 契约
+    await user.type(screen.getByPlaceholderText(/输入提示词/), '克隆这个视频的风格');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => {
+      expect(requestBody).toBeTruthy();
+      expect((requestBody as { capabilitySlug: string }).capabilitySlug).toBe('style-cloning');
+      const input = (requestBody as { input: Record<string, unknown> }).input;
+      expect(input.referenceVideos).toEqual([{ fileId: 'video-1' }]);
     });
   });
 });

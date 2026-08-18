@@ -36,6 +36,7 @@ import { useCreateWebSocket, type CreateWsEvent } from '@/hooks/useCreateWebSock
 import { apiFetch } from '@/lib/apiClient';
 import { ReferenceImageStack, type UploadedRefImage } from '@/components/ReferenceImageStack';
 import { RoleImageSlots } from '@/components/RoleImageSlots';
+import { ReferenceVideoSlot, type UploadedRefVideo } from '@/components/ReferenceVideoSlot';
 
 // Map backend icon strings to Lucide components
 const iconMap: Record<string, LucideIcon> = {
@@ -328,12 +329,16 @@ export default function WorkspacePage() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedRefImage[]>([]);
   const [uploading, setUploading] = useState(false);
+  // 风格克隆参考视频（独立契约字段 referenceVideos:[{fileId}]，非参考图 role）
+  const [uploadedVideo, setUploadedVideo] = useState<UploadedRefVideo | null>(null);
+  const [videoUploading, setVideoUploading] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [specParams, setSpecParams] = useState<Record<string, string>>({});
   const [collapsedDayGroups, setCollapsedDayGroups] = useState<Set<string>>(new Set());
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   // 槽位模式：点击某角色槽后记录 pendingRole，文件选择落地到该槽（单张替换语义）
   const pendingRoleRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -491,7 +496,9 @@ export default function WorkspacePage() {
 
     const queryParam = activeTab === 'image'
       ? (selectedCapability ? `capability=${encodeURIComponent(selectedCapability)}` : `modality=image`)
-      : `capability=${encodeURIComponent(activeTab)}`;
+      : activeTab === 'video-generation'
+        ? (selectedCapability ? `capability=${encodeURIComponent(selectedCapability)}` : `capability=video-generation`)
+        : `capability=${encodeURIComponent(activeTab)}`;
     apiFetch(`/api/gateway/models?${queryParam}`, {
       signal: controller.signal,
     })
@@ -533,6 +540,8 @@ export default function WorkspacePage() {
       const hasRef = uploadedFiles.length > 0;
       const modelCaps = models.find((m) => m.slug === selectedModelSlug)?.capabilities || ['image-generation'];
       setResolvedCapability(detectImageCapability(prompt, hasRef, modelCaps));
+    } else if (activeTab === 'video-generation') {
+      setResolvedCapability(selectedCapability ?? 'video-generation');
     } else {
       setResolvedCapability(activeTab);
     }
@@ -546,6 +555,9 @@ export default function WorkspacePage() {
       const input: Record<string, unknown> = { prompt: prompt.trim() };
       if (uploadedFiles.length > 0) {
         input.referenceImages = uploadedFiles.map((f) => (f.role ? { role: f.role, fileId: f.fileId } : { fileId: f.fileId }));
+      }
+      if (selectedCapability === 'style-cloning' && uploadedVideo) {
+        input.referenceVideos = [{ fileId: uploadedVideo.fileId }];
       }
 
       const res = await apiFetch('/api/gateway/generate', {
@@ -568,6 +580,7 @@ export default function WorkspacePage() {
         setPrompt('');
         setSourceCreateId(null);
         clearUploadedFiles();
+        clearUploadedVideo();
         // Add optimistic create to the list
         const capInfo = capabilities.find((c) => c.slug === resolvedCapability);
         if (data?.data?.createId) {
@@ -684,6 +697,24 @@ export default function WorkspacePage() {
           }
         })
         .catch(() => { /* 预览失败不阻塞修改流程 */ });
+    }
+
+    // 风格克隆参考视频恢复（快照 referenceVideos 数组优先，服务端注入 url；遗留无 url 按需 GET）
+    const refVideos = (create.input as { referenceVideos?: Array<{ fileId: string; url?: string }> } | null)?.referenceVideos;
+    if (refVideos?.length && refVideos[0].fileId) {
+      const first = refVideos[0];
+      if (first.url) {
+        setUploadedVideo({ fileId: first.fileId, previewUrl: first.url, name: '原参考视频' });
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        apiFetch(`/api/storage/files/${first.fileId}`)
+          .then(async (res) => {
+            if (!res.ok) return;
+            const file = await res.json() as { id: string; url: string; originalName: string };
+            if (file.url) setUploadedVideo({ fileId: file.id, previewUrl: file.url, name: file.originalName || '原参考视频' });
+          })
+          .catch(() => { /* 预览失败不阻塞修改流程 */ });
+      }
     }
   };
 
@@ -814,6 +845,52 @@ export default function WorkspacePage() {
     } else if (failed > 0) {
       showToast('error', `${failed} 张图片上传失败`);
     }
+  };
+
+  const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      if (videoInputRef.current) videoInputRef.current.value = '';
+      return;
+    }
+    if (!file.type.startsWith('video/')) {
+      showToast('error', '仅支持视频文件');
+      if (videoInputRef.current) videoInputRef.current.value = '';
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      showToast('error', '参考视频不能超过 50MB');
+      if (videoInputRef.current) videoInputRef.current.value = '';
+      return;
+    }
+    const previewUrl = URL.createObjectURL(file);
+    setVideoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('category', 'temp');
+      const uploadRes = await apiFetch('/api/storage/upload', { method: 'POST', body: formData });
+      const uploadData = await uploadRes.json();
+      const upload = uploadData.data ?? uploadData;
+      if (uploadRes.ok && upload.id) {
+        setUploadedVideo({ fileId: upload.id, previewUrl, name: file.name });
+        showToast('success', '参考视频已上传');
+      } else {
+        URL.revokeObjectURL(previewUrl);
+        showToast('error', '视频上传失败');
+      }
+    } catch {
+      URL.revokeObjectURL(previewUrl);
+      showToast('error', '网络错误');
+    } finally {
+      setVideoUploading(false);
+      if (videoInputRef.current) videoInputRef.current.value = '';
+    }
+  };
+
+  const clearUploadedVideo = () => {
+    if (uploadedVideo) URL.revokeObjectURL(uploadedVideo.previewUrl);
+    setUploadedVideo(null);
   };
 
   const clearUploadedFiles = () => {
@@ -1161,6 +1238,22 @@ export default function WorkspacePage() {
                     onChange={handleFileSelect}
                     className="hidden"
                   />
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/*"
+                    onChange={handleVideoSelect}
+                    className="hidden"
+                  />
+                  {activeTab === 'video-generation' && selectedCapability === 'style-cloning' && (
+                    <ReferenceVideoSlot
+                      video={uploadedVideo}
+                      uploading={videoUploading}
+                      disabled={submitting}
+                      onSelect={() => videoInputRef.current?.click()}
+                      onRemove={clearUploadedVideo}
+                    />
+                  )}
                   {supportsImageUpload && showRoleSlots && selectedCapability ? (
                     <RoleImageSlots
                       files={uploadedFiles}
@@ -1229,6 +1322,24 @@ export default function WorkspacePage() {
                       </span>
                     )}
                   </>
+                )}
+
+                {/* 能力选择（视频 Tab：视频生成 / 风格克隆；风格克隆需参考视频） */}
+                {activeTab === 'video-generation' && (
+                  <select
+                    aria-label="视频能力"
+                    value={selectedCapability ?? ''}
+                    onChange={(event) => {
+                      const next = event.target.value || null;
+                      setSelectedCapability(next);
+                      clearUploadedVideo();
+                    }}
+                    className="h-9 shrink-0 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+                  >
+                    <option value="">自动识别（{resolvedCapability === 'style-cloning' ? '风格克隆' : '视频生成'}）</option>
+                    <option value="video-generation">视频生成</option>
+                    <option value="style-cloning">风格克隆</option>
+                  </select>
                 )}
 
                 {/* Model selector */}
