@@ -599,7 +599,7 @@ describe('WorkspacePage', () => {
     });
   });
 
-  it('图片 Tab：基于此修改的图片创作自动检测能力', async () => {
+  it('图片 Tab：基于此修改的图片创作能力对齐快照（不因 prompt 关键词漂移）', async () => {
     let postedBody: Record<string, unknown> | null = null;
     server.use(
       http.post('/api/gateway/generate', async ({ request }) => {
@@ -632,11 +632,11 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: /基于此修改/ }));
     await new Promise((r) => setTimeout(r, 300));
 
-    // 提交
+    // 提交：能力对齐快照 image-generation（修改 = 延续原意图；需要换装可在能力选择器手动切换）
     await user.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
-      expect(postedBody).toMatchObject({ capabilitySlug: 'model-dressing' });
+      expect(postedBody).toMatchObject({ capabilitySlug: 'image-generation' });
     });
   });
 
@@ -1063,6 +1063,67 @@ describe('WorkspacePage', () => {
       expect(input.referenceImages).toEqual([
         { role: 'model', fileId: 'uploaded-2' }, // 替换后的新图，只有一张 model
       ]);
+    });
+  });
+
+  it('基于此修改：带 role 快照恢复时能力选择器对齐 + 槽位呈现', async () => {
+    const dressingWork = {
+      id: 'create-dress', capabilitySlug: 'model-dressing', prompt: '模特换装测试', sourceCreateId: null,
+      status: 'completed', output: { images: [{ url: 'https://img.example/out.png' }] },
+      modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskStatus: 'completed',
+      taskProgress: 100, createdAt: '2026-01-15T13:00:00Z', updatedAt: '2026-01-15T13:00:30Z',
+      input: {
+        prompt: '模特换装测试',
+        referenceImages: [
+          { role: 'model', fileId: 'f-model', url: 'https://img.example/model.png' },
+          { role: 'garment', fileId: 'f-garment', url: 'https://img.example/garment.png' },
+        ],
+      },
+    };
+    server.use(
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({ total: 1, items: [dressingWork] })),
+      http.get('/api/gateway/models', ({ request }) => {
+        const capability = new URL(request.url).searchParams.get('capability');
+        if (capability === 'model-dressing') {
+          return HttpResponse.json({ success: true, data: mockImageModels.filter((m) => m.capabilities.includes('model-dressing')) });
+        }
+        return HttpResponse.json({ success: true, data: mockImageModels });
+      }),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+    await waitFor(() => { expect(screen.getByText('基于此修改')).toBeInTheDocument(); });
+    await user.click(screen.getByText('基于此修改'));
+
+    // 能力选择器对齐 model-dressing
+    const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
+    await waitFor(() => {
+      expect(capSelect).toHaveValue('model-dressing');
+    });
+    // 槽位呈现：模特图 + 衣服图均已上传（快照 url 注入，不触发按需 GET）
+    await waitFor(() => {
+      expect(screen.getByLabelText('模特图（已上传，点击替换）')).toBeInTheDocument();
+      expect(screen.getByLabelText('衣服图（已上传，点击替换）')).toBeInTheDocument();
+    });
+    // 提交时保留 role
+    await user.type(screen.getByPlaceholderText(/输入提示词/), ' 换个颜色');
+    let requestBody: Record<string, unknown> | undefined;
+    server.use(
+      http.post('/api/gateway/generate', async ({ request }) => {
+        requestBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { createId: 'create-4', modelSlug: 'doubao-seedream-5-0' } });
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => {
+      expect(requestBody).toBeTruthy();
+      const input = (requestBody as { input: Record<string, unknown> }).input;
+      expect(input.referenceImages).toEqual([
+        { role: 'model', fileId: 'f-model' },
+        { role: 'garment', fileId: 'f-garment' },
+      ]);
+      expect((requestBody as { capabilitySlug: string }).capabilitySlug).toBe('model-dressing');
     });
   });
 });

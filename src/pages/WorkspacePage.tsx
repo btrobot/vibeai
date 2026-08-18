@@ -644,6 +644,8 @@ export default function WorkspacePage() {
     // 修改时切换到对应 tab
     const isImage = IMAGE_OUTPUT_CAPABILITIES.includes(create.capabilitySlug);
     setActiveTab(isImage ? 'image' : create.capabilitySlug);
+    // 图片创作修改：能力选择器对齐快照能力（模型列表按能力过滤 + 参考图槽位呈现）
+    if (isImage) setSelectedCapability(create.capabilitySlug);
     // 恢复参考图：新快照 referenceImages 数组优先（服务端 resolveMediaUrls 已注入 url），
     // 遗留单图 referenceImage 快照回退按需 GET（与改造前行为一致）
     const refInput = create.input as {
