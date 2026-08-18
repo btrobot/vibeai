@@ -35,7 +35,6 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { useCreateWebSocket, type CreateWsEvent } from '@/hooks/useCreateWebSocket';
 import { apiFetch } from '@/lib/apiClient';
 import { ReferenceImageStack, type UploadedRefImage } from '@/components/ReferenceImageStack';
-import { RoleImageSlots } from '@/components/RoleImageSlots';
 import { ReferenceVideoSlot, type UploadedRefVideo } from '@/components/ReferenceVideoSlot';
 import { FirstFrameSlot, type UploadedFirstFrame } from '@/components/FirstFrameSlot';
 
@@ -158,24 +157,10 @@ export const SELECTABLE_IMAGE_CAPABILITIES = IMAGE_OUTPUT_CAPABILITIES.filter(
   (slug) => !(DISABLED_IMAGE_CAPABILITIES as readonly string[]).includes(slug),
 );
 
-// 图片能力参考图槽位语义（对齐 specs/gateway.spec.yaml AICapability.inputSchema.refImageRoles）
-// 用户在图片 Tab 手动选择能力时，上传参考图按槽位顺序分配 role；
-// 自动识别模式不分配 role（系统猜测的能力不标记用户图片，保持无 role 通用数组契约）
-interface RefImageRole { role: string; label: string; max: number }
-export const REF_IMAGE_ROLES: Record<string, RefImageRole[]> = {
-  'image-generation': [],
-  // 图片编辑 = 通用多参考图（图一换到图二 等语义由 prompt 描述，不分配 role）
-  'image-editing': [],
-  'background-removal': [{ role: 'subject', label: '商品图', max: 1 }],
-  'scene-composition': [
-    { role: 'product', label: '商品图', max: 1 },
-    { role: 'scene', label: '场景图', max: 1 },
-  ],
-  'model-dressing': [
-    { role: 'model', label: '模特图', max: 1 },
-    { role: 'garment', label: '衣服图', max: 1 },
-  ],
-};
+// L1/L2 分层（2026-08 产品共识，对齐 RunningHub）：
+//   L1 生成层 = 文生图（image-generation，无参考图）/ 图片编辑（image-editing，多参考图无 role，语义由 prompt 描述）
+//   L2 后处理层 = 白底/场景/换装/局部重绘 等"结果图附加操作"，本期不启用（enabled: false，历史数据仅渲染）
+// 参考图 role 槽位（refImageRoles）属 L2 操作语义，L1 不消费；specs/gateway.spec.yaml 保留字段作为历史/未来 L2 文档
 
 
 // 图片能力判定（2026-08 简化，无正则）：
@@ -318,7 +303,7 @@ export default function WorkspacePage() {
   const [capabilities, setCapabilities] = useState<CapabilityInfo[]>(fallbackCapabilities);
   const [activeTab, setActiveTab] = useState('image');
   const [resolvedCapability, setResolvedCapability] = useState('image-generation');
-  // 图片 Tab 手动选择的能力（null = 自动识别）；选能力后模型列表按 capability 过滤，参考图按 refImageRoles 分配 role
+  // 视频 Tab 手动选择的能力（null = 自动识别）；图片 Tab 无能力选择器（L1 纯自动识别）
   const [selectedCapability, setSelectedCapability] = useState<string | null>(null);
   const [models, setModels] = useState<GatewayModelSummary[]>([]);
   const [selectedModelSlug, setSelectedModelSlug] = useState('');
@@ -346,7 +331,6 @@ export default function WorkspacePage() {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const firstFrameInputRef = useRef<HTMLInputElement>(null);
   // 槽位模式：点击某角色槽后记录 pendingRole，文件选择落地到该槽（单张替换语义）
-  const pendingRoleRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const didInitialScrollRef = useRef(false);
   const publishedIdsRef = useRef<Set<string>>(new Set());
@@ -750,52 +734,11 @@ export default function WorkspacePage() {
   const imageUploadCapabilities = ['image'];
   const supportsImageUpload = imageUploadCapabilities.includes(activeTab);
 
-  // 槽位模式：手动选择的能力定义了 refImageRoles 时，参考图按角色槽位渲染/分配
-  const activeRefRoles = selectedCapability ? REF_IMAGE_ROLES[selectedCapability] ?? [] : [];
-  const showRoleSlots = activeTab === 'image' && activeRefRoles.length > 0;
-
   const MAX_REF_IMAGES = 9;
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files ?? []);
     if (selected.length === 0) return;
-
-    // 槽位模式：单张消费 pendingRole（替换该槽已有图）
-    const roleOverride = pendingRoleRef.current;
-    if (roleOverride) {
-      pendingRoleRef.current = null;
-      const file = selected[0];
-      if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
-        showToast('error', '仅支持 10MB 以内的图片');
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return;
-      }
-      const previewUrl = URL.createObjectURL(file);
-      setUploading(true);
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('category', 'temp');
-        const uploadRes = await apiFetch('/api/storage/upload', { method: 'POST', body: formData });
-        const uploadData = await uploadRes.json();
-        const upload = uploadData.data ?? uploadData;
-        if (uploadRes.ok && upload.id) {
-          // 替换语义：移除该角色已有图后落入新图
-          setUploadedFiles((prev) => [...prev.filter((f) => f.role !== roleOverride), { fileId: upload.id, previewUrl, name: file.name, role: roleOverride }]);
-          showToast('success', `${file.name} 已作为${activeRefRoles.find((r) => r.role === roleOverride)?.label ?? '参考图'}`);
-        } else {
-          URL.revokeObjectURL(previewUrl);
-          showToast('error', '图片上传失败');
-        }
-      } catch {
-        URL.revokeObjectURL(previewUrl);
-        showToast('error', '网络错误');
-      } finally {
-        setUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      }
-      return;
-    }
 
     // 累计上限：堆叠总数不超过 maxImages，多余截断
     const remaining = Math.max(MAX_REF_IMAGES - uploadedFiles.length, 0);
@@ -811,7 +754,6 @@ export default function WorkspacePage() {
 
     setUploading(true);
     const targetTab = activeTab; // 上传中切 tab 则中止，不落地错 tab 图片
-    const targetCapability = selectedCapability; // 上传中切能力则中止，避免 role 错标
     let failed = 0;
     let uploaded = 0;
 
@@ -838,14 +780,9 @@ export default function WorkspacePage() {
             const upload = uploadData.data ?? uploadData;
             const fileId = upload.id;
             if (fileId) {
-              // 上传中切 tab/能力：中止循环，丢弃已完成项
-              if (activeTab !== targetTab || selectedCapability !== targetCapability) break;
-              setUploadedFiles((prev) => {
-                // 手动选择能力时按槽位顺序分配 role（第 N 张 → roles[N-1]）；自动识别/无槽位定义 → 无 role
-                const roles = selectedCapability ? REF_IMAGE_ROLES[selectedCapability] ?? [] : [];
-                const role = roles[prev.length]?.role;
-                return [...prev, { fileId, previewUrl, name: file.name, ...(role ? { role } : {}) }];
-              });
+              // 上传中切 tab 则中止循环，丢弃已完成项
+              if (activeTab !== targetTab) break;
+              setUploadedFiles((prev) => [...prev, { fileId, previewUrl, name: file.name }]);
               uploaded += 1;
             } else {
               failed += 1;
@@ -1339,19 +1276,7 @@ export default function WorkspacePage() {
                       onRemove={clearUploadedVideo}
                     />
                   )}
-                  {supportsImageUpload && showRoleSlots && selectedCapability ? (
-                    <RoleImageSlots
-                      files={uploadedFiles}
-                      roles={activeRefRoles}
-                      uploading={uploading}
-                      disabled={submitting}
-                      onAdd={(role) => {
-                        pendingRoleRef.current = role;
-                        fileInputRef.current?.click();
-                      }}
-                      onRemove={removeUploadedFile}
-                    />
-                  ) : supportsImageUpload ? (
+                  {supportsImageUpload && (
                     <ReferenceImageStack
                       files={uploadedFiles}
                       uploading={uploading}
@@ -1360,7 +1285,7 @@ export default function WorkspacePage() {
                       onRemove={removeUploadedFile}
                       onClear={clearUploadedFiles}
                     />
-                  ) : null}
+                  )}
                 </div>
 
                 {/* Prompt input (flex-1) */}
