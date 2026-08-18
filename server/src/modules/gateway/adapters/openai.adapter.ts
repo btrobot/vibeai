@@ -114,6 +114,15 @@ export class OpenAIAdapter implements ProtocolAdapter {
     const controller = new AbortController();
     linkExternalSignal(controller, context.signal);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // 生成期心跳：外部网关（gpt-image 系列）可达 1-3 分钟，避免前端长时间静默
+    const submitStartedAt = Date.now();
+    const progressTicker = setInterval(() => {
+      const elapsed = Math.round((Date.now() - submitStartedAt) / 1000);
+      context.onProgress?.(
+        Math.min(90, 10 + Math.round(elapsed / 8)),
+        `AI 生成中…（已等待 ${elapsed}s）`,
+      );
+    }, 8_000);
     let response: Response;
     try {
       if (useEdits) {
@@ -165,6 +174,7 @@ export class OpenAIAdapter implements ProtocolAdapter {
       throw new Error(`OpenAI 兼容网关请求失败：${msg}`);
     } finally {
       clearTimeout(timer);
+      clearInterval(progressTicker);
     }
 
     let payload: OpenAIImageResponse;

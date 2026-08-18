@@ -275,7 +275,11 @@ export class StorageService {
     contentType: string,
     category: string = 'generated',
   ): Promise<{ fileId: string; url: string }> {
-    this.logger.log(`Downloading from ${sourceUrl} for user ${userId}`);
+    // 日志脱敏：data URL（如 AI 返回的 b64_json 转存）可能含整幅图像，只打类型与长度
+    const logSource = sourceUrl.startsWith('data:')
+      ? `data:…(${sourceUrl.length} chars)`
+      : sourceUrl;
+    this.logger.log(`Downloading from ${logSource} for user ${userId}`);
 
     // 1. 下载
     // 某些 AI 平台返回的 URL（如 Replicate 的 replicate.delivery）会重定向到 CDN，
