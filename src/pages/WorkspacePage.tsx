@@ -35,6 +35,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { useCreateWebSocket, type CreateWsEvent } from '@/hooks/useCreateWebSocket';
 import { apiFetch } from '@/lib/apiClient';
 import { ReferenceImageStack, type UploadedRefImage } from '@/components/ReferenceImageStack';
+import { RoleImageSlots } from '@/components/RoleImageSlots';
 
 // Map backend icon strings to Lucide components
 const iconMap: Record<string, LucideIcon> = {
@@ -333,6 +334,8 @@ export default function WorkspacePage() {
   const [collapsedDayGroups, setCollapsedDayGroups] = useState<Set<string>>(new Set());
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // 槽位模式：点击某角色槽后记录 pendingRole，文件选择落地到该槽（单张替换语义）
+  const pendingRoleRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const didInitialScrollRef = useRef(false);
   const publishedIdsRef = useRef<Set<string>>(new Set());
@@ -686,11 +689,52 @@ export default function WorkspacePage() {
   const imageUploadCapabilities = ['image'];
   const supportsImageUpload = imageUploadCapabilities.includes(activeTab);
 
+  // 槽位模式：手动选择的能力定义了 refImageRoles 时，参考图按角色槽位渲染/分配
+  const activeRefRoles = selectedCapability ? REF_IMAGE_ROLES[selectedCapability] ?? [] : [];
+  const showRoleSlots = activeTab === 'image' && activeRefRoles.length > 0;
+
   const MAX_REF_IMAGES = 9;
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files ?? []);
     if (selected.length === 0) return;
+
+    // 槽位模式：单张消费 pendingRole（替换该槽已有图）
+    const roleOverride = pendingRoleRef.current;
+    if (roleOverride) {
+      pendingRoleRef.current = null;
+      const file = selected[0];
+      if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
+        showToast('error', '仅支持 10MB 以内的图片');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+      const previewUrl = URL.createObjectURL(file);
+      setUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('category', 'temp');
+        const uploadRes = await apiFetch('/api/storage/upload', { method: 'POST', body: formData });
+        const uploadData = await uploadRes.json();
+        const upload = uploadData.data ?? uploadData;
+        if (uploadRes.ok && upload.id) {
+          // 替换语义：移除该角色已有图后落入新图
+          setUploadedFiles((prev) => [...prev.filter((f) => f.role !== roleOverride), { fileId: upload.id, previewUrl, name: file.name, role: roleOverride }]);
+          showToast('success', `${file.name} 已作为${activeRefRoles.find((r) => r.role === roleOverride)?.label ?? '参考图'}`);
+        } else {
+          URL.revokeObjectURL(previewUrl);
+          showToast('error', '图片上传失败');
+        }
+      } catch {
+        URL.revokeObjectURL(previewUrl);
+        showToast('error', '网络错误');
+      } finally {
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+      return;
+    }
 
     // 累计上限：堆叠总数不超过 maxImages，多余截断
     const remaining = Math.max(MAX_REF_IMAGES - uploadedFiles.length, 0);
@@ -1105,8 +1149,8 @@ export default function WorkspacePage() {
             <div className="flex min-w-0 flex-1 flex-col p-3">
               {/* Row 1: 参考图 (left stack) + Prompt (right flex-1) */}
               <div className="flex items-stretch gap-3">
-                {/* 参考图 stack：多图堆叠（折叠 → hover 扇形展开） */}
-                <div className="relative flex w-12 shrink-0 flex-col items-center justify-center overflow-visible">
+                {/* 参考图：手动选能力 → 角色槽位；否则多图堆叠（折叠 → hover 扇形展开） */}
+                <div className="relative flex shrink-0 flex-col items-center justify-center overflow-visible">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -1115,7 +1159,19 @@ export default function WorkspacePage() {
                     onChange={handleFileSelect}
                     className="hidden"
                   />
-                  {supportsImageUpload && (
+                  {supportsImageUpload && showRoleSlots && selectedCapability ? (
+                    <RoleImageSlots
+                      files={uploadedFiles}
+                      roles={activeRefRoles}
+                      uploading={uploading}
+                      disabled={submitting}
+                      onAdd={(role) => {
+                        pendingRoleRef.current = role;
+                        fileInputRef.current?.click();
+                      }}
+                      onRemove={removeUploadedFile}
+                    />
+                  ) : supportsImageUpload ? (
                     <ReferenceImageStack
                       files={uploadedFiles}
                       uploading={uploading}
@@ -1124,7 +1180,7 @@ export default function WorkspacePage() {
                       onRemove={removeUploadedFile}
                       onClear={clearUploadedFiles}
                     />
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Prompt input (flex-1) */}

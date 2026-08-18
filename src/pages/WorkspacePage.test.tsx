@@ -946,19 +946,27 @@ describe('WorkspacePage', () => {
     const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
     await user.selectOptions(capSelect, 'model-dressing');
 
-    // 槽位提示：第 1 张模特图 + 第 2 张衣服图
+    // 槽位提示：第 1 张模特图 + 第 2 张衣服图（能力选择器旁摘要 + 组件标签）
     await waitFor(() => {
-      expect(screen.getByText(/模特图/)).toBeInTheDocument();
-      expect(screen.getByText(/衣服图/)).toBeInTheDocument();
+      expect(screen.getByText('模特图 + 衣服图')).toBeInTheDocument();
+    });
+    // 两个角色槽位（空态）
+    expect(screen.getByLabelText('模特图（点击上传）')).toBeInTheDocument();
+    expect(screen.getByLabelText('衣服图（点击上传）')).toBeInTheDocument();
+
+    // 点击模特图槽位上传第 1 张（pendingRole=model）
+    await user.click(screen.getByLabelText('模特图（点击上传）'));
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(['a'], 'a.png', { type: 'image/png' }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('模特图（已上传，点击替换）')).toBeInTheDocument();
     });
 
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    await user.upload(fileInput, [
-      new File(['a'], 'a.png', { type: 'image/png' }),
-      new File(['b'], 'b.png', { type: 'image/png' }),
-    ]);
+    // 点击衣服图槽位上传第 2 张（pendingRole=garment）
+    await user.click(screen.getByLabelText('衣服图（点击上传）'));
+    await user.upload(fileInput, new File(['b'], 'b.png', { type: 'image/png' }));
     await waitFor(() => {
-      expect(screen.getByLabelText('移除参考图 2')).toBeInTheDocument();
+      expect(screen.getByLabelText('衣服图（已上传，点击替换）')).toBeInTheDocument();
     });
 
     await user.type(screen.getByPlaceholderText(/输入提示词/), '模特换上新衣服');
@@ -999,6 +1007,62 @@ describe('WorkspacePage', () => {
     await waitFor(() => {
       expect(postedBody).toBeTruthy();
       expect(postedBody).toMatchObject({ createId: 'create-edit', type: 'image' });
+    });
+  });
+
+  it('槽位替换：同一角色再次上传替换旧图，不追加（每槽 1 张）', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    let uploadSeq = 0;
+    server.use(
+      http.get('/api/gateway/models', ({ request }) => {
+        const capability = new URL(request.url).searchParams.get('capability');
+        if (capability === 'model-dressing') {
+          return HttpResponse.json({ success: true, data: mockImageModels.filter((m) => m.capabilities.includes('model-dressing')) });
+        }
+        return HttpResponse.json({ success: true, data: mockImageModels });
+      }),
+      http.post('/api/gateway/generate', async ({ request }) => {
+        requestBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { createId: 'create-3', modelSlug: 'doubao-seedream-5-0' } });
+      }),
+      http.post('/api/storage/upload', () => HttpResponse.json({ success: true, data: { id: `uploaded-${++uploadSeq}` } })),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+    await waitFor(() => { expect(screen.getByTitle('视频生成')).toBeInTheDocument(); });
+    await user.click(screen.getByTitle('图片'));
+
+    const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
+    await user.selectOptions(capSelect, 'model-dressing');
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+    // 第 1 次上传模特图
+    await user.click(screen.getByLabelText('模特图（点击上传）'));
+    await user.upload(fileInput, new File(['a'], 'a.png', { type: 'image/png' }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('模特图（已上传，点击替换）')).toBeInTheDocument();
+    });
+
+    // 再次点击模特图槽位上传新图（替换）
+    await user.click(screen.getByLabelText('模特图（已上传，点击替换）'));
+    await user.upload(fileInput, new File(['a2'], 'a2.png', { type: 'image/png' }));
+    await waitFor(() => {
+      // 替换后该槽仍只有一张（移除旧 + 落新）
+      expect(screen.getByAltText('a2.png')).toBeInTheDocument();
+      expect(screen.queryByAltText('a.png')).not.toBeInTheDocument();
+    });
+
+    await user.type(screen.getByPlaceholderText(/输入提示词/), '换上新衣服');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(requestBody).toBeTruthy();
+      const input = (requestBody as { input: Record<string, unknown> }).input;
+      expect(input.referenceImages).toEqual([
+        { role: 'model', fileId: 'uploaded-2' }, // 替换后的新图，只有一张 model
+      ]);
     });
   });
 });
