@@ -139,7 +139,7 @@ const capabilities = [
 ];
 
 // 图片类能力（输出图片）：详情恢复 / 发布 / 能力选择共用，防止集合漂移
-const IMAGE_OUTPUT_CAPABILITIES = [
+export const IMAGE_OUTPUT_CAPABILITIES = [
   'image-generation',
   'image-editing',
   'background-removal',
@@ -151,7 +151,7 @@ const IMAGE_OUTPUT_CAPABILITIES = [
 // 用户在图片 Tab 手动选择能力时，上传参考图按槽位顺序分配 role；
 // 自动识别模式不分配 role（系统猜测的能力不标记用户图片，保持无 role 通用数组契约）
 interface RefImageRole { role: string; label: string; max: number }
-const REF_IMAGE_ROLES: Record<string, RefImageRole[]> = {
+export const REF_IMAGE_ROLES: Record<string, RefImageRole[]> = {
   'image-generation': [],
   'image-editing': [{ role: 'target', label: '编辑目标图', max: 1 }],
   'background-removal': [{ role: 'subject', label: '商品图', max: 1 }],

@@ -1,5 +1,5 @@
 domain: gateway
-version: '4.4'
+version: '4.5'
 last_updated: '2026-08-18'
 entities:
   - name: AICapability
@@ -921,6 +921,25 @@ seed_data:
   # 生成方式：node --import tsx /tmp/dump-seeds.ts | node -e "js-yaml dump"
   # 平台/渠道：SEED_PLATFORMS（按模型 providerName 去重）+ SEED_CHANNELS（每模型一个渠道，config 空继承平台）
   # 平台 key/baseUrl 不在种子中硬编码，运行时在 Admin 后台配置（效率优先，明文存 DB）
+  # 图片类能力参考图槽位权威清单（refImageRoles）
+  # 前端 WorkspacePage REF_IMAGE_ROLES 必须与之双向一致（见 image-capability-consistency 测试）
+  capabilities:
+    - slug: image-generation
+      refImageRoles: []
+    - slug: image-editing
+      refImageRoles:
+        - { role: target, label: 编辑目标图, max: 1 }
+    - slug: background-removal
+      refImageRoles:
+        - { role: subject, label: 商品图, max: 1 }
+    - slug: scene-composition
+      refImageRoles:
+        - { role: product, label: 商品图, max: 1 }
+        - { role: scene, label: 场景图, max: 1 }
+    - slug: model-dressing
+      refImageRoles:
+        - { role: model, label: 模特图, max: 1 }
+        - { role: garment, label: 衣服图, max: 1 }
   platforms:
     - name: doubao
     - name: moonshot
