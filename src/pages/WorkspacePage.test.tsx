@@ -47,6 +47,8 @@ const mockModels = [
     tags: ['featured'],
     isDefault: true,
     sortOrder: 1,
+    capabilities: ['text-generation'],
+    modality: 'llm',
   },
   {
     slug: 'kimi-k2-5',
@@ -56,6 +58,33 @@ const mockModels = [
     tags: [],
     isDefault: false,
     sortOrder: 2,
+    capabilities: ['text-generation'],
+    modality: 'llm',
+  },
+];
+
+const mockImageModels = [
+  {
+    slug: 'doubao-seedream-5-0',
+    name: 'Doubao SeeDream 5.0',
+    description: '旗舰图像模型',
+    costCredits: 10,
+    tags: ['featured'],
+    isDefault: true,
+    sortOrder: 1,
+    capabilities: ['image-generation', 'image-editing', 'background-removal', 'scene-composition', 'model-dressing'],
+    modality: 'image',
+  },
+  {
+    slug: 'gpt-image-2',
+    name: 'GPT Image 2',
+    description: 'OpenAI 图像模型',
+    costCredits: 15,
+    tags: [],
+    isDefault: false,
+    sortOrder: 2,
+    capabilities: ['image-generation', 'image-editing'],
+    modality: 'image',
   },
 ];
 
@@ -85,7 +114,14 @@ describe('WorkspacePage', () => {
     server.use(
       http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
       http.get('/api/projects/proj-1/creates', () => HttpResponse.json({ total: 2, items: mockCreates })),
-      http.get('/api/gateway/models', () => HttpResponse.json({ success: true, data: mockModels })),
+      http.get('/api/gateway/models', ({ request }) => {
+        const url = new URL(request.url);
+        const modality = url.searchParams.get('modality');
+        if (modality === 'image') {
+          return HttpResponse.json({ success: true, data: mockImageModels });
+        }
+        return HttpResponse.json({ success: true, data: mockModels });
+      }),
     );
   });
 
@@ -113,7 +149,7 @@ describe('WorkspacePage', () => {
     expect(screen.getByText('这是一个测试项目')).toBeInTheDocument();
   });
 
-  it('应该渲染能力标签列表', async () => {
+  it('应该渲染合并后的能力标签列表（图片 Tab 合并）', async () => {
     server.use(
       http.get('/api/projects/proj-1', () =>
         HttpResponse.json(mockProject),
@@ -125,18 +161,22 @@ describe('WorkspacePage', () => {
 
     renderWorkspace();
 
+    // 等待 Tab 渲染（文本生成按钮存在，可能有多个匹配，用 getAllByRole 定位 Tab 区域）
     await waitFor(() => {
-      expect(screen.getAllByText('文本生成').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByRole('button').length).toBeGreaterThan(0);
     });
 
-    expect(screen.getByText('视频生成')).toBeInTheDocument();
-    expect(screen.getByText('白底图')).toBeInTheDocument();
-    expect(screen.getByText('场景合成')).toBeInTheDocument();
-    expect(screen.getByText('模特换装')).toBeInTheDocument();
-    expect(screen.getByText('详情页')).toBeInTheDocument();
+    // 合并后只显示 4 个 Tab：文本生成、图片、视频生成、详情页
+    expect(screen.getByRole('button', { name: '图片' })).toBeInTheDocument();
+    expect(screen.getAllByText('视频生成').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('详情页').length).toBeGreaterThanOrEqual(1);
+    // 白底图/场景合成/模特换装不再作为独立 Tab 出现
+    expect(screen.queryByText('白底图')).not.toBeInTheDocument();
+    expect(screen.queryByText('场景合成')).not.toBeInTheDocument();
+    expect(screen.queryByText('模特换装')).not.toBeInTheDocument();
   });
 
-  it('应该切换能力标签', async () => {
+  it('应该切换能力标签（图片 Tab）', async () => {
     server.use(
       http.get('/api/projects/proj-1', () =>
         HttpResponse.json(mockProject),
@@ -149,15 +189,12 @@ describe('WorkspacePage', () => {
     renderWorkspace();
     const user = userEvent.setup();
 
-    // 默认选中文本生成，输入框可见
     await waitFor(() => {
       expect(screen.getByText('视频生成')).toBeInTheDocument();
     });
 
-    // 点击图像生成标签（第一个按钮元素）
-    const imageButtons = screen.getAllByText('图像生成');
-    await user.click(imageButtons[0]);
-    // 输入框应该出现（使用 findBy 等待异步渲染）
+    // 点击图片 Tab
+    await user.click(screen.getByText('图片'));
     const textarea = await screen.findByPlaceholderText(/输入提示词/);
     expect(textarea).toBeInTheDocument();
   });
@@ -530,5 +567,76 @@ describe('WorkspacePage', () => {
     // 等异步处理完成
     await new Promise((r) => setTimeout(r, 100));
     expect(storageSpy).not.toHaveBeenCalled();
+  });
+
+  it('图片 Tab：无参考图时自动路由到图像生成', async () => {
+    let postedBody: Record<string, unknown> | null = null;
+    server.use(
+      http.post('/api/gateway/generate', async ({ request }) => {
+        postedBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { taskId: 't1', createId: 'c1' } });
+      }),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    // 等待加载完成，Tab 可见
+    await waitFor(() => {
+      expect(screen.getByText('视频生成')).toBeInTheDocument();
+    });
+
+    // 切到图片 Tab
+    await user.click(screen.getByText('图片'));
+    // 等图片模型加载 + 输入框出现
+    const textarea = await screen.findByPlaceholderText(/输入提示词/);
+    // 输入图片提示词，无参考图
+    await user.type(textarea, '一只猫');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(postedBody).toMatchObject({ capabilitySlug: 'image-generation' });
+    });
+  });
+
+  it('图片 Tab：基于此修改的图片创作自动检测能力', async () => {
+    let postedBody: Record<string, unknown> | null = null;
+    server.use(
+      http.post('/api/gateway/generate', async ({ request }) => {
+        postedBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { taskId: 't1', createId: 'c1' } });
+      }),
+      http.get('/api/storage/files/file-uuid-123', () => HttpResponse.json({ id: 'file-uuid-123', url: 'https://example.com/ref.png', originalName: 'ref.png' })),
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({
+        total: 1,
+        items: [{
+          id: 'c-img-ref', capabilitySlug: 'image-generation', prompt: '给模特换装成红色裙子', sourceCreateId: null,
+          status: 'completed', output: { images: [{ url: 'https://example.com/a.png' }] },
+          input: { prompt: '给模特换装成红色裙子', referenceImage: { fileId: 'file-uuid-123' } },
+          modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskStatus: 'completed',
+          taskProgress: 100, createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:01:00Z',
+        }],
+      })),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    // 等待加载完成
+    await waitFor(() => {
+      expect(screen.getByText('给模特换装成红色裙子')).toBeInTheDocument();
+    });
+
+    // 点击"基于此修改" → 触发 handleModify
+    await user.click(screen.getByRole('button', { name: /基于此修改/ }));
+    await new Promise((r) => setTimeout(r, 300));
+
+    // 提交
+    await user.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(postedBody).toMatchObject({ capabilitySlug: 'model-dressing' });
+    });
   });
 });

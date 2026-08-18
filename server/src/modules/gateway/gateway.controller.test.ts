@@ -113,7 +113,7 @@ describe('GatewayController', () => {
       const result = await controller.listModels(createMockRequest());
 
       expect(result).toEqual({ success: true, data: models });
-      expect(mockGatewayService.listModels).toHaveBeenCalledWith(undefined);
+      expect(mockGatewayService.listModels).toHaveBeenCalledWith(undefined, undefined);
     });
 
     it('应支持 ?capability= 过滤', async () => {
@@ -125,7 +125,19 @@ describe('GatewayController', () => {
       );
 
       expect(result).toEqual({ success: true, data: models });
-      expect(mockGatewayService.listModels).toHaveBeenCalledWith('image-generation');
+      expect(mockGatewayService.listModels).toHaveBeenCalledWith('image-generation', undefined);
+    });
+
+    it('应支持 ?modality= 过滤', async () => {
+      const models = [{ slug: 'gpt-image-2', modality: 'image' }];
+      mockGatewayService.listModels.mockResolvedValue(models);
+
+      const result = await controller.listModels(
+        createMockRequest({ query: { modality: 'image' } }),
+      );
+
+      expect(result).toEqual({ success: true, data: models });
+      expect(mockGatewayService.listModels).toHaveBeenCalledWith(undefined, 'image');
     });
   });
 

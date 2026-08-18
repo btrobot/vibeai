@@ -73,6 +73,8 @@ interface GatewayModelSummary {
   tags: string[];
   isDefault: boolean;
   sortOrder: number;
+  capabilities: string[];
+  modality: string;
 }
 
 // Fallback capabilities (used while loading or if API fails)
@@ -114,6 +116,14 @@ interface Create {
   updatedAt: string;
 }
 
+// Tab bar configuration (merged image tabs for Phase A)
+const tabConfig = [
+  { slug: 'text-generation', label: '文本生成', icon: MessageSquare, color: 'text-primary' },
+  { slug: 'image', label: '图片', icon: ImageIcon, color: 'text-brand' },
+  { slug: 'video-generation', label: '视频生成', icon: Video, color: 'text-foreground' },
+  { slug: 'detail-page-generation', label: '详情页', icon: FileText, color: 'text-foreground' },
+];
+
 const capabilities = [
   { slug: 'text-generation', label: '文本生成', icon: MessageSquare, color: 'text-primary' },
   { slug: 'image-generation', label: '图像生成', icon: ImageIcon, color: 'text-brand' },
@@ -124,6 +134,26 @@ const capabilities = [
   { slug: 'detail-page-generation', label: '详情页', icon: FileText, color: 'text-foreground' },
 ];
 
+
+// Auto-detect image capability from prompt + reference + model support
+function detectImageCapability(prompt: string, hasReferenceImage: boolean, modelCapabilities: string[]): string {
+  const supported = modelCapabilities.length > 0 ? modelCapabilities : ['image-generation'];
+  if (!hasReferenceImage) {
+    return supported.includes('image-generation') ? 'image-generation' : supported[0];
+  }
+  const p = prompt.toLowerCase();
+  if (supported.includes('background-removal') && /换背景|白底|移除背景|去背景|抠图|去除背景/.test(p)) {
+    return 'background-removal';
+  }
+  if (supported.includes('model-dressing') && /换装|换衣|穿衣|试穿|模特|穿衣服/.test(p)) {
+    return 'model-dressing';
+  }
+  if (supported.includes('scene-composition') && /场景|合成|融合|合并|组合/.test(p)) {
+    return 'scene-composition';
+  }
+  if (supported.includes('image-editing')) return 'image-editing';
+  return supported.includes('image-generation') ? 'image-generation' : supported[0];
+}
 
 interface DayGroup {
   key: string;
@@ -166,7 +196,8 @@ export default function WorkspacePage() {
   const [creates, setCreates] = useState<Create[]>([]);
   const [loading, setLoading] = useState(true);
   const [capabilities, setCapabilities] = useState<CapabilityInfo[]>(fallbackCapabilities);
-  const [activeCapability, setActiveCapability] = useState('text-generation');
+  const [activeTab, setActiveTab] = useState('text-generation');
+  const [resolvedCapability, setResolvedCapability] = useState('text-generation');
   const [models, setModels] = useState<GatewayModelSummary[]>([]);
   const [selectedModelSlug, setSelectedModelSlug] = useState('');
   const [modelLoading, setModelLoading] = useState(true);
@@ -337,7 +368,10 @@ export default function WorkspacePage() {
     setModelLoading(true);
     setModelError(null);
 
-    apiFetch(`/api/gateway/models?capability=${encodeURIComponent(activeCapability)}`, {
+    const queryParam = activeTab === 'image'
+      ? `modality=image`
+      : `capability=${encodeURIComponent(activeTab)}`;
+    apiFetch(`/api/gateway/models?${queryParam}`, {
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -359,14 +393,25 @@ export default function WorkspacePage() {
       });
 
     return () => controller.abort();
-  }, [activeCapability]);
+  }, [activeTab]);
 
   // Clear uploaded file when switching to a non-image-upload capability
   useEffect(() => {
-    if (!imageUploadCapabilities.includes(activeCapability) && uploadedFile) {
+    if (!imageUploadCapabilities.includes(activeTab) && uploadedFile) {
       clearUploadedFile();
     }
-  }, [activeCapability]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Resolve actual capability slug: image tab auto-detects, others use tab slug directly
+  useEffect(() => {
+    if (activeTab === 'image') {
+      const hasRef = !!uploadedFile;
+      const modelCaps = models.find((m) => m.slug === selectedModelSlug)?.capabilities || ['image-generation'];
+      setResolvedCapability(detectImageCapability(prompt, hasRef, modelCaps));
+    } else {
+      setResolvedCapability(activeTab);
+    }
+  }, [activeTab, prompt, uploadedFile, selectedModelSlug, models]);
 
   const handleSubmit = async () => {
     if (!prompt.trim() || submitting || modelLoading || Boolean(modelError) || !selectedModelSlug || models.length === 0) return;
@@ -385,7 +430,7 @@ export default function WorkspacePage() {
         },
         body: JSON.stringify({
           projectId,
-          capabilitySlug: activeCapability,
+          capabilitySlug: resolvedCapability,
           modelSlug: selectedModelSlug,
           input,
           sourceCreateId: sourceCreateId ?? undefined,
@@ -399,11 +444,11 @@ export default function WorkspacePage() {
         setSourceCreateId(null);
         clearUploadedFile();
         // Add optimistic create to the list
-        const capInfo = capabilities.find((c) => c.slug === activeCapability);
+        const capInfo = capabilities.find((c) => c.slug === resolvedCapability);
         if (data?.data?.createId) {
           setCreates((prev) => [...prev, {
             id: data.data.createId,
-            capabilitySlug: activeCapability,
+            capabilitySlug: resolvedCapability,
             prompt: prompt.trim(),
             input: uploadedFile
               ? { prompt: prompt.trim(), referenceImage: { fileId: uploadedFile.fileId } }
@@ -471,7 +516,9 @@ export default function WorkspacePage() {
   const handleModify = (create: Create) => {
     setSourceCreateId(create.id);
     setPrompt(create.prompt);
-    setActiveCapability(create.capabilitySlug);
+    // 修改时切换到对应 tab
+    const isImage = ['image-generation','image-editing','background-removal','scene-composition','model-dressing'].includes(create.capabilitySlug);
+    setActiveTab(isImage ? 'image' : create.capabilitySlug);
     // 恢复参考图（若原创作曾上传过），避免基于此修改时丢失参考图
     const refImg = (create.input as { referenceImage?: { fileId?: string } } | null)?.referenceImage;
     if (refImg?.fileId) {
@@ -489,14 +536,8 @@ export default function WorkspacePage() {
   };
 
   // Capabilities that accept a reference image
-  const imageUploadCapabilities = [
-    'image-generation',
-    'background-removal',
-    'scene-composition',
-    'model-dressing',
-    'image-editing',
-  ];
-  const supportsImageUpload = imageUploadCapabilities.includes(activeCapability);
+  const imageUploadCapabilities = ['image'];
+  const supportsImageUpload = imageUploadCapabilities.includes(activeTab);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -641,21 +682,25 @@ export default function WorkspacePage() {
 
         {/* Capability Tabs */}
         <div className="flex gap-1 border-b border-border px-4 py-2 overflow-x-auto">
-          {capabilities.map((cap) => {
-            const Icon = iconMap[cap.icon] ?? ImageIcon;
-            const color = categoryColor[cap.category] ?? 'text-muted-foreground';
+          {tabConfig.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.slug;
             return (
               <button
-                key={cap.slug}
-                onClick={() => setActiveCapability(cap.slug)}
+                key={tab.slug}
+                onClick={() => {
+                  setActiveTab(tab.slug);
+                  // 切换到图片 tab 时清除已上传文件（避免残留不同能力）
+                  setUploadedFile(null);
+                }}
                 className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  activeCapability === cap.slug
+                  isActive
                     ? 'bg-primary/10 text-primary'
                     : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                 }`}
               >
-                <Icon className={`h-3.5 w-3.5 ${activeCapability === cap.slug ? 'text-primary' : color}`} />
-                {cap.name}
+                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-primary' : tab.color}`} />
+                {tab.label}
               </button>
             );
           })}
@@ -904,6 +949,17 @@ export default function WorkspacePage() {
               </button>
             </div>
           )}
+          {/* Auto-detect badge for image tab */}
+          {activeTab === 'image' && selectedModelSlug && prompt.trim() && (
+            <div className="mb-2 flex items-center gap-1">
+              <span className="rounded-md bg-brand/10 px-2 py-0.5 text-xs text-brand">
+                {capabilities.find((c) => c.slug === resolvedCapability)?.name || '图片'}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                (基于输入内容自动识别)
+              </span>
+            </div>
+          )}
           <div className="mb-3 flex items-center gap-2">
             <label htmlFor="workspace-model" className="text-xs font-medium text-muted-foreground">模型</label>
             {modelLoading ? (
@@ -1016,7 +1072,12 @@ export default function WorkspacePage() {
         <div className="space-y-3 text-xs text-muted-foreground">
           <div>
             <span className="font-medium text-foreground">当前能力</span>
-            <p className="mt-1">{capabilities.find((c) => c.slug === activeCapability)?.name || activeCapability}</p>
+            <p className="mt-1">{capabilities.find((c) => c.slug === resolvedCapability)?.name || resolvedCapability}</p>
+            {activeTab === 'image' && (
+              <div className="mt-1 inline-flex items-center gap-1 rounded-md bg-brand/10 px-2 py-0.5 text-xs text-brand">
+                自动识别: {capabilities.find((c) => c.slug === resolvedCapability)?.name || resolvedCapability}
+              </div>
+            )}
           </div>
           {project && (
             <div>

@@ -59,7 +59,8 @@ export class GatewayController {
   @UseGuards(JwtAuthGuard)
   async listModels(@Req() req: any) {
     const capability = req.query?.capability as string | undefined;
-    const models = await this.gatewayService.listModels(capability);
+    const modality = req.query?.modality as string | undefined;
+    const models = await this.gatewayService.listModels(capability, modality);
     return { success: true, data: models.map(sanitizeModelForClient) };
   }
 

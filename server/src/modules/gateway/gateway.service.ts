@@ -119,14 +119,19 @@ export class GatewayService {
 
   // ===== Models (database source of truth) =====
 
-  async listModels(capability?: string): Promise<GatewayModelSummary[]> {
+  async listModels(capability?: string, modality?: string): Promise<GatewayModelSummary[]> {
     try {
-      const rows = capability
-        ? await this.db
-          .select()
-          .from(aiModels)
-          .where(and(eq(aiModels.isActive, true), sql`${aiModels.capabilities} @> ARRAY[${capability}]::text[]`))
-        : await this.db.select().from(aiModels).where(eq(aiModels.isActive, true));
+      const conditions = [eq(aiModels.isActive, true)];
+      if (capability) {
+        conditions.push(sql`${aiModels.capabilities} @> ARRAY[${capability}]::text[]`);
+      }
+      if (modality) {
+        conditions.push(eq(aiModels.modality, modality));
+      }
+      const rows = await this.db
+        .select()
+        .from(aiModels)
+        .where(and(...conditions));
 
       const defaultModel = capability
         ? await this.modelRoutingService.getDefaultModel(capability)
