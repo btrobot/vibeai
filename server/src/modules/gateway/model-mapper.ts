@@ -12,6 +12,7 @@ export function toAdapterModel(row: typeof aiModels.$inferSelect): AdapterModel 
     sdkClient: row.sdkClient,
     capabilities: row.capabilities ?? [],
     constraints: (row.constraints as Record<string, unknown>) || {},
+    inputSchema: (row.inputSchema as Record<string, unknown> | undefined) || {},
     defaultParams: (row.defaultParams as Record<string, unknown>) || {},
     costCredits: row.costCredits,
     sortOrder: row.sortOrder,

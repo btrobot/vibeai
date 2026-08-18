@@ -36,6 +36,8 @@ import { useCreateWebSocket, type CreateWsEvent } from '@/hooks/useCreateWebSock
 import { apiFetch } from '@/lib/apiClient';
 import { ReferenceImageStack, type UploadedRefImage } from '@/components/ReferenceImageStack';
 import { ReferenceVideoSlot, type UploadedRefVideo } from '@/components/ReferenceVideoSlot';
+import { ImageParamAggregate } from '@/components/ImageParamAggregate';
+import { ImageSkillPresets, type ImageSkillPreset } from '@/components/ImageSkillPresets';
 import { FirstFrameSlot, type UploadedFirstFrame } from '@/components/FirstFrameSlot';
 
 // Map backend icon strings to Lucide components
@@ -76,6 +78,9 @@ interface GatewayModelSummary {
   sortOrder: number;
   capabilities: string[];
   modality: string;
+  constraints?: Record<string, unknown>;
+  inputSchema?: { properties?: Record<string, { enum?: string[]; default?: unknown }> };
+  defaultParams?: Record<string, unknown>;
 }
 
 // Fallback capabilities (used while loading or if API fails)
@@ -208,90 +213,51 @@ function groupCreatesByDay(creates: Create[]): DayGroup[] {
   return groups;
 }
 
-// Spec selector: renders model-specific parameter controls (size, ratio, quality, etc.)
-function SpecSelect({ model, value, onChange }: {
+// 视频参数（视频 Tab：比例/分辨率/时长；字段与 video.adapter 消费契约一致）
+function VideoSpecSelect({ model, value, onChange }: {
   model: GatewayModelSummary | undefined;
   value: Record<string, string>;
   onChange: (v: Record<string, string>) => void;
 }) {
-  if (!model) return null;
-  const constraints = (model as any).constraints as Record<string, unknown> | undefined;
-  if (!constraints) return null;
-
-  // Image model specs: sizes
-  const sizes = constraints.sizes as string[] | undefined;
-  if (sizes && sizes.length > 0 && model.modality === 'image') {
-    const current = value.size || (model as any).defaultParams?.size || sizes[0];
-    return (
+  if (!model || model.modality !== 'video') return null;
+  const constraints = model.constraints ?? {};
+  const videoRatios = constraints.ratios as string[] | undefined;
+  const resolutions = constraints.resolutions as string[] | undefined;
+  const maxDur = constraints.maxDuration as number | undefined;
+  const minDur = constraints.minDuration as number | undefined;
+  const curRatio = value.ratio || model.defaultParams?.ratio as string | undefined || videoRatios?.[0] || '16:9';
+  const curRes = value.resolution || model.defaultParams?.resolution as string | undefined || resolutions?.[0] || '720p';
+  const curDur = value.duration || String(model.defaultParams?.duration ?? 5);
+  return (
+    <div className="flex items-center gap-1">
       <select
-        value={current}
-        onChange={(e) => onChange({ ...value, size: e.target.value })}
-        className="h-9 min-w-24 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
-        aria-label="规格"
-      >
-        {sizes.map((s) => <option key={s} value={s}>{s}</option>)}
-      </select>
-    );
-  }
-
-  // Image model: aspect_ratio + quality (gpt-image-2 style)
-  const ratios = constraints.ratios as string[] | undefined;
-  if (ratios && model.modality === 'image') {
-    const current = value.ratio || (model as any).defaultParams?.aspect_ratio || ratios[0];
-    return (
-      <select
-        value={current}
+        value={curRatio}
         onChange={(e) => onChange({ ...value, ratio: e.target.value })}
-        className="h-9 min-w-24 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
-        aria-label="画面比例"
+        className="h-9 min-w-20 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+        aria-label="比例"
       >
-        {ratios.map((r) => <option key={r} value={r}>{r}</option>)}
+        {videoRatios?.map((r) => <option key={r} value={r}>{r}</option>)}
       </select>
-    );
-  }
-
-  // Video model: ratio + resolution + duration
-  if (model.modality === 'video') {
-    const videoRatios = constraints.ratios as string[] | undefined;
-    const resolutions = constraints.resolutions as string[] | undefined;
-    const maxDur = constraints.maxDuration as number | undefined;
-    const minDur = constraints.minDuration as number | undefined;
-    const curRatio = value.ratio || (model as any).defaultParams?.ratio || videoRatios?.[0] || '16:9';
-    const curRes = value.resolution || (model as any).defaultParams?.resolution || resolutions?.[0] || '720p';
-    const curDur = value.duration || String((model as any).defaultParams?.duration || 5);
-    return (
-      <div className="flex items-center gap-1">
-        <select
-          value={curRatio}
-          onChange={(e) => onChange({ ...value, ratio: e.target.value })}
-          className="h-9 min-w-20 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
-          aria-label="比例"
-        >
-          {videoRatios?.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-        <select
-          value={curRes}
-          onChange={(e) => onChange({ ...value, resolution: e.target.value })}
-          className="h-9 min-w-20 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
-          aria-label="分辨率"
-        >
-          {resolutions?.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-        <select
-          value={curDur}
-          onChange={(e) => onChange({ ...value, duration: e.target.value })}
-          className="h-9 min-w-16 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
-          aria-label="时长"
-        >
-          {Array.from({ length: (maxDur || 12) - (minDur || 4) + 1 }, (_, i) => String((minDur || 4) + i)).map((d) => (
-            <option key={d} value={d}>{d}s</option>
-          ))}
-        </select>
-      </div>
-    );
-  }
-
-  return null;
+      <select
+        value={curRes}
+        onChange={(e) => onChange({ ...value, resolution: e.target.value })}
+        className="h-9 min-w-20 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+        aria-label="分辨率"
+      >
+        {resolutions?.map((r) => <option key={r} value={r}>{r}</option>)}
+      </select>
+      <select
+        value={curDur}
+        onChange={(e) => onChange({ ...value, duration: e.target.value })}
+        className="h-9 min-w-16 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+        aria-label="时长"
+      >
+        {Array.from({ length: (maxDur || 12) - (minDur || 4) + 1 }, (_, i) => String((minDur || 4) + i)).map((d) => (
+          <option key={d} value={d}>{d}s</option>
+        ))}
+      </select>
+    </div>
+  );
 }
 
 export default function WorkspacePage() {
@@ -537,12 +503,23 @@ export default function WorkspacePage() {
     }
   }, [activeTab, prompt, uploadedFiles, selectedModelSlug, models, selectedCapability]);
 
+  // 技能预设：填充 prompt 模板（不强制模型/参数，用户可按需调整）
+  const applySkillPreset = (preset: ImageSkillPreset) => {
+    setPrompt(preset.prompt);
+    showToast('success', `${preset.name}模板已填入提示词`);
+  };
+
   const handleSubmit = async () => {
     if (!prompt.trim() || submitting || modelLoading || Boolean(modelError) || !selectedModelSlug || models.length === 0) return;
     setSubmitting(true);
 
     try {
       const input: Record<string, unknown> = { prompt: prompt.trim() };
+      // 参数提交（修复：此前 specParams 仅存前端 state 未上送；字段与适配器消费契约一致，
+      // 图片 ratio/size/quality、视频 ratio/resolution/duration）
+      for (const [k, v] of Object.entries(specParams)) {
+        if (v !== undefined && v !== null && v !== '') input[k] = v;
+      }
       if (uploadedFiles.length > 0) {
         input.referenceImages = uploadedFiles.map((f) => (f.role ? { role: f.role, fileId: f.fileId } : { fileId: f.fileId }));
       }
@@ -1321,6 +1298,14 @@ export default function WorkspacePage() {
                   </select>
                 )}
 
+                {/* 技能预设（图片 Tab，对齐 boli SkillSelector）：一键填充 prompt 模板 */}
+                {activeTab === 'image' && (
+                  <ImageSkillPresets
+                    disabled={submitting}
+                    onApply={applySkillPreset}
+                  />
+                )}
+
                 {/* Model selector */}
                 {modelLoading ? (
                   <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />加载中</span>
@@ -1350,12 +1335,20 @@ export default function WorkspacePage() {
                   </span>
                 )}
 
-                {/* Spec selector (model constraints driven) */}
-                <SpecSelect
-                  model={models.find((m) => m.slug === selectedModelSlug)}
-                  value={specParams}
-                  onChange={setSpecParams}
-                />
+                {/* 参数：图片聚合按钮（比例·规格·质量）/ 视频三下拉 */}
+                {activeTab === 'image' ? (
+                  <ImageParamAggregate
+                    model={models.find((m) => m.slug === selectedModelSlug)}
+                    value={specParams}
+                    onChange={setSpecParams}
+                  />
+                ) : (
+                  <VideoSpecSelect
+                    model={models.find((m) => m.slug === selectedModelSlug)}
+                    value={specParams}
+                    onChange={setSpecParams}
+                  />
+                )}
 
                 <div className="flex-1" />
 

@@ -43,6 +43,18 @@ export class OpenAIAdapter implements ProtocolAdapter {
   readonly modality = 'image' as const;
   readonly sdkClient = 'openai';
 
+  /** gpt-image 系列 images/generations 的 size 语义：'比例' → OpenAI size（规范输入 aspect_ratio） */
+  private static readonly RATIO_TO_SIZE: Record<string, string> = {
+    '1:1': '1024x1024',
+    '3:2': '1536x1024',
+    '2:3': '1024x1536',
+    '4:3': '1536x1024',
+    '3:4': '1024x1536',
+    '16:9': '1536x1024',
+    '9:16': '1024x1536',
+    auto: 'auto',
+  };
+
   private readonly logger = new Logger(OpenAIAdapter.name);
 
   async execute(
@@ -61,7 +73,11 @@ export class OpenAIAdapter implements ProtocolAdapter {
       return this.streamChat(input, model, context, baseUrl, apiKey, timeoutMs);
     }
 
-    const size = (input.size as string) ?? (model.defaultParams.size as string) ?? '1024x1024';
+    const size = (input.size as string)
+      ?? (input.ratio ? OpenAIAdapter.RATIO_TO_SIZE[input.ratio as string] : undefined)
+      ?? (model.defaultParams.size as string)
+      ?? '1024x1024';
+    const quality = (input.quality as string) ?? (model.defaultParams.quality as string);
     const count = (input.count as number) ?? (input.n as number) ?? (model.defaultParams.n as number) ?? 1;
 
     // 生产模式：渠道必须配置完整，未配置 apiKey 直接报错（不再 Mock）
@@ -88,7 +104,13 @@ export class OpenAIAdapter implements ProtocolAdapter {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({ model: modelId, prompt, size, n: count }),
+        body: JSON.stringify({
+          model: modelId,
+          prompt,
+          size,
+          n: count,
+          ...(quality ? { quality } : {}),
+        }),
         signal: controller.signal,
       });
     } catch (err: unknown) {

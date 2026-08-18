@@ -75,6 +75,36 @@ describe('OpenAIAdapter', () => {
     expect(body).toEqual({ model: 'gpt-image-2', prompt: '一只猫', size: '1024x1024', n: 2 });
   });
 
+  it('input.ratio 归一化为 OpenAI size（规范输入 aspect_ratio）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ data: [{ url: 'https://cdn.example.com/a.png' }] }));
+
+    await adapter.execute({ prompt: '海报', ratio: '9:16' }, model(), ctx());
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body).toEqual({ model: 'gpt-image-2', prompt: '海报', size: '1024x1536', n: 1 });
+  });
+
+  it('input.quality 透传到请求体（gpt-image-2 inputSchema 声明参数生效）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ data: [{ url: 'https://cdn.example.com/a.png' }] }));
+
+    await adapter.execute({ prompt: '产品图', ratio: '16:9', quality: 'high' }, model(), ctx());
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body).toEqual({ model: 'gpt-image-2', prompt: '产品图', size: '1536x1024', n: 1, quality: 'high' });
+  });
+
+  it('未提供 quality 时不带该字段（保持向后兼容请求体）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ data: [{ url: 'https://cdn.example.com/a.png' }] }));
+
+    await adapter.execute({ prompt: '猫' }, model(), ctx());
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body).toEqual({ model: 'gpt-image-2', prompt: '猫', size: '1024x1024', n: 1 });
+  });
+
   it('去尾斜杠拼接 baseUrl', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ data: [{ url: 'https://cdn.example.com/a.png' }] }));
 

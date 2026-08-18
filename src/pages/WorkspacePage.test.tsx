@@ -74,6 +74,8 @@ const mockImageModels = [
     sortOrder: 1,
     capabilities: ['image-generation', 'image-editing', 'background-removal', 'scene-composition', 'model-dressing'],
     modality: 'image',
+    constraints: { sizes: ['2K', '4K'], supportsImageToImage: true },
+    defaultParams: { size: '2K' },
   },
   {
     slug: 'gpt-image-2',
@@ -85,6 +87,14 @@ const mockImageModels = [
     sortOrder: 2,
     capabilities: ['image-generation', 'image-editing'],
     modality: 'image',
+    constraints: { supportsImageToImage: true },
+    inputSchema: {
+      properties: {
+        aspect_ratio: { enum: ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16'], default: '1:1' },
+        quality: { enum: ['low', 'medium', 'high', 'auto'], default: 'low' },
+      },
+    },
+    defaultParams: { aspect_ratio: '1:1', quality: 'low' },
   },
 ];
 
@@ -99,6 +109,8 @@ const mockVideoModels = [
     sortOrder: 1,
     capabilities: ['video-generation'],
     modality: 'video',
+    constraints: { maxDuration: 12, minDuration: 4, ratios: ['16:9', '9:16', '1:1'], resolutions: ['480p', '720p', '1080p'] },
+    defaultParams: { ratio: '16:9', resolution: '720p', duration: 5 },
   },
   {
     slug: 'doubao-seedance-2-0',
@@ -110,6 +122,8 @@ const mockVideoModels = [
     sortOrder: 2,
     capabilities: ['video-generation', 'style-cloning'],
     modality: 'video',
+    constraints: { maxDuration: 12, minDuration: 4, ratios: ['16:9', '9:16', '1:1'], resolutions: ['480p', '720p', '1080p'] },
+    defaultParams: { ratio: '16:9', resolution: '720p', duration: 5 },
   },
 ];
 
@@ -1248,6 +1262,92 @@ describe('WorkspacePage', () => {
       const input = (requestBody as { input: Record<string, unknown> }).input;
       expect(input.firstFrame).toEqual({ fileId: 'uploaded-1' });
       expect(input.referenceVideos).toBeUndefined();
+    });
+  });
+
+  it('技能预设：点击技能填充 prompt 模板（对齐 boli SkillSelector）', async () => {
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '技能' })).toBeInTheDocument();
+    });
+
+    // 展开技能面板 → 选「商品摄影」
+    await user.click(screen.getByRole('button', { name: '技能' }));
+    await user.click(screen.getByText('商品摄影'));
+
+    const textarea = screen.getByPlaceholderText(/输入提示词/) as HTMLTextAreaElement;
+    expect(textarea.value).toContain('Professional product photography');
+  });
+
+  it('图片参数聚合按钮：gpt-image-2 显示「比例 · 质量」摘要，选择后提交 body 含 ratio', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    server.use(
+      http.post('/api/gateway/generate', async ({ request }) => {
+        requestBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { createId: 'create-p', modelSlug: 'gpt-image-2' } });
+      }),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    // 默认 gpt-image-2（inputSchema 驱动）：摘要「1:1 · 低」
+    const paramBtn = await screen.findByRole('button', { name: '图片参数' });
+    await waitFor(() => {
+      expect(paramBtn).toHaveTextContent('1:1');
+      expect(paramBtn).toHaveTextContent('低');
+    });
+
+    // 展开面板 → 选 9:16
+    await user.click(paramBtn);
+    await user.click(screen.getByRole('button', { name: /9:16/ }));
+
+    // 提交：input.ratio = 9:16（openai adapter 归一化为 size 1024x1536）
+    await user.type(screen.getByPlaceholderText(/输入提示词/), '竖向海报');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => {
+      expect(requestBody).toBeTruthy();
+      const input = (requestBody as { input: Record<string, unknown> }).input;
+      expect(input.ratio).toBe('9:16');
+    });
+  });
+
+  it('视频参数提交修复：选分辨率/时长后提交 body 含 resolution（video.adapter 消费契约）', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    server.use(
+      http.get('/api/gateway/models', ({ request }) => {
+        const capability = new URL(request.url).searchParams.get('capability');
+        if (capability === 'style-cloning') {
+          return HttpResponse.json({ success: true, data: [mockVideoModels[1]] });
+        }
+        return HttpResponse.json({ success: true, data: mockVideoModels });
+      }),
+      http.post('/api/gateway/generate', async ({ request }) => {
+        requestBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { createId: 'create-r', modelSlug: 'doubao-seedance-1-5-pro' } });
+      }),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    await waitFor(() => { expect(screen.getByTitle('视频生成')).toBeInTheDocument(); });
+    await user.click(screen.getByTitle('视频生成'));
+
+    // 默认模型 seedance-1-5-pro：VideoSpecSelect 渲染比例/分辨率/时长
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: '分辨率' })).toBeInTheDocument();
+    });
+    await user.selectOptions(screen.getByRole('combobox', { name: '分辨率' }), '1080p');
+
+    await user.type(screen.getByPlaceholderText(/输入提示词/), '海边日落');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => {
+      expect(requestBody).toBeTruthy();
+      const input = (requestBody as { input: Record<string, unknown> }).input;
+      expect(input.resolution).toBe('1080p');
     });
   });
 });

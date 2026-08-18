@@ -82,6 +82,8 @@ export interface AdapterModel {
   sdkClient: string;
   capabilities: string[];
   constraints: Record<string, unknown>;
+  /** 模型输入契约（inputSchema JSONB）：前端参数 UI 的 SOT 数据源（比例/规格/质量 enum 等） */
+  inputSchema?: Record<string, unknown>;
   defaultParams: Record<string, unknown>;
   costCredits: number;
   sortOrder: number;
