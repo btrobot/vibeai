@@ -167,9 +167,9 @@ describe('WorkspacePage', () => {
     });
 
     // 合并后只显示 4 个 Tab：文本生成、图片、视频生成、详情页
-    expect(screen.getByRole('button', { name: '图片' })).toBeInTheDocument();
-    expect(screen.getAllByText('视频生成').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('详情页').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByTitle('图片')).toBeInTheDocument();
+    expect(screen.getByTitle('视频生成')).toBeInTheDocument();
+    expect(screen.getByTitle('详情页')).toBeInTheDocument();
     // 白底图/场景合成/模特换装不再作为独立 Tab 出现
     expect(screen.queryByText('白底图')).not.toBeInTheDocument();
     expect(screen.queryByText('场景合成')).not.toBeInTheDocument();
@@ -190,11 +190,11 @@ describe('WorkspacePage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText('视频生成')).toBeInTheDocument();
+      expect(screen.getByTitle('视频生成')).toBeInTheDocument();
     });
 
     // 点击图片 Tab
-    await user.click(screen.getByText('图片'));
+    await user.click(screen.getByTitle('图片'));
     const textarea = await screen.findByPlaceholderText(/输入提示词/);
     expect(textarea).toBeInTheDocument();
   });
@@ -212,7 +212,7 @@ describe('WorkspacePage', () => {
     renderWorkspace();
 
     await waitFor(() => {
-      expect(screen.getByText('视频生成')).toBeInTheDocument();
+      expect(screen.getByTitle('视频生成')).toBeInTheDocument();
     });
 
     // 创作状态
@@ -540,7 +540,7 @@ describe('WorkspacePage', () => {
       expect(storageCalled).toBe(true);
     });
     // 上传文件预览应出现
-    expect(await screen.findByText('ref.png')).toBeInTheDocument();
+    expect(await screen.findByLabelText('移除参考图')).toBeInTheDocument();
   });
 
   it('基于此修改无参考图时不调用存储 API', async () => {
@@ -583,11 +583,11 @@ describe('WorkspacePage', () => {
 
     // 等待加载完成，Tab 可见
     await waitFor(() => {
-      expect(screen.getByText('视频生成')).toBeInTheDocument();
+      expect(screen.getByTitle('视频生成')).toBeInTheDocument();
     });
 
     // 切到图片 Tab
-    await user.click(screen.getByText('图片'));
+    await user.click(screen.getByTitle('图片'));
     // 等图片模型加载 + 输入框出现
     const textarea = await screen.findByPlaceholderText(/输入提示词/);
     // 输入图片提示词，无参考图

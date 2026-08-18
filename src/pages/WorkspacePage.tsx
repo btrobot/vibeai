@@ -22,8 +22,6 @@ import {
   Clapperboard,
   Paperclip,
   X,
-  PanelRightClose,
-  PanelRightOpen,
   ArrowDown,
   ChevronDown,
   Maximize2,
@@ -189,6 +187,92 @@ function groupCreatesByDay(creates: Create[]): DayGroup[] {
   return groups;
 }
 
+// Spec selector: renders model-specific parameter controls (size, ratio, quality, etc.)
+function SpecSelect({ model, value, onChange }: {
+  model: GatewayModelSummary | undefined;
+  value: Record<string, string>;
+  onChange: (v: Record<string, string>) => void;
+}) {
+  if (!model) return null;
+  const constraints = (model as any).constraints as Record<string, unknown> | undefined;
+  if (!constraints) return null;
+
+  // Image model specs: sizes
+  const sizes = constraints.sizes as string[] | undefined;
+  if (sizes && sizes.length > 0 && model.modality === 'image') {
+    const current = value.size || (model as any).defaultParams?.size || sizes[0];
+    return (
+      <select
+        value={current}
+        onChange={(e) => onChange({ ...value, size: e.target.value })}
+        className="h-9 min-w-24 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+        aria-label="规格"
+      >
+        {sizes.map((s) => <option key={s} value={s}>{s}</option>)}
+      </select>
+    );
+  }
+
+  // Image model: aspect_ratio + quality (gpt-image-2 style)
+  const ratios = constraints.ratios as string[] | undefined;
+  if (ratios && model.modality === 'image') {
+    const current = value.ratio || (model as any).defaultParams?.aspect_ratio || ratios[0];
+    return (
+      <select
+        value={current}
+        onChange={(e) => onChange({ ...value, ratio: e.target.value })}
+        className="h-9 min-w-24 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+        aria-label="画面比例"
+      >
+        {ratios.map((r) => <option key={r} value={r}>{r}</option>)}
+      </select>
+    );
+  }
+
+  // Video model: ratio + resolution + duration
+  if (model.modality === 'video') {
+    const videoRatios = constraints.ratios as string[] | undefined;
+    const resolutions = constraints.resolutions as string[] | undefined;
+    const maxDur = constraints.maxDuration as number | undefined;
+    const minDur = constraints.minDuration as number | undefined;
+    const curRatio = value.ratio || (model as any).defaultParams?.ratio || videoRatios?.[0] || '16:9';
+    const curRes = value.resolution || (model as any).defaultParams?.resolution || resolutions?.[0] || '720p';
+    const curDur = value.duration || String((model as any).defaultParams?.duration || 5);
+    return (
+      <div className="flex items-center gap-1">
+        <select
+          value={curRatio}
+          onChange={(e) => onChange({ ...value, ratio: e.target.value })}
+          className="h-9 min-w-20 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+          aria-label="比例"
+        >
+          {videoRatios?.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <select
+          value={curRes}
+          onChange={(e) => onChange({ ...value, resolution: e.target.value })}
+          className="h-9 min-w-20 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+          aria-label="分辨率"
+        >
+          {resolutions?.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <select
+          value={curDur}
+          onChange={(e) => onChange({ ...value, duration: e.target.value })}
+          className="h-9 min-w-16 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+          aria-label="时长"
+        >
+          {Array.from({ length: (maxDur || 12) - (minDur || 4) + 1 }, (_, i) => String((minDur || 4) + i)).map((d) => (
+            <option key={d} value={d}>{d}s</option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export default function WorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -208,10 +292,10 @@ export default function WorkspacePage() {
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [uploadedFile, setUploadedFile] = useState<{ fileId: string; previewUrl: string; name: string } | null>(null);
-  const [infoCollapsed, setInfoCollapsed] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [specParams, setSpecParams] = useState<Record<string, string>>({});
   const [collapsedDayGroups, setCollapsedDayGroups] = useState<Set<string>>(new Set());
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -660,6 +744,7 @@ export default function WorkspacePage() {
   }
 
   return (
+    <>
     <div className="flex h-full">
       {/* Left+Center: Capability Selector + Chat */}
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -678,32 +763,6 @@ export default function WorkspacePage() {
               <p className="text-xs text-muted-foreground truncate max-w-md">{project.description}</p>
             )}
           </div>
-        </div>
-
-        {/* Capability Tabs */}
-        <div className="flex gap-1 border-b border-border px-4 py-2 overflow-x-auto">
-          {tabConfig.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.slug;
-            return (
-              <button
-                key={tab.slug}
-                onClick={() => {
-                  setActiveTab(tab.slug);
-                  // 切换到图片 tab 时清除已上传文件（避免残留不同能力）
-                  setUploadedFile(null);
-                }}
-                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
-                }`}
-              >
-                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-primary' : tab.color}`} />
-                {tab.label}
-              </button>
-            );
-          })}
         </div>
 
         {/* LiveBar: processing tasks always visible */}
@@ -915,190 +974,178 @@ export default function WorkspacePage() {
           )}
         </div>
 
-        {/* Input Area */}
-        <div className="border-t border-border p-4">
-          {sourceCreateId && (
-            <div className="mb-2 flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5">
-              <GitBranch className="h-3 w-3 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">基于之前的创作修改</span>
-              <button
-                onClick={() => { setSourceCreateId(null); setPrompt(''); }}
-                className="ml-auto text-xs text-muted-foreground hover:text-foreground"
-              >
-                取消
-              </button>
+        {/* Input Area: [Mode | 参考图+Prompt | Model+Spec+发送] */}
+        <div className="border-t border-border bg-card">
+          <div className="flex items-stretch">
+            {/* Mode selector (vertical, inside input area) */}
+            <div className="flex shrink-0 flex-col gap-0.5 border-r border-border p-2">
+              {tabConfig.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.slug;
+                return (
+                  <button
+                    key={tab.slug}
+                    onClick={() => {
+                      setActiveTab(tab.slug);
+                      // 切换到图片 tab 时清除已上传文件（避免残留不同能力）
+                      setUploadedFile(null);
+                    }}
+                    title={tab.label}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors ${
+                      isActive
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
+                    }`}
+                  >
+                    <Icon className={`h-4 w-4 ${isActive ? 'text-primary' : tab.color}`} />
+                  </button>
+                );
+              })}
             </div>
-          )}
-          {uploadedFile && (
-            <div className="mb-2 flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2">
-              <img
-                src={uploadedFile.previewUrl}
-                alt={uploadedFile.name}
-                className="h-12 w-12 rounded-md object-cover border border-border"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground truncate">{uploadedFile.name}</p>
-                <p className="text-xs text-muted-foreground">已上传，将作为参考图</p>
+
+            <div className="flex min-w-0 flex-1 flex-col p-3">
+              {/* Row 1: 参考图 (left stack) + Prompt (right flex-1) */}
+              <div className="flex items-stretch gap-3">
+                {/* 参考图 stack */}
+                <div className="flex w-12 shrink-0 flex-col items-center justify-center">
+                  {supportsImageUpload && (
+                    uploadedFile ? (
+                      <div className="group relative">
+                        <img
+                          src={uploadedFile.previewUrl}
+                          alt="参考图"
+                          className="h-12 w-12 rounded-lg border border-border object-cover"
+                        />
+                        <button
+                          onClick={clearUploadedFile}
+                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-card text-muted-foreground shadow hover:text-destructive"
+                          aria-label="移除参考图"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileSelect}
+                          className="hidden"
+                        />
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploading || submitting}
+                          className="flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-input text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                          aria-label="上传参考图"
+                          title="上传参考图"
+                        >
+                          {uploading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Paperclip className="h-4 w-4" />
+                          )}
+                        </button>
+                        <span className="text-[10px] leading-none text-muted-foreground">参考图</span>
+                      </div>
+                    )
+                  )}
+                </div>
+
+                {/* Prompt input (flex-1) */}
+                <div className="min-w-0 flex-1">
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={supportsImageUpload ? '输入提示词，可上传参考图，按 Enter 发送...' : '输入提示词，按 Enter 发送...'}
+                    rows={3}
+                    className="h-full w-full min-h-[64px] resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-all duration-150"
+                  />
+                </div>
               </div>
-              <button
-                onClick={clearUploadedFile}
-                className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-                aria-label="移除图片"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-          {/* Auto-detect badge for image tab */}
-          {activeTab === 'image' && selectedModelSlug && prompt.trim() && (
-            <div className="mb-2 flex items-center gap-1">
-              <span className="rounded-md bg-brand/10 px-2 py-0.5 text-xs text-brand">
-                {capabilities.find((c) => c.slug === resolvedCapability)?.name || '图片'}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                (基于输入内容自动识别)
-              </span>
-            </div>
-          )}
-          <div className="mb-3 flex items-center gap-2">
-            <label htmlFor="workspace-model" className="text-xs font-medium text-muted-foreground">模型</label>
-            {modelLoading ? (
-              <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />加载中</span>
-            ) : modelError ? (
-              <span className="text-xs text-destructive">模型加载失败</span>
-            ) : models.length === 0 ? (
-              <span className="text-xs text-muted-foreground">当前能力暂无可用模型</span>
-            ) : (
-              <>
-                <select
-                  id="workspace-model"
-                  aria-label="模型"
-                  value={selectedModelSlug}
-                  onChange={(event) => setSelectedModelSlug(event.target.value)}
-                  disabled={submitting}
-                  className="h-9 min-w-52 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
-                >
-                  {models.map((model) => <option key={model.slug} value={model.slug}>{model.name}</option>)}
-                </select>
-                {models.find((model) => model.slug === selectedModelSlug) && (
-                  <span className="text-xs text-muted-foreground">
+
+              {/* Row 2: Model + Spec + cost + 发送 */}
+              <div className="mt-2 flex items-center gap-2">
+                {/* Mode 能力徽章（图片模式显示自动识别） */}
+                {activeTab === 'image' && (
+                  <span className="shrink-0 rounded-md bg-brand/10 px-2 py-1 text-xs text-brand">
+                    {capabilities.find((c) => c.slug === resolvedCapability)?.name || '图片'}
+                  </span>
+                )}
+
+                {/* Model selector */}
+                {modelLoading ? (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />加载中</span>
+                ) : modelError ? (
+                  <span className="text-xs text-destructive">模型加载失败</span>
+                ) : models.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">当前能力暂无可用模型</span>
+                ) : (
+                  <select
+                    id="workspace-model"
+                    aria-label="模型"
+                    value={selectedModelSlug}
+                    onChange={(event) => {
+                      setSelectedModelSlug(event.target.value);
+                      // 模型切换后重置 Spec 到默认
+                      setSpecParams({});
+                    }}
+                    disabled={submitting}
+                    className="h-9 min-w-40 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+                  >
+                    {models.map((model) => <option key={model.slug} value={model.slug}>{model.name}</option>)}
+                  </select>
+                )}
+                {models.find((model) => model.slug === selectedModelSlug) && !modelLoading && !modelError && (
+                  <span className="shrink-0 text-xs text-muted-foreground">
                     {models.find((model) => model.slug === selectedModelSlug)?.costCredits} 积分/次
                   </span>
                 )}
-              </>
-            )}
-          </div>
-          <div className="flex gap-3 items-end">
-            {supportsImageUpload && (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileSelect}
-                  className="hidden"
+
+                {/* Spec selector (model constraints driven) */}
+                <SpecSelect
+                  model={models.find((m) => m.slug === selectedModelSlug)}
+                  value={specParams}
+                  onChange={setSpecParams}
                 />
+
+                <div className="flex-1" />
+
                 <Button
-                  variant="outline"
+                  variant="brand"
                   size="icon"
-                  className="h-10 w-10 shrink-0"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading || submitting}
-                  aria-label="上传参考图"
+                  className="h-9 w-9 shrink-0"
+                  onClick={handleSubmit}
+                  disabled={!prompt.trim() || submitting || modelLoading || Boolean(modelError) || models.length === 0 || !selectedModelSlug}
+                  aria-label="发送"
                 >
-                  {uploading ? (
+                  {submitting ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Paperclip className="h-4 w-4" />
+                    <Send className="h-4 w-4" />
                   )}
                 </Button>
-              </>
-            )}
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={supportsImageUpload ? '输入提示词，可上传参考图，按 Enter 发送...' : '输入提示词，按 Enter 发送...'}
-              rows={2}
-              className="flex-1 rounded-lg border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none transition-all duration-150"
-            />
-            <Button
-              variant="brand"
-              size="icon"
-              className="h-10 w-10 shrink-0"
-              onClick={handleSubmit}
-              disabled={!prompt.trim() || submitting || modelLoading || Boolean(modelError) || models.length === 0 || !selectedModelSlug}
-              aria-label="发送"
-            >
-              {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Right: Info Panel */}
-      {infoCollapsed ? (
-        <div className="hidden w-11 shrink-0 border-l border-border lg:flex items-center justify-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setInfoCollapsed(false)}
-            aria-label="展开创作信息"
-            title="展开创作信息"
-          >
-            <PanelRightOpen className="h-4 w-4" />
-          </Button>
-        </div>
-      ) : (
-      <div className="hidden w-72 shrink-0 border-l border-border p-4 lg:block">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-foreground">创作信息</h3>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => setInfoCollapsed(true)}
-            aria-label="收起创作信息"
-            title="收起创作信息"
-          >
-            <PanelRightClose className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="space-y-3 text-xs text-muted-foreground">
-          <div>
-            <span className="font-medium text-foreground">当前能力</span>
-            <p className="mt-1">{capabilities.find((c) => c.slug === resolvedCapability)?.name || resolvedCapability}</p>
-            {activeTab === 'image' && (
-              <div className="mt-1 inline-flex items-center gap-1 rounded-md bg-brand/10 px-2 py-0.5 text-xs text-brand">
-                自动识别: {capabilities.find((c) => c.slug === resolvedCapability)?.name || resolvedCapability}
               </div>
-            )}
-          </div>
-          {project && (
-            <div>
-              <span className="font-medium text-foreground">项目</span>
-              <p className="mt-1">{project.name}</p>
+
+              {/* sourceCreateId indicator */}
+              {sourceCreateId && (
+                <div className="mt-2 flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5">
+                  <GitBranch className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">基于之前的创作修改</span>
+                  <button
+                    onClick={() => { setSourceCreateId(null); setPrompt(''); }}
+                    className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    取消
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-          <div>
-            <span className="font-medium text-foreground">创作数</span>
-            <p className="mt-1">{creates.length}</p>
-          </div>
-          <div className="rounded-lg bg-muted/50 p-3">
-            <p className="text-xs leading-relaxed">
-              提示词越具体，生成效果越好。支持中英文输入。
-              {supportsImageUpload && ' 当前能力支持上传参考图，点击回形针按钮选择图片。'}
-              {sourceCreateId && ' 当前为修改模式，将基于之前的创作结果进行迭代。'}
-            </p>
           </div>
         </div>
       </div>
-      )}
+    </div>
 
       {/* Lightbox */}
       {lightboxUrl && (
@@ -1128,6 +1175,6 @@ export default function WorkspacePage() {
           <span className="text-sm text-foreground">{toast.message}</span>
         </div>
       )}
-    </div>
+    </>
   );
 }

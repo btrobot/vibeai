@@ -47,9 +47,6 @@ if [ -z "${JWT_SECRET:-}" ]; then
 fi
 
 # ── HMR client port for Vite (nginx proxy passthrough) ──
-# On dev server behind nginx (e.g. 8082 → 5000), HMR WebSocket must
-# connect through the public-facing port. Set HMR_CLIENT_PORT in .env.local
-# or environment to match your nginx proxy port.
 if [ -n "${HMR_CLIENT_PORT:-}" ]; then
   export HMR_CLIENT_PORT
   echo "[hmr] HMR clientPort = ${HMR_CLIENT_PORT}"
@@ -66,12 +63,13 @@ echo "Building NestJS backend..."
 
 # ── Cleanup handler ──
 NEST_PID=""
-VITE_PID=""
+VITE_WRAPPER_PID=""
 
 cleanup() {
   echo ""
   echo "[dev] Shutting down..."
-  [ -n "${VITE_PID}" ] && kill "${VITE_PID}" 2>/dev/null && echo "[dev] Stopped Vite (PID ${VITE_PID})"
+  # Kill Vite wrapper first (it will cleanly stop Vite)
+  [ -n "${VITE_WRAPPER_PID}" ] && kill "${VITE_WRAPPER_PID}" 2>/dev/null && echo "[dev] Stopped Vite (PID ${VITE_WRAPPER_PID})"
   [ -n "${NEST_PID}" ] && kill "${NEST_PID}" 2>/dev/null && echo "[dev] Stopped NestJS (PID ${NEST_PID})"
   wait 2>/dev/null
   echo "[dev] All processes stopped."
@@ -93,7 +91,6 @@ for i in $(seq 1 20); do
     BACKEND_READY=true
     break
   fi
-  # Check if process is still alive
   if ! kill -0 "${NEST_PID}" 2>/dev/null; then
     echo "[dev] ERROR: Backend process exited unexpectedly. Check /tmp/nestjs.log"
     cat /tmp/nestjs.log 2>/dev/null | tail -20
@@ -108,15 +105,34 @@ else
   echo "[dev] Backend ready."
 fi
 
-# ── Start Vite frontend ──
+# ── Vite auto-restart wrapper ──
+# Root cause: pnpm install deletes + recreates .pnpm virtual store.
+# Vite holds file descriptors to old inodes → crash on next HMR.
+# This wrapper restarts Vite whenever it crashes (non-zero exit).
+# It exits cleanly (exit 0) when killed by cleanup().
+_vite_runner() {
+  local port="$1"
+  while true; do
+    pnpm vite --port "${port}" --host 0.0.0.0
+    VITE_EXIT=$?
+    if [ "${VITE_EXIT}" -eq 0 ]; then
+      # Clean exit (SIGTERM from cleanup) → stop
+      exit 0
+    fi
+    echo "[dev] Vite exited with code ${VITE_EXIT}, restarting in 1s..."
+    sleep 1
+  done
+}
+
+# ── Start Vite frontend via wrapper ──
 echo "Starting Vite frontend on port ${FRONTEND_PORT}..."
 echo "[dev] Frontend: http://localhost:${FRONTEND_PORT}"
 echo "[dev] Backend:  http://localhost:${BACKEND_PORT}"
 echo "[dev] Press Ctrl+C to stop all services."
 echo ""
 
-pnpm vite --port "${FRONTEND_PORT}" --host 0.0.0.0 &
-VITE_PID=$!
+_vite_runner "${FRONTEND_PORT}" &
+VITE_WRAPPER_PID=$!
 
 # ── Keep script alive, wait for any child to exit ──
 wait
