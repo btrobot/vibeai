@@ -930,6 +930,13 @@ rules:
     description: 面向用户的信用成本（模型 costCredits，预扣/结算）与渠道采购成本（costPerCall/costPerSecond，利润分析）分离核算
     enforcement: TaskExecutionService 以模型 costCredits 预扣与结算信用，recordProviderAttempt 将渠道采购成本写入 provider_attempts
     test: providerAttempt 记录包含 Provider 的单次和按秒采购成本
+  - name: incomplete_channel_filter
+    id: GTW-024
+    severity: error
+    level: error
+    description: 渠道筛选必须过滤参数不完整的渠道，避免无效 fallback 产生误导性报错（openai 需合并后 apiKey 非空；replicate 需进程环境 REPLICATE_API_TOKEN；coze 协议 image/llm/video 需进程环境 COZE_LOOP_API_TOKEN/COZE_WORKLOAD_API_TOKEN；未知协议不过滤，由适配器自身校验）
+    enforcement: ProviderService.getAvailableProviders 在返回渠道列表前按 sdkClient 判定参数完整性并过滤；被过滤渠道记录 warn 日志
+    test: provider.service.test.ts 多渠道时仅返回参数完整的渠道（不完整渠道被过滤且不影响其余渠道）
 seed_data:
   # 权威来源：server/src/modules/gateway/seeds/model-seeds.ts
   # 生成方式：node --import tsx /tmp/dump-seeds.ts | node -e "js-yaml dump"

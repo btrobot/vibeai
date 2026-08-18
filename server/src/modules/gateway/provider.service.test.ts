@@ -7,9 +7,10 @@
  * - 按优先级排序（由 SQL 保证，此处验证字段透传）
  * - 采购成本数值转换
  * - 无记录时返回空数组
+ * - 渠道参数完整性过滤（GTW-024）：openai 需 apiKey；replicate/coze 协议需进程环境 token
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ProviderService } from './provider.service';
 import { createDrizzleMockForNestJS } from '../../test/drizzle-mock';
 
@@ -40,15 +41,25 @@ describe('ProviderService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     db = createDrizzleMockForNestJS();
     service = new ProviderService(db as any);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe('getAvailableProviders', () => {
     it('平台 + 渠道有记录时返回多渠道列表（平台默认账号合并进 config）', async () => {
       db._result = [
         channelRow({
-          channel: { ...channelRow().channel, priority: 2 },
+          channel: {
+            ...channelRow().channel,
+            priority: 2,
+            // openai 协议渠道必须有 apiKey 才有效（GTW-024）；无平台默认时由渠道 config 提供
+            config: { apiKey: 'ch-key-replicate' },
+          },
           platformName: 'replicate',
           platformBaseUrl: null,
           platformApiKey: null,
@@ -59,9 +70,9 @@ describe('ProviderService', () => {
       const providers = await service.getAvailableProviders('gpt-image-2');
 
       expect(providers).toHaveLength(2);
-      // 渠道1：replicate 平台无默认账号 → config 不含 baseUrl/apiKey
+      // 渠道1：replicate 平台无默认账号 → 仅合并渠道 config 的 apiKey
       expect(providers[0].platformName).toBe('replicate');
-      expect(providers[0].config).toEqual({});
+      expect(providers[0].config).toEqual({ apiKey: 'ch-key-replicate' });
       // 渠道2：pptoken 平台有默认账号 → config 合并平台 baseUrl/apiKey
       expect(providers[1].platformName).toBe('pptoken');
       expect(providers[1].config).toEqual({
@@ -90,8 +101,13 @@ describe('ProviderService', () => {
       });
     });
 
-    it('平台有 baseUrl 但无 apiKey 时仅合并 baseUrl', async () => {
-      db._result = [channelRow({ platformApiKey: null })];
+    it('平台有 baseUrl 但无 apiKey 时仅合并 baseUrl（未知协议不过滤，仅验证合并语义）', async () => {
+      db._result = [
+        channelRow({
+          channel: { ...channelRow().channel, sdkClient: 'future-protocol' },
+          platformApiKey: null,
+        }),
+      ];
 
       const providers = await service.getAvailableProviders('gpt-image-2');
 
@@ -155,6 +171,7 @@ describe('ProviderService', () => {
     });
 
     it('返回的 provider 应包含所有必需字段', async () => {
+      vi.stubEnv('REPLICATE_API_TOKEN', 'test-token');
       db._result = [
         channelRow({
           channel: {
@@ -186,6 +203,172 @@ describe('ProviderService', () => {
         costPerSecond: 0.001,
         config: { num_outputs: 1 },
       });
+    });
+  });
+
+  describe('渠道参数完整性过滤（GTW-024）', () => {
+    it('openai 渠道平台与渠道均无 apiKey 时被过滤（返回空）', async () => {
+      db._result = [channelRow({ platformApiKey: null })];
+
+      const providers = await service.getAvailableProviders('gpt-image-2');
+
+      expect(providers).toEqual([]);
+    });
+
+    it('openai 渠道 apiKey 为空白字符串时被过滤', async () => {
+      db._result = [
+        channelRow({
+          channel: { ...channelRow().channel, config: { apiKey: '   ' } },
+          platformApiKey: null,
+        }),
+      ];
+
+      const providers = await service.getAvailableProviders('gpt-image-2');
+
+      expect(providers).toEqual([]);
+    });
+
+    it('openai 渠道 apiKey 仅存于渠道 config 时保留', async () => {
+      db._result = [
+        channelRow({
+          channel: { ...channelRow().channel, config: { apiKey: 'ch-only-key' } },
+          platformApiKey: null,
+        }),
+      ];
+
+      const providers = await service.getAvailableProviders('gpt-image-2');
+
+      expect(providers).toHaveLength(1);
+      expect(providers[0].config.apiKey).toBe('ch-only-key');
+    });
+
+    it('replicate 渠道进程环境无 REPLICATE_API_TOKEN 时被过滤', async () => {
+      vi.stubEnv('REPLICATE_API_TOKEN', '');
+      db._result = [
+        channelRow({
+          channel: {
+            ...channelRow().channel,
+            modelSlug: 'flux-schnell',
+            sdkClient: 'replicate',
+            config: { num_outputs: 1 },
+          },
+          platformName: 'replicate',
+          platformBaseUrl: null,
+          platformApiKey: null,
+        }),
+      ];
+
+      const providers = await service.getAvailableProviders('flux-schnell');
+
+      expect(providers).toEqual([]);
+    });
+
+    it('replicate 渠道进程环境有 REPLICATE_API_TOKEN 时保留', async () => {
+      vi.stubEnv('REPLICATE_API_TOKEN', 'test-token');
+      db._result = [
+        channelRow({
+          channel: {
+            ...channelRow().channel,
+            modelSlug: 'flux-schnell',
+            sdkClient: 'replicate',
+            config: { num_outputs: 1 },
+          },
+          platformName: 'replicate',
+          platformBaseUrl: null,
+          platformApiKey: null,
+        }),
+      ];
+
+      const providers = await service.getAvailableProviders('flux-schnell');
+
+      expect(providers).toHaveLength(1);
+    });
+
+    it('coze 协议渠道（image/llm/video）进程环境无 token 时被过滤', async () => {
+      db._result = [
+        channelRow({
+          channel: {
+            ...channelRow().channel,
+            modelSlug: 'doubao-seedream-5-0',
+            sdkClient: 'image',
+            config: null,
+          },
+          platformName: 'coze',
+          platformBaseUrl: null,
+          platformApiKey: null,
+        }),
+      ];
+
+      const providers = await service.getAvailableProviders('doubao-seedream-5-0');
+
+      expect(providers).toEqual([]);
+    });
+
+    it('coze 协议渠道进程环境有 COZE_LOOP_API_TOKEN 时保留', async () => {
+      vi.stubEnv('COZE_LOOP_API_TOKEN', 'test-token');
+      db._result = [
+        channelRow({
+          channel: {
+            ...channelRow().channel,
+            modelSlug: 'doubao-seedream-5-0',
+            sdkClient: 'image',
+            config: null,
+          },
+          platformName: 'coze',
+          platformBaseUrl: null,
+          platformApiKey: null,
+        }),
+      ];
+
+      const providers = await service.getAvailableProviders('doubao-seedream-5-0');
+
+      expect(providers).toHaveLength(1);
+    });
+
+    it('未知 sdkClient 不过滤（保留由适配器自身校验）', async () => {
+      db._result = [
+        channelRow({
+          channel: { ...channelRow().channel, sdkClient: 'future-protocol' },
+          platformApiKey: null,
+        }),
+      ];
+
+      const providers = await service.getAvailableProviders('gpt-image-2');
+
+      expect(providers).toHaveLength(1);
+    });
+
+    it('多渠道时仅返回参数完整的渠道（不完整渠道被过滤且不影响其余渠道）', async () => {
+      db._result = [
+        // replicate 渠道：env 无 token → 过滤
+        channelRow({
+          channel: {
+            ...channelRow().channel,
+            priority: 1,
+            sdkClient: 'replicate',
+            config: { num_outputs: 1 },
+          },
+          platformName: 'replicate',
+          platformBaseUrl: null,
+          platformApiKey: null,
+        }),
+        // openai 渠道：无 apiKey → 过滤
+        channelRow({
+          channel: { ...channelRow().channel, priority: 2 },
+          platformApiKey: null,
+        }),
+        // openai 渠道：有 apiKey → 保留
+        channelRow({
+          channel: { ...channelRow().channel, priority: 3, config: { apiKey: 'valid-key' } },
+          platformApiKey: null,
+        }),
+      ];
+
+      const providers = await service.getAvailableProviders('gpt-image-2');
+
+      expect(providers).toHaveLength(1);
+      expect(providers[0].priority).toBe(3);
+      expect(providers[0].config.apiKey).toBe('valid-key');
     });
   });
 });
