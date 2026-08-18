@@ -940,6 +940,7 @@ seed_data:
   capabilities:
     # 2026-08 产品决策：图片创作收敛为两条路 —— 无参考图 → 文生图（image-generation）、
     # 有参考图 → 图片编辑（image-editing，多参考图无 role，语义由 prompt 描述）。
+    # UI 无能力选择器（纯自动识别），判定由参考图有无驱动，无正则。
     # 白底图/场景合成/模特换装 屏蔽新建入口（enabled: false），历史数据仍可读取渲染。
     - slug: image-generation
       enabled: true

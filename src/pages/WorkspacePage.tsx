@@ -151,7 +151,9 @@ export const IMAGE_OUTPUT_CAPABILITIES = [
   'model-dressing',
 ];
 
-// 能力选择器可选项：屏蔽能力不提供新建入口（历史数据渲染/恢复不受影响）
+// 可新建图片能力白名单（2026-08 起 UI 无能力选择器，图片 Tab 纯自动识别：
+// 有参考图 → image-editing，无参考图 → image-generation）。
+// 屏蔽能力不提供新建入口（历史数据渲染/恢复不受影响）；与 spec seed_data.capabilities.enabled 双向一致。
 export const SELECTABLE_IMAGE_CAPABILITIES = IMAGE_OUTPUT_CAPABILITIES.filter(
   (slug) => !(DISABLED_IMAGE_CAPABILITIES as readonly string[]).includes(slug),
 );
@@ -314,8 +316,8 @@ export default function WorkspacePage() {
   const [creates, setCreates] = useState<Create[]>([]);
   const [loading, setLoading] = useState(true);
   const [capabilities, setCapabilities] = useState<CapabilityInfo[]>(fallbackCapabilities);
-  const [activeTab, setActiveTab] = useState('text-generation');
-  const [resolvedCapability, setResolvedCapability] = useState('text-generation');
+  const [activeTab, setActiveTab] = useState('image');
+  const [resolvedCapability, setResolvedCapability] = useState('image-generation');
   // 图片 Tab 手动选择的能力（null = 自动识别）；选能力后模型列表按 capability 过滤，参考图按 refImageRoles 分配 role
   const [selectedCapability, setSelectedCapability] = useState<string | null>(null);
   const [models, setModels] = useState<GatewayModelSummary[]>([]);
@@ -499,7 +501,7 @@ export default function WorkspacePage() {
     setModelError(null);
 
     const queryParam = activeTab === 'image'
-      ? (selectedCapability ? `capability=${encodeURIComponent(selectedCapability)}` : `modality=image`)
+      ? 'modality=image'
       : activeTab === 'video-generation'
         ? (selectedCapability ? `capability=${encodeURIComponent(selectedCapability)}` : `capability=video-generation`)
         : `capability=${encodeURIComponent(activeTab)}`;
@@ -512,7 +514,10 @@ export default function WorkspacePage() {
         const data = Array.isArray(result) ? result : result.data ?? [];
         if (!Array.isArray(data)) throw new Error('模型加载失败');
         setModels(data);
-        const defaultModel = data.find((model) => model.isDefault) ?? data[0];
+        // 图片 Tab 默认模型对齐 boli：优先 gpt-image-2（未启用则回退 isDefault → 列表首项）
+        const defaultModel = activeTab === 'image'
+          ? data.find((m) => m.slug === 'gpt-image-2') ?? data.find((m) => m.isDefault) ?? data[0]
+          : data.find((m) => m.isDefault) ?? data[0];
         setSelectedModelSlug(defaultModel?.slug ?? '');
       })
       .catch((reason: unknown) => {
@@ -537,10 +542,7 @@ export default function WorkspacePage() {
   // Resolve actual capability slug: image tab uses manual selection (if any) or auto-detects; others use tab slug directly
   useEffect(() => {
     if (activeTab === 'image') {
-      if (selectedCapability) {
-        setResolvedCapability(selectedCapability);
-        return;
-      }
+      // 图片 Tab 无能力选择器：有参考图 → 图片编辑，无参考图 → 文生图（参考 boli）
       const hasRef = uploadedFiles.length > 0;
       const modelCaps = models.find((m) => m.slug === selectedModelSlug)?.capabilities || ['image-generation'];
       setResolvedCapability(detectImageCapability(prompt, hasRef, modelCaps));
@@ -665,13 +667,9 @@ export default function WorkspacePage() {
     // 修改时切换到对应 tab
     const isImage = IMAGE_OUTPUT_CAPABILITIES.includes(create.capabilitySlug);
     setActiveTab(isImage ? 'image' : create.capabilitySlug);
-    // 图片创作修改：能力选择器对齐快照能力（模型列表按能力过滤 + 参考图槽位呈现）；
-    // 被屏蔽的历史能力（白底/场景/换装）回退自动识别，避免下拉无对应选项
-    if (isImage) {
-      setSelectedCapability(
-        (SELECTABLE_IMAGE_CAPABILITIES as readonly string[]).includes(create.capabilitySlug) ? create.capabilitySlug : null,
-      );
-    }
+    // 图片创作修改：Tab 无能力选择器（纯自动识别），清空手动选择避免视频能力残留；
+    // 历史屏蔽能力（白底/场景/换装）快照同样走自动识别（有参考图 → 图片编辑）
+    if (isImage) setSelectedCapability(null);
     // 恢复参考图：新快照 referenceImages 数组优先（服务端 resolveMediaUrls 已注入 url），
     // 遗留单图 referenceImage 快照回退按需 GET（与改造前行为一致）
     const refInput = create.input as {
@@ -1380,37 +1378,6 @@ export default function WorkspacePage() {
 
               {/* Row 2: 能力选择 + Model + Spec + cost + 发送 */}
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                {/* 能力选择（图片 Tab：自动识别 或 手动选择能力；选后模型按能力过滤、参考图按槽位分配 role） */}
-                {activeTab === 'image' && (
-                  <>
-                    <select
-                      aria-label="图片能力"
-                      value={selectedCapability ?? ''}
-                      onChange={(event) => {
-                        const next = event.target.value || null;
-                        setSelectedCapability(next);
-                        // 能力切换 → 参考图槽位语义变化，清空已上传图避免角色错位
-                        clearUploadedFiles();
-                        setSpecParams({});
-                      }}
-                      className="h-9 shrink-0 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
-                    >
-                      <option value="">自动识别（{capabilities.find((c) => c.slug === resolvedCapability)?.name || '图片'}）</option>
-                      {SELECTABLE_IMAGE_CAPABILITIES.map((slug) => (
-                        <option key={slug} value={slug}>
-                          {capabilities.find((c) => c.slug === slug)?.name || slug}
-                        </option>
-                      ))}
-                    </select>
-                    {/* 槽位语义提示：手动选能力且有槽位定义时说明每张图用途 */}
-                    {selectedCapability && (REF_IMAGE_ROLES[selectedCapability]?.length ?? 0) > 0 && (
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
-                        {REF_IMAGE_ROLES[selectedCapability].map((r) => `${r.label}${r.max > 1 ? `≤${r.max}张` : ''}`).join(' + ')}
-                      </span>
-                    )}
-                  </>
-                )}
-
                 {/* 能力选择（视频 Tab：视频生成 / 风格克隆；风格克隆需参考视频） */}
                 {activeTab === 'video-generation' && (
                   <select

@@ -262,12 +262,30 @@ describe('WorkspacePage', () => {
     });
   });
 
-  it('按服务端默认标记选择模型', async () => {
+  it('按服务端默认标记选择模型（文本 Tab）', async () => {
     renderWorkspace();
+    const user = userEvent.setup();
+    // 默认 Tab = 图片；切到文本生成验证服务端 isDefault 标记
+    await waitFor(() => { expect(screen.getByTitle('文本生成')).toBeInTheDocument(); });
+    await user.click(screen.getByTitle('文本生成'));
 
     const selector = await screen.findByRole('combobox', { name: '模型' });
     expect(selector).toHaveValue('doubao-seed-2-0-pro');
     expect(screen.getByText('5 积分/次')).toBeInTheDocument();
+  });
+
+  it('图片 Tab 默认模型 = gpt-image-2（对齐 boli），文本 Tab 不受影响', async () => {
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    // 默认 Tab = 图片：模型默认 gpt-image-2
+    const selector = await screen.findByRole('combobox', { name: '模型' });
+    await waitFor(() => {
+      expect(selector).toHaveValue('gpt-image-2');
+    });
+    // 无参考图 + 提示词 → 文生图
+    await user.type(screen.getByPlaceholderText(/输入提示词/), '一只猫');
+    await user.click(screen.getByRole('button', { name: '发送' }));
   });
 
   it('提交用户选择的逻辑模型 slug', async () => {
@@ -284,6 +302,9 @@ describe('WorkspacePage', () => {
     renderWorkspace();
     const user = userEvent.setup();
 
+    // 默认 Tab = 图片；切到文本生成再选模型提交
+    await waitFor(() => { expect(screen.getByTitle('文本生成')).toBeInTheDocument(); });
+    await user.click(screen.getByTitle('文本生成'));
     await user.selectOptions(await screen.findByRole('combobox', { name: '模型' }), 'kimi-k2-5');
     await user.type(screen.getByPlaceholderText(/输入提示词/), '写一段商品文案');
     await user.click(screen.getByRole('button', { name: '发送' }));
@@ -624,7 +645,7 @@ describe('WorkspacePage', () => {
     });
   });
 
-  it('图片 Tab：基于此修改的图片创作能力对齐快照（不因 prompt 关键词漂移）', async () => {
+  it('图片 Tab：基于此修改（含参考图）→ 自动识别为图片编辑（无正则，不因 prompt 关键词漂移）', async () => {
     let postedBody: Record<string, unknown> | null = null;
     server.use(
       http.post('/api/gateway/generate', async ({ request }) => {
@@ -653,15 +674,15 @@ describe('WorkspacePage', () => {
       expect(screen.getByText('给模特换装成红色裙子')).toBeInTheDocument();
     });
 
-    // 点击"基于此修改" → 触发 handleModify
+    // 点击"基于此修改" → 触发 handleModify（恢复 legacy 参考图，按需 GET 已 mock）
     await user.click(screen.getByRole('button', { name: /基于此修改/ }));
     await new Promise((r) => setTimeout(r, 300));
 
-    // 提交：能力对齐快照 image-generation（修改 = 延续原意图；需要换装可在能力选择器手动切换）
+    // 提交：快照含参考图 → 自动识别为图片编辑（有图就是编辑图；prompt 关键词不再参与判定）
     await user.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
-      expect(postedBody).toMatchObject({ capabilitySlug: 'image-generation' });
+      expect(postedBody).toMatchObject({ capabilitySlug: 'image-editing' });
     });
   });
 
@@ -908,14 +929,14 @@ describe('WorkspacePage', () => {
   });
   // ===== 能力显式选择 + 参考图槽位 role（对齐 runninghub 心智） =====
 
-  it('手动选择图片能力后模型列表按 capability 过滤（能力-模型强绑定）', async () => {
+  it('图片 Tab 无能力选择器：modality=image 拉全量图片模型，默认 gpt-image-2', async () => {
     let requestedUrl = '';
     server.use(
       http.get('/api/gateway/models', ({ request }) => {
         requestedUrl = request.url;
-        const capability = new URL(request.url).searchParams.get('capability');
-        if (capability === 'image-editing') {
-          return HttpResponse.json({ success: true, data: mockImageModels.filter((m) => m.capabilities.includes('image-editing')) });
+        const modality = new URL(request.url).searchParams.get('modality');
+        if (modality === 'image') {
+          return HttpResponse.json({ success: true, data: mockImageModels });
         }
         return HttpResponse.json({ success: true, data: mockModels });
       }),
@@ -924,28 +945,21 @@ describe('WorkspacePage', () => {
     renderWorkspace();
     const user = userEvent.setup();
     await waitFor(() => { expect(screen.getByTitle('视频生成')).toBeInTheDocument(); });
-    await user.click(screen.getByTitle('图片'));
 
-    // 默认自动识别：modality=image 拉全量图片模型
+    // 默认 Tab = 图片：modality=image 拉全量图片模型
     await waitFor(() => {
       expect(requestedUrl).toContain('modality=image');
     });
-
-    // 手动选择"图片编辑"
-    const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
-    await user.selectOptions(capSelect, 'image-editing');
-
-    await waitFor(() => {
-      expect(requestedUrl).toContain('capability=image-editing');
-    });
-    // 模型列表收敛为支持该能力的模型
+    // 无"图片能力"选择器（操作类型列表已删除，纯自动识别）
+    expect(screen.queryByRole('combobox', { name: '图片能力' })).not.toBeInTheDocument();
+    // 默认模型 = gpt-image-2（对齐 boli）
     const modelSelect = await screen.findByRole('combobox', { name: '模型' });
     await waitFor(() => {
-      expect(modelSelect).toHaveValue('doubao-seedream-5-0');
+      expect(modelSelect).toHaveValue('gpt-image-2');
     });
   });
 
-  it('手动选能力（图片编辑）上传多张参考图，无 role 通用数组提交', async () => {
+  it('图片 Tab 上传多张参考图：自动识别为图片编辑，无 role 通用数组提交', async () => {
     let requestBody: Record<string, unknown> | undefined;
     let uploadSeq = 0;
     server.use(
@@ -966,12 +980,9 @@ describe('WorkspacePage', () => {
     renderWorkspace();
     const user = userEvent.setup();
     await waitFor(() => { expect(screen.getByTitle('视频生成')).toBeInTheDocument(); });
-    await user.click(screen.getByTitle('图片'));
 
-    const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
-    await user.selectOptions(capSelect, 'image-editing');
-
-    // 图片编辑 = 通用多参考图：无角色槽位提示（REF_IMAGE_ROLES 空契约）
+    // 无能力选择器；无角色槽位提示（图片编辑 = 通用多参考图契约）
+    expect(screen.queryByRole('combobox', { name: '图片能力' })).not.toBeInTheDocument();
     expect(screen.queryByText('编辑目标图')).not.toBeInTheDocument();
     expect(screen.queryByText('模特图 + 衣服图')).not.toBeInTheDocument();
 
@@ -1048,14 +1059,12 @@ describe('WorkspacePage', () => {
     renderWorkspace();
     const user = userEvent.setup();
     await waitFor(() => { expect(screen.getByTitle('视频生成')).toBeInTheDocument(); });
-    await user.click(screen.getByTitle('图片'));
 
-    const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
-    await user.selectOptions(capSelect, 'image-editing');
-
+    // 无能力选择器（纯自动识别）；图片编辑为通用多图，不互斥
+    expect(screen.queryByRole('combobox', { name: '图片能力' })).not.toBeInTheDocument();
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 
-    // 上传第 1 张后，追加第 2 张（图片编辑为通用多图，不互斥）
+    // 上传第 1 张后，追加第 2 张
     await user.upload(fileInput, new File(['a'], 'a.png', { type: 'image/png' }));
     await waitFor(() => expect(screen.getByAltText('a.png')).toBeInTheDocument());
     await user.upload(fileInput, new File(['b'], 'b.png', { type: 'image/png' }));
@@ -1109,11 +1118,8 @@ describe('WorkspacePage', () => {
     await waitFor(() => { expect(screen.getByText('基于此修改')).toBeInTheDocument(); });
     await user.click(screen.getByText('基于此修改'));
 
-    // 能力已被屏蔽：选择器回退自动识别（不残留 model-dressing 选项）
-    const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
-    await waitFor(() => {
-      expect(capSelect).toHaveValue('');
-    });
+    // 图片 Tab 无能力选择器（纯自动识别）；历史屏蔽能力快照不残留任何选择
+    expect(screen.queryByRole('combobox', { name: '图片能力' })).not.toBeInTheDocument();
     // 快照参考图以通用方式呈现（无角色槽位 label；url 注入，不触发按需 GET）
     await waitFor(() => {
       expect(screen.queryByLabelText('模特图（已上传，点击替换）')).not.toBeInTheDocument();

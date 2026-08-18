@@ -32,26 +32,18 @@ test.describe('工作区图片/视频创建链路', () => {
     await page.locator('[data-testid="create-list"]').waitFor({ state: 'visible', timeout: 10000 });
   }
 
-  test('1. 图片 Tab：能力选择器出现，选"图片编辑"后模型过滤 + 通用多参考图堆叠', async ({ page }) => {
+  test('1. 图片 Tab：默认打开、无能力选择器（纯自动识别）、默认模型 gpt-image-2、通用参考图堆叠', async ({ page }) => {
     await openWorkspace(page);
 
-    // 进入图片 Tab
-    await page.getByTitle('图片').click();
-    const capSelect = page.getByRole('combobox', { name: '图片能力' });
-    await expect(capSelect).toBeVisible();
-
-    // 默认自动识别：模型下拉加载（modality=image → seedream-5-0 默认）
+    // 默认 Tab = 图片（mode 默认图片）
+    await expect(page.getByTitle('图片')).toBeVisible();
+    // 图片能力选择器已删除（有参考图 → 图片编辑；无参考图 → 文生图，无正则判定）
+    await expect(page.getByRole('combobox', { name: '图片能力' })).toHaveCount(0);
+    // 模型默认 gpt-image-2（对齐 boli）
     const modelSelect = page.getByRole('combobox', { name: '模型' });
     await expect(modelSelect).toBeVisible();
-    await expect(modelSelect).toHaveValue('doubao-seedream-5-0', { timeout: 10000 });
-
-    // 手动选"图片编辑"：模型按 capability 过滤（seedream-5-0 优先）+ 通用多参考图堆叠（无角色槽位）
-    await capSelect.selectOption('image-editing');
-    await expect(modelSelect).toHaveValue('doubao-seedream-5-0');
-    await expect(page.getByLabel('上传参考图')).toBeVisible({ timeout: 5000 });
-
-    // 切回自动识别：仍为通用参考图堆叠（自动识别不分配角色槽位）
-    await capSelect.selectOption('');
+    await expect(modelSelect).toHaveValue('gpt-image-2', { timeout: 10000 });
+    // 通用参考图堆叠（无角色槽位）
     await expect(page.getByLabel('上传参考图')).toBeVisible({ timeout: 5000 });
   });
 
@@ -81,12 +73,9 @@ test.describe('工作区图片/视频创建链路', () => {
 
     await openWorkspace(page);
 
-    // 图片能力切换：自动 → 场景合成 → 自动
+    // 图片 Tab：无能力选择器（纯自动识别），无未捕获错误
     await page.getByTitle('图片').click();
-    const imgCap = page.getByRole('combobox', { name: '图片能力' });
-    await expect(imgCap).toBeVisible();
-    await imgCap.selectOption('image-editing');
-    await imgCap.selectOption('');
+    await expect(page.getByRole('combobox', { name: '图片能力' })).toHaveCount(0);
     await page.waitForTimeout(200);
 
     // 视频能力切换：自动 → 风格克隆 → 自动
