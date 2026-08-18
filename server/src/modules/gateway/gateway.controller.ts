@@ -36,6 +36,17 @@ export class GatewayController {
 
   // ===== Capabilities =====
 
+
+  /** 从请求头推导公网域名（兜底参考图相对路径 → 绝对 URL 解析；x-forwarded-* 优先） */
+  private extractPublicDomain(req: any): string | undefined {
+    const headers = req?.headers ?? {};
+    const protoRaw = headers['x-forwarded-proto'] || req?.protocol || 'http';
+    const proto = String(protoRaw).split(',')[0].trim();
+    const hostRaw = headers['x-forwarded-host'] || headers.host;
+    const host = hostRaw ? String(hostRaw).split(',')[0].trim() : '';
+    return host ? `${proto}://${host}` : undefined;
+  }
+
   @Get('capabilities')
   @UseGuards(JwtAuthGuard)
   listCapabilities() {
@@ -97,7 +108,9 @@ export class GatewayController {
       throw new BadRequestException('项目 ID 不能为空');
     }
 
-    const result = await this.gatewayService.submitGeneration(userId, projectId, capabilitySlug, input, modelSlug, sourceCreateId);
+    const result = await this.gatewayService.submitGeneration(
+      userId, projectId, capabilitySlug, input, modelSlug, sourceCreateId, this.extractPublicDomain(req),
+    );
     return { success: true, data: result };
   }
 
@@ -109,7 +122,7 @@ export class GatewayController {
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
   async quickCreate(@Req() req: any, @Body() body: QuickCreateInput) {
     const userId = req.user.userId;
-    const result = await this.gatewayService.quickCreate(userId, body.projectId, body.recipeId, body.input);
+    const result = await this.gatewayService.quickCreate(userId, body.projectId, body.recipeId, body.input, this.extractPublicDomain(req));
     return { success: true, data: result };
   }
 

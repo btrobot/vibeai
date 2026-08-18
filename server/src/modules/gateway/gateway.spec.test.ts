@@ -438,6 +438,8 @@ describe('Gateway Spec Tests', () => {
           size: '2K', // from recipe defaultInput
         }),
         'doubao-seedream-5-0',
+        undefined, // sourceCreateId
+        undefined, // fallbackDomain（quickCreate 未透传请求域名时为空）
       );
     });
 
@@ -458,6 +460,8 @@ describe('Gateway Spec Tests', () => {
         'image-generation',
         expect.objectContaining({ size: '2K' }),
         'doubao-seedream-5-0',
+        undefined, // sourceCreateId
+        undefined, // fallbackDomain
       );
     });
   });

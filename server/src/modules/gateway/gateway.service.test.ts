@@ -442,6 +442,53 @@ describe('GatewayService', () => {
 
       expect(resolved.referenceImage).toBe('https://cdn.example.com/a.png');
     });
+
+    it('COZE_PROJECT_DOMAIN_DEFAULT 为空时 fallbackDomain 将相对 URL 绝对化（请求域名兜底）', async () => {
+      const prev = process.env.COZE_PROJECT_DOMAIN_DEFAULT;
+      delete process.env.COZE_PROJECT_DOMAIN_DEFAULT;
+      try {
+        const urlMap = new Map<string, string>([
+          ['file-a', '/api/storage/serve/users/1/ref.webp'],
+        ]);
+        vi.spyOn(service['storageService'], 'resolveUrls').mockResolvedValue(urlMap);
+
+        const input = { prompt: '换装', referenceImages: [{ fileId: 'file-a' }] };
+
+        const resolved = await (service as any).resolveInputForAdapter(
+          input,
+          'https://123.207.4.56',
+        );
+
+        expect(resolved.referenceImages).toEqual([
+          'https://123.207.4.56/api/storage/serve/users/1/ref.webp',
+        ]);
+      } finally {
+        if (prev === undefined) delete process.env.COZE_PROJECT_DOMAIN_DEFAULT;
+        else process.env.COZE_PROJECT_DOMAIN_DEFAULT = prev;
+      }
+    });
+
+    it('COZE_PROJECT_DOMAIN_DEFAULT 优先于 fallbackDomain（环境变量为准）', async () => {
+      const prev = process.env.COZE_PROJECT_DOMAIN_DEFAULT;
+      process.env.COZE_PROJECT_DOMAIN_DEFAULT = 'https://env.example.com';
+      try {
+        const urlMap = new Map<string, string>([
+          ['file-a', '/api/storage/serve/users/1/ref.webp'],
+        ]);
+        vi.spyOn(service['storageService'], 'resolveUrls').mockResolvedValue(urlMap);
+
+        const input = { prompt: '换装', referenceImages: [{ fileId: 'file-a' }] };
+
+        const resolved = await (service as any).resolveInputForAdapter(input, 'https://req.example.com');
+
+        expect(resolved.referenceImages).toEqual([
+          'https://env.example.com/api/storage/serve/users/1/ref.webp',
+        ]);
+      } finally {
+        if (prev === undefined) delete process.env.COZE_PROJECT_DOMAIN_DEFAULT;
+        else process.env.COZE_PROJECT_DOMAIN_DEFAULT = prev;
+      }
+    });
   });
 
   describe('chatStream — 渠道解析与 fallback', () => {

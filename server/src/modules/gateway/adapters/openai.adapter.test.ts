@@ -176,6 +176,130 @@ describe('OpenAIAdapter', () => {
 
   // ===== LLM: chat completions =====
 
+  describe('图片编辑 — 有参考图走 images/edits multipart（多参考图契约）', () => {
+    function imageResponse(): Response {
+      return new Response(new Uint8Array([1, 2, 3, 4]), {
+        headers: { 'Content-Type': 'image/webp' },
+      });
+    }
+
+    afterEach(() => {
+      delete process.env.COZE_PROJECT_DOMAIN_DEFAULT;
+    });
+
+    it('有 referenceImages 时走 /images/edits，multipart 携带每张参考图（image 字段 × N）', async () => {
+      fetchMock
+        .mockResolvedValueOnce(imageResponse()) // 下载 ref1
+        .mockResolvedValueOnce(imageResponse()) // 下载 ref2
+        .mockResolvedValueOnce(jsonResponse({ data: [{ url: 'https://cdn.example.com/edit.png' }] })); // edits
+
+      const result = await adapter.execute(
+        {
+          prompt: '将图一的连衣裙、开衫换到图二 图二模特动作姿势不改变',
+          referenceImages: [
+            'https://cdn.example.com/ref1.webp',
+            'https://cdn.example.com/ref2.webp',
+          ],
+        },
+        model(),
+        ctx(),
+      );
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      // 前两次为参考图下载
+      expect(fetchMock.mock.calls[0][0]).toBe('https://cdn.example.com/ref1.webp');
+      expect(fetchMock.mock.calls[1][0]).toBe('https://cdn.example.com/ref2.webp');
+      // 第三次为 edits 提交
+      const [url, init] = fetchMock.mock.calls[2];
+      expect(url).toBe('https://cn.pptoken.cc/v1/images/edits');
+      expect(init.method).toBe('POST');
+      expect(init.headers.Authorization).toBe('Bearer sk-test-key');
+      // multipart：Content-Type 由 fetch 自动生成（boundary），不可手动设置
+      expect(init.headers['Content-Type']).toBeUndefined();
+      const fd = init.body as FormData;
+      expect(fd.get('model')).toBe('gpt-image-2');
+      expect(fd.get('prompt')).toBe('将图一的连衣裙、开衫换到图二 图二模特动作姿势不改变');
+      expect(fd.get('n')).toBe('1');
+      expect(fd.get('size')).toBeNull(); // 未显式 size 时不强制（沿用参考图比例）
+      const images = fd.getAll('image');
+      expect(images).toHaveLength(2);
+      expect((images[0] as Blob).type).toBe('image/webp');
+      expect((images[0] as Blob).size).toBe(4);
+      expect(result.output.images).toHaveLength(1);
+      expect(result.output.modelUsed).toBe('gpt-image-2');
+    });
+
+    it('编辑响应 b64_json 解析为 data URL 兜底', async () => {
+      fetchMock
+        .mockResolvedValueOnce(imageResponse())
+        .mockResolvedValueOnce(jsonResponse({ data: [{ b64_json: 'QUJD' }] }));
+
+      const result = await adapter.execute(
+        { prompt: '换装', referenceImages: ['https://cdn.example.com/ref.webp'] },
+        model(),
+        ctx(),
+      );
+
+      expect(result.output.images).toEqual([{ url: 'data:image/png;base64,QUJD', embedded: true }]);
+    });
+
+    it('无 referenceImages 时维持 /images/generations JSON（不触发参考图下载）', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ data: [{ url: 'https://cdn.example.com/a.png' }] }));
+
+      await adapter.execute({ prompt: '猫' }, model(), ctx());
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][0]).toBe('https://cn.pptoken.cc/v1/images/generations');
+      const [, init] = fetchMock.mock.calls[0];
+      expect(init.headers['Content-Type']).toBe('application/json');
+    });
+
+    it('参考图下载失败时显性报错（绝不静默丢弃参考图继续文生图）', async () => {
+      fetchMock
+        .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+        .mockResolvedValueOnce(jsonResponse({ data: [{ url: 'https://cdn.example.com/x.png' }] }));
+
+      await expect(
+        adapter.execute(
+          { prompt: '换装', referenceImages: ['https://cdn.example.com/ref.webp'] },
+          model(),
+          ctx(),
+        ),
+      ).rejects.toThrow(/参考图下载失败（HTTP 404）/);
+      expect(fetchMock).toHaveBeenCalledTimes(1); // 下载失败即中止，不再提交
+    });
+
+    it('相对路径参考图 + 未配置 COZE_PROJECT_DOMAIN_DEFAULT → 显性报错', async () => {
+      delete process.env.COZE_PROJECT_DOMAIN_DEFAULT;
+
+      await expect(
+        adapter.execute(
+          { prompt: '换装', referenceImages: ['/api/storage/serve/users/1/ref.webp'] },
+          model(),
+          ctx(),
+        ),
+      ).rejects.toThrow(/COZE_PROJECT_DOMAIN_DEFAULT/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('相对路径参考图 + COZE_PROJECT_DOMAIN_DEFAULT → 拼接绝对 URL 下载并走 edits', async () => {
+      process.env.COZE_PROJECT_DOMAIN_DEFAULT = 'https://app.example.com';
+      fetchMock
+        .mockResolvedValueOnce(imageResponse())
+        .mockResolvedValueOnce(jsonResponse({ data: [{ url: 'https://cdn.example.com/edit.png' }] }));
+
+      const result = await adapter.execute(
+        { prompt: '换装', referenceImages: ['/api/storage/serve/users/1/ref.webp'] },
+        model(),
+        ctx(),
+      );
+
+      expect(fetchMock.mock.calls[0][0]).toBe('https://app.example.com/api/storage/serve/users/1/ref.webp');
+      expect(fetchMock.mock.calls[1][0]).toBe('https://cn.pptoken.cc/v1/images/edits');
+      expect(result.output.images).toHaveLength(1);
+    });
+  });
+
   describe('LLM chat completions', () => {
     const llmModel = () => model({ outputType: 'text', modality: 'llm' });
 

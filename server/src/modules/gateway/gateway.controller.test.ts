@@ -55,6 +55,7 @@ function createMockRequest(overrides: Record<string, unknown> = {}): any {
   return {
     user: { userId: 'user-1' },
     query: {},
+    headers: { host: 'app.example.com', 'x-forwarded-proto': 'https' },
     ...overrides,
   };
 }
@@ -230,6 +231,7 @@ describe('GatewayController', () => {
         { prompt: '一只猫' },
         undefined,
         undefined,
+        'https://app.example.com', // fallbackDomain（从请求 Host 推导，参考图相对路径兜底）
       );
     });
 
@@ -249,6 +251,7 @@ describe('GatewayController', () => {
         { prompt: '你好' },
         'kimi-k2-5',
         undefined,
+        'https://app.example.com',
       );
     });
   });
@@ -266,7 +269,7 @@ describe('GatewayController', () => {
       );
 
       expect(result).toEqual({ success: true, data: taskResponse });
-      expect(mockGatewayService.quickCreate).toHaveBeenCalledWith('user-1', 'proj-1', 'text-to-image', { prompt: '一只猫' });
+      expect(mockGatewayService.quickCreate).toHaveBeenCalledWith('user-1', 'proj-1', 'text-to-image', { prompt: '一只猫' }, 'https://app.example.com');
     });
 
     it('应支持无 input 的配方调用', async () => {
@@ -278,7 +281,7 @@ describe('GatewayController', () => {
         { recipeId: 'prompt-enhance', projectId: 'proj-1' },
       );
 
-      expect(mockGatewayService.quickCreate).toHaveBeenCalledWith('user-1', 'proj-1', 'prompt-enhance', undefined);
+      expect(mockGatewayService.quickCreate).toHaveBeenCalledWith('user-1', 'proj-1', 'prompt-enhance', undefined, 'https://app.example.com');
     });
   });
 

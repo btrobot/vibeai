@@ -27,6 +27,17 @@ interface OpenAIChatResponse {
   error?: { message?: string; type?: string };
 }
 
+/** 根据 MIME 推断 multipart 文件名扩展名（网关按扩展名/类型识别参考图） */
+function extensionForBlob(contentType: string): string {
+  const sub = contentType.split('/')[1]?.toLowerCase() ?? '';
+  if (sub.includes('jpeg') || sub.includes('jpg')) return '.jpg';
+  if (sub.includes('webp')) return '.webp';
+  if (sub.includes('gif')) return '.gif';
+  if (sub.includes('svg')) return '.svg';
+  if (sub.includes('png')) return '.png';
+  return '.png';
+}
+
 /** 外部取消信号联动内部超时 controller：任一触发即 abort */
 function linkExternalSignal(controller: AbortController, external?: AbortSignal): void {
   if (!external) return;
@@ -88,31 +99,64 @@ export class OpenAIAdapter implements ProtocolAdapter {
     }
 
     // ===== Real mode =====
-    const url = `${baseUrl.replace(/\/+$/, '')}/images/generations`;
-    this.logger.log(`OpenAI image generation: model=${modelId}, size=${size}, n=${count}, baseUrl=${baseUrl}, taskId=${context.taskId}`);
+    // 图片编辑（有参考图）→ /images/edits（multipart 多图上传）；文生图（无参考图）→ /images/generations（JSON）
+    const referenceImages = (input.referenceImages as string[] | undefined) ?? [];
+    const useEdits = referenceImages.length > 0;
+    const url = `${baseUrl.replace(/\/+$/, '')}/${useEdits ? 'images/edits' : 'images/generations'}`;
+    const effectiveSize = useEdits ? ((input.size as string) ?? 'auto') : size;
+    this.logger.log(
+      `OpenAI image ${useEdits ? 'edit' : 'generation'}: model=${modelId}, refs=${referenceImages.length}, ` +
+        `size=${effectiveSize}, n=${useEdits ? 1 : count}, baseUrl=${baseUrl}, taskId=${context.taskId}`,
+    );
 
-    context.onProgress?.(10, '正在提交到 OpenAI 兼容网关...');
+    context.onProgress?.(10, useEdits ? '正在下载参考图并提交图片编辑...' : '正在提交到 OpenAI 兼容网关...');
 
     const controller = new AbortController();
     linkExternalSignal(controller, context.signal);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: modelId,
-          prompt,
-          size,
-          n: count,
-          ...(quality ? { quality } : {}),
-        }),
-        signal: controller.signal,
-      });
+      if (useEdits) {
+        // 多参考图编辑：参考图逐个下载 → multipart image 字段（每图一个）→ images/edits
+        const form = new FormData();
+        form.append('model', modelId);
+        form.append('prompt', prompt);
+        form.append('n', '1'); // OpenAI images/edits 仅支持 n=1
+        if (effectiveSize && effectiveSize !== 'auto') {
+          form.append('size', effectiveSize);
+        }
+        for (let i = 0; i < referenceImages.length; i++) {
+          const refUrl = referenceImages[i];
+          if (!refUrl) continue;
+          const blob = await this.downloadReferenceImage(
+            this.toAbsoluteReferenceUrl(refUrl),
+            controller.signal,
+          );
+          form.append('image', blob, `reference_${i}${extensionForBlob(blob.type)}`);
+        }
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: form, // fetch 自动生成 multipart boundary，勿手动设 Content-Type
+          signal: controller.signal,
+        });
+      } else {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: modelId,
+            prompt,
+            size,
+            n: count,
+            ...(quality ? { quality } : {}),
+          }),
+          signal: controller.signal,
+        });
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('abort')) {
@@ -164,6 +208,28 @@ export class OpenAIAdapter implements ProtocolAdapter {
   }
 
   // ===== LLM: OpenAI 标准 chat completions（SSE 流式）=====
+
+  /** 相对路径参考图 → 公网绝对 URL（COZE_PROJECT_DOMAIN_DEFAULT 兜底；无法解析则显性报错，绝不静默丢弃参考图） */
+  private toAbsoluteReferenceUrl(url: string): string {
+    if (!url.startsWith('/')) return url;
+    const domain = (process.env.COZE_PROJECT_DOMAIN_DEFAULT || '').trim();
+    if (domain) return `${domain.replace(/\/+$/, '')}${url}`;
+    throw new Error(
+      `参考图地址为相对路径（${url}）且未配置 COZE_PROJECT_DOMAIN_DEFAULT，无法解析为公网可访问的绝对 URL`,
+    );
+  }
+
+  /** 下载参考图到内存 Blob（供 multipart 上传） */
+  private async downloadReferenceImage(url: string, signal: AbortSignal): Promise<Blob> {
+    const res = await fetch(url, { signal });
+    if (!res.ok) {
+      throw new Error(`参考图下载失败（HTTP ${res.status}）：${url}`);
+    }
+    const buf = await res.arrayBuffer();
+    const contentType = res.headers.get('content-type') || 'image/png';
+    return new Blob([buf], { type: contentType });
+  }
+
 
   private async streamChat(
     input: Record<string, unknown>,

@@ -340,7 +340,10 @@ export class GatewayService {
    * Array fields: images, referenceImages, referenceVideos, referenceAudios
    * Single fields: firstFrame, lastFrame, referenceImage, imageUrl
    */
-  private async resolveInputForAdapter(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async resolveInputForAdapter(
+    input: Record<string, unknown>,
+    fallbackDomain?: string,
+  ): Promise<Record<string, unknown>> {
     const resolved = { ...input };
 
     // Collect all fileIds to resolve in batch
@@ -394,7 +397,7 @@ export class GatewayService {
     }
 
     // Convert relative URLs to absolute for external AI API consumption
-    const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT;
+    const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT?.trim() || fallbackDomain?.trim();
     if (domain) {
       const toAbsolute = (url: unknown): unknown => {
         if (typeof url === 'string' && url.startsWith('/')) {
@@ -423,6 +426,7 @@ export class GatewayService {
     input: Record<string, unknown>,
     preferredModel?: string,
     sourceCreateId?: string,
+    fallbackDomain?: string,
   ): Promise<GenerationTaskResponse> {
     // Validate capability
     const capability = builtInCapabilityMap.get(capabilitySlug);
@@ -459,7 +463,7 @@ export class GatewayService {
     });
 
     // Resolve fileId references to URLs for adapter consumption (boundary: system → external API)
-    const resolvedInput = await this.resolveInputForAdapter(input);
+    const resolvedInput = await this.resolveInputForAdapter(input, fallbackDomain);
 
     // Create task record linked to the Create
     const taskId = uuidv4();
@@ -519,6 +523,7 @@ export class GatewayService {
     projectId: string,
     recipeId: string,
     input?: Record<string, unknown>,
+    fallbackDomain?: string,
   ): Promise<GenerationTaskResponse> {
     const recipe = SEED_RECIPES.find((r) => r.id === recipeId);
     if (!recipe) {
@@ -528,7 +533,7 @@ export class GatewayService {
     // Merge default input with user input
     const mergedInput = { ...recipe.defaultInput, ...input };
 
-    return this.submitGeneration(userId, projectId, recipe.capabilitySlug, mergedInput, recipe.modelSlug);
+    return this.submitGeneration(userId, projectId, recipe.capabilitySlug, mergedInput, recipe.modelSlug, undefined, fallbackDomain);
   }
 
   // ===== Task Query =====

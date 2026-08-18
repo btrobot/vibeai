@@ -491,7 +491,7 @@ operations:
               type: string
               enum: [target, subject, product, scene, model, garment]
               description: 参考图槽位角色（对齐能力 inputSchema.refImageRoles）；用户手动选择能力时按槽位顺序分配，自动识别模式可省略（无 role = 通用参考图，按数组顺序传给适配器）
-        description: 多参考图 fileId 引用数组（运行时解析 fileId→URL 后传给 AI 适配器）；无参考图时省略该字段，与 referenceImage 单图兼容
+        description: 多参考图 fileId 引用数组（运行时解析 fileId→URL 后传给 AI 适配器）；无参考图时省略该字段，与 referenceImage 单图兼容。OpenAI 兼容网关适配器（gpt-image 系列）：有参考图 → POST /images/edits（multipart image 字段逐张上传，n=1）；无参考图 → POST /images/generations
       referenceVideos:
         type: array
         maxItems: 3
@@ -945,6 +945,8 @@ seed_data:
   # L1/L2 分层（2026-08 产品共识，对齐 RunningHub）：
   #   L1 生成层：image-generation（文生图，无参考图）/ image-editing（图片编辑，多参考图无 role，语义由 prompt 描述）
   #     → 前端 UI 无能力选择器（纯自动识别），判定由"参考图有无"驱动，无正则
+  #     → 适配器协议：OpenAI 兼容网关（pptoken 等）有参考图走 images/edits multipart（参考图=image 字段，下载后逐张上传）；
+  #       无参考图走 images/generations JSON。参考图必须传递到模型——下载失败/无法绝对化 URL 时显性报错，绝不静默降级为文生图。
   #   L2 后处理层：background-removal（白底）/ scene-composition（场景）/ model-dressing（换装）
   #     → "结果图附加操作"语义，本期不启用（enabled: false），历史数据仅渲染不可新建
   # refImageRoles 仅属 L2 操作语义（历史/未来文档），L1 不消费；前端无对应常量（见 image-capability-consistency 测试）

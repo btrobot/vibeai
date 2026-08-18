@@ -11,6 +11,7 @@
  * REG-006: submitGeneration Task 创建失败后退还信用
  * REG-007: 退款失败不影响任务失败状态
  * REG-008: 版本化 sdkModelId 不得作为逻辑模型 slug
+ * REG-018: 图片编辑参考图必须传递到执行层（OpenAI edits 协议，防"换装输出乱七八糟"复现）
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -1071,6 +1072,119 @@ describe('AI Gateway 回归测试', () => {
         'user-1', 'proj-1', 'text-generation', { prompt: 'hello' },
         'doubao-seedance-1-5-pro',
       )).rejects.toThrow('不支持能力');
+    });
+  });
+
+  // ============================================================
+  // REG-018: 图片编辑参考图必须传递到执行层（OpenAI edits 协议）
+  //
+  // Bug: OpenAIAdapter 读取 input 时忽略 referenceImages，只发 images/generations，
+  //      模型看不到参考图 → 换装/编辑任务凭空脑补（输出男人图像/乱七八糟），任务却标记成功。
+  // 修复: adapter 有参考图走 /images/edits multipart（参考图逐个下载上传，n=1）；
+  //      上游 resolveInputForAdapter 保证参考图以（绝对）URL 数组到达 adapter。
+  // 回归保护: referenceImages 字段在 gateway → executeTask 链路上不得丢失/变形。
+  // ============================================================
+  describe('REG-018: 图片编辑参考图传递链路（防静默丢弃）', () => {
+    function dbImageModel() {
+      return {
+        slug: 'gpt-image-2',
+        name: 'GPT Image 2',
+        sdkModelId: 'gpt-image-2',
+        modality: 'image',
+        outputType: 'image',
+        providerName: 'pptoken',
+        sdkClient: 'openai',
+        capabilities: ['image-generation'],
+        constraints: {},
+        defaultParams: {},
+        costCredits: 10,
+        sortOrder: 30,
+        description: '',
+        avatar: null,
+        contextWindow: null,
+        maxOutputTokens: null,
+        inputModes: [],
+        inputSchema: {},
+        tags: [],
+        isActive: true,
+        isFeatured: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    }
+
+    it('含参考图的提交 → executeTask 收到绝对 URL 数组（resolveUrls 相对 + fallbackDomain 兜底）', async () => {
+      mockSingle(db, dbImageModel() as any);
+      vi.spyOn((service as any)['storageService'], 'resolveUrls').mockResolvedValue(
+        new Map<string, string>([
+          ['file-a', '/api/storage/serve/users/1/ref1.webp'],
+          ['file-b', '/api/storage/serve/users/1/ref2.webp'],
+        ]),
+      );
+
+      await service.submitGeneration(
+        'user-1', 'proj-1', 'image-generation',
+        {
+          prompt: '将图一的连衣裙、开衫换到图二 图二模特动作姿势不改变',
+          referenceImages: [{ fileId: 'file-a' }, { fileId: 'file-b' }],
+        },
+        'gpt-image-2', undefined, 'https://123.207.4.56',
+      );
+
+      expect(mockTaskExecution.executeTask).toHaveBeenCalledTimes(1);
+      const resolvedInput = mockTaskExecution.executeTask.mock.calls[0][3];
+      // 参考图必须完整到达执行层（adapter 下载上传的基础），且为绝对 URL
+      expect(resolvedInput.referenceImages).toEqual([
+        'https://123.207.4.56/api/storage/serve/users/1/ref1.webp',
+        'https://123.207.4.56/api/storage/serve/users/1/ref2.webp',
+      ]);
+      expect(resolvedInput.prompt).toBe('将图一的连衣裙、开衫换到图二 图二模特动作姿势不改变');
+    });
+
+    it('直传绝对 URL（legacy）→ 原样透传不改写、不丢失', async () => {
+      mockSingle(db, dbImageModel() as any);
+      const refs = ['https://cdn.example.com/a.png', 'https://cdn.example.com/b.png'];
+
+      await service.submitGeneration(
+        'user-1', 'proj-1', 'image-generation',
+        { prompt: 'edit', referenceImages: refs },
+        'gpt-image-2',
+      );
+
+      const resolvedInput = mockTaskExecution.executeTask.mock.calls[0][3];
+      expect(resolvedInput.referenceImages).toEqual(refs);
+      expect(resolvedInput.referenceImages).not.toContainEqual(expect.any(Object));
+    });
+
+    it('resolveUrls 未解析到的 fileId 被过滤（adapter 不会收到混合对象/URL 结构）', async () => {
+      mockSingle(db, dbImageModel() as any);
+      vi.spyOn((service as any)['storageService'], 'resolveUrls').mockResolvedValue(
+        new Map<string, string>([['file-a', 'https://cdn.example.com/a.png']]),
+      );
+
+      await service.submitGeneration(
+        'user-1', 'proj-1', 'image-generation',
+        { prompt: 'edit', referenceImages: [{ fileId: 'file-a' }, { fileId: 'missing-b' }] },
+        'gpt-image-2',
+      );
+
+      const resolvedInput = mockTaskExecution.executeTask.mock.calls[0][3];
+      expect(resolvedInput.referenceImages).toEqual(['https://cdn.example.com/a.png']);
+      expect(resolvedInput.referenceImages).toHaveLength(1);
+    });
+
+    it('referenceImages 空数组不触发解析、不残留 fileId 对象（无参考图 → 文生图契约）', async () => {
+      mockSingle(db, dbImageModel() as any);
+
+      await service.submitGeneration(
+        'user-1', 'proj-1', 'image-generation',
+        { prompt: '一只猫', referenceImages: [] },
+        'gpt-image-2',
+      );
+
+      const resolvedInput = mockTaskExecution.executeTask.mock.calls[0][3];
+      expect(resolvedInput.referenceImages).toEqual([]);
+      expect(service['storageService'].resolveUrls).not.toHaveBeenCalled();
     });
   });
 });
