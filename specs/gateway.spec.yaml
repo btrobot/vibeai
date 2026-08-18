@@ -1,6 +1,6 @@
 domain: gateway
-version: '4.0'
-last_updated: '2026-08-17'
+version: '4.1'
+last_updated: '2026-08-18'
 entities:
   - name: AICapability
     table: ai_capabilities
@@ -78,7 +78,7 @@ entities:
         type: varchar(100)
         notNull: true
         default: coze
-        desc: 供应商标识（doubao | replicate | coze | openai | ...）
+        desc: 兼容占位字段（创建时自动填 unconfigured）。模型不绑定供应商，运行时以渠道所属平台为准
       - name: modality
         type: varchar(50)
         notNull: true
@@ -86,12 +86,12 @@ entities:
       - name: sdkModelId
         type: varchar(200)
         notNull: true
-        desc: 传给 Coze SDK 的模型 ID
+        desc: 兼容占位字段（创建时自动填 slug）。SDK 调用使用的模型 ID 以渠道 sdkModelId 为准
       - name: sdkClient
         type: varchar(50)
         notNull: true
         default: llm
-        desc: llm | image | video | replicate | openai
+        desc: 兼容占位字段（创建时自动填 modality）。协议适配器以渠道 sdkClient 为准（llm | image | video | replicate | openai）
       - name: capabilities
         type: text[]
         default: '[]'
@@ -291,7 +291,7 @@ entities:
     timestamps: true
   - name: ModelChannel
     table: model_channels
-    description: 渠道实例（平台 × 逻辑模型 × 协议）。key 解析：模型 defaultParams > 渠道 config > 平台 apiKey
+    description: 渠道实例（平台 × 逻辑模型 × 协议）。key 解析：渠道 config > 平台 apiKey（模型不参与 key/连接配置）
     fields:
       - name: id
         type: uuid
@@ -848,9 +848,10 @@ rules:
     id: GTW-017
     severity: error
     level: error
-    description: key 三级解析：模型 defaultParams.apiKey > 渠道 config.apiKey > 平台 apiKey；三级均未配置时适配器直接报错，不得 Mock
-    enforcement: TaskExecutionService 合并 provider.config（含平台默认+渠道覆盖）与模型 defaultParams 后传给适配器，OpenAIAdapter/ReplicateAdapter/Coze 适配器在未配置 apiKey 时抛「配置不完整」异常
+    description: key 二级解析：渠道 config.apiKey > 平台 apiKey；模型不参与 key 配置（模型 defaultParams 仅业务参数，内嵌密钥在执行时被剔除）；两级均未配置时适配器直接报错，不得 Mock
+    enforcement: TaskExecutionService 合并 { ...stripKeys(模型 defaultParams), ...provider.config } 后传给适配器，其中 provider.config 由 ProviderService 以平台默认 + 渠道覆盖合并；OpenAIAdapter/ReplicateAdapter/Coze 适配器在未配置 apiKey 时抛「配置不完整」异常
     test: 平台级 key 作为默认传给适配器
+    known_gap: chat（LLM SSE）当前直接使用 ai_models.defaultParams 调用适配器，未接入渠道解析；openai 协议模型在模型层不配 key 时必然报「配置不完整」。目标：chat 与 generate 一致，经 ProviderService 渠道解析合并 key
   - name: channel_identity_unique
     id: GTW-018
     severity: error
@@ -869,7 +870,7 @@ rules:
     id: GTW-020
     severity: error
     level: error
-    description: 模型 defaultParams / 平台 apiKey / 渠道 config 中的密钥任何出口均不回显，仅暴露 apiKeyConfigured 标记
+    description: 平台 apiKey / 渠道 config 中的密钥任何出口均不回显，仅暴露 apiKeyConfigured 标记；模型 defaultParams 不参与 key 配置，其出口脱敏同时剔除密钥与 baseUrl（兜底历史数据）
     enforcement: sanitizePlatform/sanitizeChannel 与 gateway 出口脱敏（omitSensitiveConfig 递归移除敏感字段）
     test: 读取配置时平台 apiKey 不回显
   - name: platform_delete_cascade
@@ -879,6 +880,20 @@ rules:
     description: 删除平台必须级联删除其全部渠道，渠道不得脱离平台孤立存在
     enforcement: deletePlatform 删除平台，FK ON DELETE CASCADE 级联清理 model_channels
     test: 删除平台
+  - name: route_model_channel_available
+    id: GTW-022
+    severity: warning
+    level: warning
+    description: 默认路由解析应跳过无启用渠道的模型并继续下一路由（路由级 fallback）；当前仅实现渠道级 fallback，首选路由模型无渠道时直接报错
+    enforcement: ModelRoutingService.getDefaultModel 应 join model_channels 校验模型存在启用渠道（目标），当前实现仅校验路由与模型 isActive
+    test: model-routing.service.test.ts 返回首个启用路由模型及数据库 costCredits
+  - name: cost_dual_track
+    id: GTW-023
+    severity: error
+    level: error
+    description: 面向用户的信用成本（模型 costCredits，预扣/结算）与渠道采购成本（costPerCall/costPerSecond，利润分析）分离核算
+    enforcement: TaskExecutionService 以模型 costCredits 预扣与结算信用，recordProviderAttempt 将渠道采购成本写入 provider_attempts
+    test: providerAttempt 记录包含 Provider 的单次和按秒采购成本
 seed_data:
   # 权威来源：server/src/modules/gateway/seeds/model-seeds.ts
   # 生成方式：node --import tsx /tmp/dump-seeds.ts | node -e "js-yaml dump"
@@ -888,6 +903,7 @@ seed_data:
     - name: doubao
     - name: moonshot
     - name: zhipu
+    - name: pptoken
     - name: replicate
   channels:
     - platformName: doubao
@@ -895,6 +911,121 @@ seed_data:
       sdkClient: llm
       sdkModelId: doubao-seed-2-0-pro-260215
       priority: 1
+      costPerCall: null
+      costPerSecond: null
+      config: {}
+    - platformName: doubao
+      modelSlug: doubao-seed-2-0-lite
+      sdkClient: llm
+      sdkModelId: doubao-seed-2-0-lite-260215
+      priority: 1
+      costPerCall: null
+      costPerSecond: null
+      config: {}
+    - platformName: doubao
+      modelSlug: doubao-seed-2-0-mini
+      sdkClient: llm
+      sdkModelId: doubao-seed-2-0-mini-260215
+      priority: 1
+      costPerCall: null
+      costPerSecond: null
+      config: {}
+    - platformName: doubao
+      modelSlug: doubao-seed-1-8
+      sdkClient: llm
+      sdkModelId: doubao-seed-1-8-251228
+      priority: 1
+      costPerCall: null
+      costPerSecond: null
+      config: {}
+    - platformName: moonshot
+      modelSlug: kimi-k2-5
+      sdkClient: llm
+      sdkModelId: kimi-k2-5-260127
+      priority: 1
+      costPerCall: null
+      costPerSecond: null
+      config: {}
+    - platformName: zhipu
+      modelSlug: glm-5-0
+      sdkClient: llm
+      sdkModelId: glm-5-0-260211
+      priority: 1
+      costPerCall: null
+      costPerSecond: null
+      config: {}
+    - platformName: doubao
+      modelSlug: doubao-seedream-5-0
+      sdkClient: image
+      sdkModelId: doubao-seedream-5-0-260128
+      priority: 1
+      costPerCall: null
+      costPerSecond: null
+      config: {}
+    - platformName: doubao
+      modelSlug: doubao-seedream-4-5
+      sdkClient: image
+      sdkModelId: doubao-seedream-4-5-251128
+      priority: 1
+      costPerCall: null
+      costPerSecond: null
+      config: {}
+    - platformName: pptoken
+      modelSlug: gpt-5.6-sol
+      sdkClient: openai
+      sdkModelId: gpt-5.6-sol
+      priority: 1
+      costPerCall: '0.05'
+      costPerSecond: null
+      config: {}
+    - platformName: doubao
+      modelSlug: doubao-seedance-1-5-pro
+      sdkClient: video
+      sdkModelId: doubao-seedance-1-5-pro-251215
+      priority: 1
+      costPerCall: null
+      costPerSecond: null
+      config: {}
+    - platformName: doubao
+      modelSlug: doubao-seedance-2-0
+      sdkClient: video
+      sdkModelId: doubao-seedance-2-0-260128
+      priority: 1
+      costPerCall: null
+      costPerSecond: null
+      config: {}
+    - platformName: replicate
+      modelSlug: gpt-image-2
+      sdkClient: replicate
+      sdkModelId: openai/gpt-image-2
+      priority: 2
+      costPerCall: '0.05'
+      costPerSecond: null
+      config: {}
+    - platformName: replicate
+      modelSlug: sdxl
+      sdkClient: replicate
+      sdkModelId: stability-ai/sdxl
+      priority: 1
+      costPerCall: '0.002'
+      costPerSecond: null
+      config: {}
+    - platformName: replicate
+      modelSlug: flux-schnell
+      sdkClient: replicate
+      sdkModelId: black-forest-labs/flux-schnell
+      priority: 1
+      costPerCall: '0.003'
+      costPerSecond: null
+      config: {}
+    - platformName: pptoken
+      modelSlug: gpt-image-2
+      sdkClient: openai
+      sdkModelId: gpt-image-2
+      priority: 1
+      costPerCall: null
+      costPerSecond: null
+      config: {}
   models:
     - slug: doubao-seed-2-0-pro
       name: Doubao Seed 2.0 Pro
