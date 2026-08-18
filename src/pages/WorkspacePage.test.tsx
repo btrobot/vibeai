@@ -881,4 +881,124 @@ describe('WorkspacePage', () => {
       expect(screen.queryByLabelText(/^移除参考图/)).not.toBeInTheDocument();
     });
   });
+  // ===== 能力显式选择 + 参考图槽位 role（对齐 runninghub 心智） =====
+
+  it('手动选择图片能力后模型列表按 capability 过滤（能力-模型强绑定）', async () => {
+    let requestedUrl = '';
+    server.use(
+      http.get('/api/gateway/models', ({ request }) => {
+        requestedUrl = request.url;
+        const capability = new URL(request.url).searchParams.get('capability');
+        if (capability === 'model-dressing') {
+          return HttpResponse.json({ success: true, data: mockImageModels.filter((m) => m.capabilities.includes('model-dressing')) });
+        }
+        return HttpResponse.json({ success: true, data: mockModels });
+      }),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+    await waitFor(() => { expect(screen.getByTitle('视频生成')).toBeInTheDocument(); });
+    await user.click(screen.getByTitle('图片'));
+
+    // 默认自动识别：modality=image 拉全量图片模型
+    await waitFor(() => {
+      expect(requestedUrl).toContain('modality=image');
+    });
+
+    // 手动选择"模特换装"
+    const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
+    await user.selectOptions(capSelect, 'model-dressing');
+
+    await waitFor(() => {
+      expect(requestedUrl).toContain('capability=model-dressing');
+    });
+    // 模型列表收敛为支持该能力的模型（gpt-image-2 不支持 model-dressing，被过滤）
+    const modelSelect = await screen.findByRole('combobox', { name: '模型' });
+    await waitFor(() => {
+      expect(modelSelect).toHaveValue('doubao-seedream-5-0');
+    });
+  });
+
+  it('手动选能力（模特换装）上传参考图按槽位分配 role 提交', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    let uploadSeq = 0;
+    server.use(
+      http.get('/api/gateway/models', ({ request }) => {
+        const capability = new URL(request.url).searchParams.get('capability');
+        if (capability === 'model-dressing') {
+          return HttpResponse.json({ success: true, data: mockImageModels.filter((m) => m.capabilities.includes('model-dressing')) });
+        }
+        return HttpResponse.json({ success: true, data: mockImageModels });
+      }),
+      http.post('/api/gateway/generate', async ({ request }) => {
+        requestBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { createId: 'create-3', modelSlug: 'doubao-seedream-5-0' } });
+      }),
+      http.post('/api/storage/upload', () => HttpResponse.json({ success: true, data: { id: `uploaded-${++uploadSeq}` } })),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+    await waitFor(() => { expect(screen.getByTitle('视频生成')).toBeInTheDocument(); });
+    await user.click(screen.getByTitle('图片'));
+
+    const capSelect = await screen.findByRole('combobox', { name: '图片能力' });
+    await user.selectOptions(capSelect, 'model-dressing');
+
+    // 槽位提示：第 1 张模特图 + 第 2 张衣服图
+    await waitFor(() => {
+      expect(screen.getByText(/模特图/)).toBeInTheDocument();
+      expect(screen.getByText(/衣服图/)).toBeInTheDocument();
+    });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]);
+    await waitFor(() => {
+      expect(screen.getByLabelText('移除参考图 2')).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByPlaceholderText(/输入提示词/), '模特换上新衣服');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(requestBody).toBeTruthy();
+      const input = (requestBody as { input: Record<string, unknown> }).input;
+      expect(input.referenceImages).toEqual([
+        { role: 'model', fileId: 'uploaded-1' },
+        { role: 'garment', fileId: 'uploaded-2' },
+      ]);
+      expect((requestBody as { capabilitySlug: string }).capabilitySlug).toBe('model-dressing');
+    });
+  });
+
+  it('image-editing 作品发布类型为 image（P0 能力集合一致，防误判 video）', async () => {
+    let postedBody: Record<string, unknown> | undefined;
+    const editingWork = {
+      id: 'create-edit', capabilitySlug: 'image-editing', prompt: '编辑图片', sourceCreateId: null,
+      status: 'completed', output: { images: [{ url: 'https://img.example/edit.png' }] },
+      modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskStatus: 'completed',
+      taskProgress: 100, createdAt: '2026-01-15T12:00:00Z', updatedAt: '2026-01-15T12:00:30Z',
+    };
+    server.use(
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({ total: 1, items: [editingWork] })),
+      http.post('/api/gallery/works', async ({ request }) => {
+        postedBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { id: 'work-1' } });
+      }),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+    await waitFor(() => { expect(screen.getByText('发布')).toBeInTheDocument(); });
+    await user.click(screen.getByText('发布'));
+
+    await waitFor(() => {
+      expect(postedBody).toBeTruthy();
+      expect(postedBody).toMatchObject({ createId: 'create-edit', type: 'image' });
+    });
+  });
 });

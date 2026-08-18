@@ -1,5 +1,5 @@
 domain: gateway
-version: '4.3'
+version: '4.4'
 last_updated: '2026-08-18'
 entities:
   - name: AICapability
@@ -29,6 +29,8 @@ entities:
       - name: inputSchema
         type: jsonb
         default: '{}'
+        desc: '能力输入契约 JSON Schema；图片类能力可含 refImageRoles（参考图槽位语义列表，每项 {role,label,max}，如模特换装 = [{role:model,label:模特图,max:1},{role:garment,label:衣服图,max:1}]），供前端渲染带标签的上传槽位'
+
       - name: outputSchema
         type: jsonb
         default: '{}'
@@ -481,7 +483,14 @@ operations:
       referenceImages:
         type: array
         maxItems: 9
-        items: { type: object, properties: { fileId: { type: string, format: uuid } } }
+        items:
+          type: object
+          properties:
+            fileId: { type: string, format: uuid }
+            role:
+              type: string
+              enum: [target, subject, product, scene, model, garment]
+              description: 参考图槽位角色（对齐能力 inputSchema.refImageRoles）；用户手动选择能力时按槽位顺序分配，自动识别模式可省略（无 role = 通用参考图，按数组顺序传给适配器）
         description: 多参考图 fileId 引用数组（运行时解析 fileId→URL 后传给 AI 适配器）；无参考图时省略该字段，与 referenceImage 单图兼容
       referenceImage:
         type: object

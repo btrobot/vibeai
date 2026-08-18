@@ -24,6 +24,8 @@ export interface UploadedRefImage {
   fileId: string;
   previewUrl: string;
   name: string;
+  /** 参考图槽位角色（对齐 specs/gateway.spec.yaml refImageRoles）；无 role = 通用参考图 */
+  role?: string;
 }
 
 export interface ReferenceImageStackProps {

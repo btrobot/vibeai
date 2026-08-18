@@ -129,11 +129,40 @@ const capabilities = [
   { slug: 'text-generation', label: '文本生成', icon: MessageSquare, color: 'text-primary' },
   { slug: 'image-generation', label: '图像生成', icon: ImageIcon, color: 'text-brand' },
   { slug: 'video-generation', label: '视频生成', icon: Video, color: 'text-foreground' },
+  { slug: 'image-editing', label: '图片编辑', icon: Wand2, color: 'text-brand' },
   { slug: 'background-removal', label: '白底图', icon: ImageIcon, color: 'text-muted-foreground' },
   { slug: 'scene-composition', label: '场景合成', icon: ImageIcon, color: 'text-brand' },
   { slug: 'model-dressing', label: '模特换装', icon: ImageIcon, color: 'text-primary' },
   { slug: 'detail-page-generation', label: '详情页', icon: FileText, color: 'text-foreground' },
+  { slug: 'style-cloning', label: '风格克隆', icon: Clapperboard, color: 'text-foreground' },
 ];
+
+// 图片类能力（输出图片）：详情恢复 / 发布 / 能力选择共用，防止集合漂移
+const IMAGE_OUTPUT_CAPABILITIES = [
+  'image-generation',
+  'image-editing',
+  'background-removal',
+  'scene-composition',
+  'model-dressing',
+];
+
+// 图片能力参考图槽位语义（对齐 specs/gateway.spec.yaml AICapability.inputSchema.refImageRoles）
+// 用户在图片 Tab 手动选择能力时，上传参考图按槽位顺序分配 role；
+// 自动识别模式不分配 role（系统猜测的能力不标记用户图片，保持无 role 通用数组契约）
+interface RefImageRole { role: string; label: string; max: number }
+const REF_IMAGE_ROLES: Record<string, RefImageRole[]> = {
+  'image-generation': [],
+  'image-editing': [{ role: 'target', label: '编辑目标图', max: 1 }],
+  'background-removal': [{ role: 'subject', label: '商品图', max: 1 }],
+  'scene-composition': [
+    { role: 'product', label: '商品图', max: 1 },
+    { role: 'scene', label: '场景图', max: 1 },
+  ],
+  'model-dressing': [
+    { role: 'model', label: '模特图', max: 1 },
+    { role: 'garment', label: '衣服图', max: 1 },
+  ],
+};
 
 
 // Auto-detect image capability from prompt + reference + model support
@@ -285,6 +314,8 @@ export default function WorkspacePage() {
   const [capabilities, setCapabilities] = useState<CapabilityInfo[]>(fallbackCapabilities);
   const [activeTab, setActiveTab] = useState('text-generation');
   const [resolvedCapability, setResolvedCapability] = useState('text-generation');
+  // 图片 Tab 手动选择的能力（null = 自动识别）；选能力后模型列表按 capability 过滤，参考图按 refImageRoles 分配 role
+  const [selectedCapability, setSelectedCapability] = useState<string | null>(null);
   const [models, setModels] = useState<GatewayModelSummary[]>([]);
   const [selectedModelSlug, setSelectedModelSlug] = useState('');
   const [modelLoading, setModelLoading] = useState(true);
@@ -456,7 +487,7 @@ export default function WorkspacePage() {
     setModelError(null);
 
     const queryParam = activeTab === 'image'
-      ? `modality=image`
+      ? (selectedCapability ? `capability=${encodeURIComponent(selectedCapability)}` : `modality=image`)
       : `capability=${encodeURIComponent(activeTab)}`;
     apiFetch(`/api/gateway/models?${queryParam}`, {
       signal: controller.signal,
@@ -480,7 +511,7 @@ export default function WorkspacePage() {
       });
 
     return () => controller.abort();
-  }, [activeTab]);
+  }, [activeTab, selectedCapability]);
 
   // Clear uploaded file when switching to a non-image-upload capability
   useEffect(() => {
@@ -489,16 +520,20 @@ export default function WorkspacePage() {
     }
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Resolve actual capability slug: image tab auto-detects, others use tab slug directly
+  // Resolve actual capability slug: image tab uses manual selection (if any) or auto-detects; others use tab slug directly
   useEffect(() => {
     if (activeTab === 'image') {
+      if (selectedCapability) {
+        setResolvedCapability(selectedCapability);
+        return;
+      }
       const hasRef = uploadedFiles.length > 0;
       const modelCaps = models.find((m) => m.slug === selectedModelSlug)?.capabilities || ['image-generation'];
       setResolvedCapability(detectImageCapability(prompt, hasRef, modelCaps));
     } else {
       setResolvedCapability(activeTab);
     }
-  }, [activeTab, prompt, uploadedFiles, selectedModelSlug, models]);
+  }, [activeTab, prompt, uploadedFiles, selectedModelSlug, models, selectedCapability]);
 
   const handleSubmit = async () => {
     if (!prompt.trim() || submitting || modelLoading || Boolean(modelError) || !selectedModelSlug || models.length === 0) return;
@@ -507,7 +542,7 @@ export default function WorkspacePage() {
     try {
       const input: Record<string, unknown> = { prompt: prompt.trim() };
       if (uploadedFiles.length > 0) {
-        input.referenceImages = uploadedFiles.map((f) => ({ fileId: f.fileId }));
+        input.referenceImages = uploadedFiles.map((f) => (f.role ? { role: f.role, fileId: f.fileId } : { fileId: f.fileId }));
       }
 
       const res = await apiFetch('/api/gateway/generate', {
@@ -538,7 +573,7 @@ export default function WorkspacePage() {
             capabilitySlug: resolvedCapability,
             prompt: prompt.trim(),
             input: uploadedFiles.length > 0
-              ? { prompt: prompt.trim(), referenceImages: uploadedFiles.map((f) => ({ fileId: f.fileId })) }
+              ? { prompt: prompt.trim(), referenceImages: uploadedFiles.map((f) => (f.role ? { role: f.role, fileId: f.fileId } : { fileId: f.fileId })) }
               : { prompt: prompt.trim() },
             sourceCreateId: null,
             status: 'processing' as const,
@@ -604,12 +639,12 @@ export default function WorkspacePage() {
     setSourceCreateId(create.id);
     setPrompt(create.prompt);
     // 修改时切换到对应 tab
-    const isImage = ['image-generation','image-editing','background-removal','scene-composition','model-dressing'].includes(create.capabilitySlug);
+    const isImage = IMAGE_OUTPUT_CAPABILITIES.includes(create.capabilitySlug);
     setActiveTab(isImage ? 'image' : create.capabilitySlug);
     // 恢复参考图：新快照 referenceImages 数组优先（服务端 resolveMediaUrls 已注入 url），
     // 遗留单图 referenceImage 快照回退按需 GET（与改造前行为一致）
     const refInput = create.input as {
-      referenceImages?: Array<{ fileId: string; url?: string }>;
+      referenceImages?: Array<{ fileId: string; url?: string; role?: string }>;
       referenceImage?: { fileId?: string; url?: string };
     } | null;
     const refImages = refInput?.referenceImages;
@@ -617,7 +652,7 @@ export default function WorkspacePage() {
       setUploadedFiles(
         refImages
           .filter((r) => r.fileId)
-          .map((r) => ({ fileId: r.fileId, previewUrl: r.url ?? '', name: '原参考图' })),
+          .map((r) => ({ fileId: r.fileId, previewUrl: r.url ?? '', name: '原参考图', ...(r.role ? { role: r.role } : {}) })),
       );
       // 乐观本地条目（无 url）按需回源
       const missing = refImages.filter((r) => r.fileId && !r.url);
@@ -671,6 +706,7 @@ export default function WorkspacePage() {
 
     setUploading(true);
     const targetTab = activeTab; // 上传中切 tab 则中止，不落地错 tab 图片
+    const targetCapability = selectedCapability; // 上传中切能力则中止，避免 role 错标
     let failed = 0;
     let uploaded = 0;
 
@@ -697,9 +733,14 @@ export default function WorkspacePage() {
             const upload = uploadData.data ?? uploadData;
             const fileId = upload.id;
             if (fileId) {
-              // 上传中切 tab：中止循环，丢弃已完成项
-              if (activeTab !== targetTab) break;
-              setUploadedFiles((prev) => [...prev, { fileId, previewUrl, name: file.name }]);
+              // 上传中切 tab/能力：中止循环，丢弃已完成项
+              if (activeTab !== targetTab || selectedCapability !== targetCapability) break;
+              setUploadedFiles((prev) => {
+                // 手动选择能力时按槽位顺序分配 role（第 N 张 → roles[N-1]）；自动识别/无槽位定义 → 无 role
+                const roles = selectedCapability ? REF_IMAGE_ROLES[selectedCapability] ?? [] : [];
+                const role = roles[prev.length]?.role;
+                return [...prev, { fileId, previewUrl, name: file.name, ...(role ? { role } : {}) }];
+              });
               uploaded += 1;
             } else {
               failed += 1;
@@ -744,7 +785,7 @@ export default function WorkspacePage() {
 
   const handlePublish = async (create: Create) => {
     const output = create.output as Record<string, unknown> | null;
-    const isImage = ['image-generation', 'background-removal', 'scene-composition', 'model-dressing'].includes(create.capabilitySlug);
+    const isImage = IMAGE_OUTPUT_CAPABILITIES.includes(create.capabilitySlug);
     const isVideo = create.capabilitySlug === 'video-generation';
     const type = isVideo ? 'video' : 'image';
 
@@ -1099,13 +1140,37 @@ export default function WorkspacePage() {
                 </div>
               </div>
 
-              {/* Row 2: Model + Spec + cost + 发送 */}
-              <div className="mt-2 flex items-center gap-2">
-                {/* Mode 能力徽章（图片模式显示自动识别） */}
+              {/* Row 2: 能力选择 + Model + Spec + cost + 发送 */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {/* 能力选择（图片 Tab：自动识别 或 手动选择能力；选后模型按能力过滤、参考图按槽位分配 role） */}
                 {activeTab === 'image' && (
-                  <span className="shrink-0 rounded-md bg-brand/10 px-2 py-1 text-xs text-brand">
-                    {capabilities.find((c) => c.slug === resolvedCapability)?.name || '图片'}
-                  </span>
+                  <>
+                    <select
+                      aria-label="图片能力"
+                      value={selectedCapability ?? ''}
+                      onChange={(event) => {
+                        const next = event.target.value || null;
+                        setSelectedCapability(next);
+                        // 能力切换 → 参考图槽位语义变化，清空已上传图避免角色错位
+                        clearUploadedFiles();
+                        setSpecParams({});
+                      }}
+                      className="h-9 shrink-0 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
+                    >
+                      <option value="">自动识别（{capabilities.find((c) => c.slug === resolvedCapability)?.name || '图片'}）</option>
+                      {IMAGE_OUTPUT_CAPABILITIES.map((slug) => (
+                        <option key={slug} value={slug}>
+                          {capabilities.find((c) => c.slug === slug)?.name || slug}
+                        </option>
+                      ))}
+                    </select>
+                    {/* 槽位语义提示：手动选能力且有槽位定义时说明每张图用途 */}
+                    {selectedCapability && (REF_IMAGE_ROLES[selectedCapability]?.length ?? 0) > 0 && (
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {REF_IMAGE_ROLES[selectedCapability].map((r) => `${r.label}${r.max > 1 ? `≤${r.max}张` : ''}`).join(' + ')}
+                      </span>
+                    )}
+                  </>
                 )}
 
                 {/* Model selector */}
