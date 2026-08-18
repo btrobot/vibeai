@@ -21,15 +21,17 @@ import type {
 } from './dto/model-config';
 
 const sensitiveKeyPattern = /(api[-_]?key|token|secret|password|authorization|credential)/i;
+/** 模型 defaultParams 出口脱敏：模型层不参与 key/连接配置，baseUrl 一并剔除（渠道 config 的 baseUrl 保留） */
+const modelSensitiveKeyPattern = /(api[-_]?key|token|secret|password|authorization|credential|baseurl)/i;
 
-function omitSensitiveConfig(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(omitSensitiveConfig);
+function omitSensitiveConfig(value: unknown, pattern: RegExp = sensitiveKeyPattern): unknown {
+  if (Array.isArray(value)) return value.map((v) => omitSensitiveConfig(v, pattern));
   if (!value || typeof value !== 'object') return value;
 
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([key]) => !sensitiveKeyPattern.test(key))
-      .map(([key, nested]) => [key, omitSensitiveConfig(nested)]),
+      .filter(([key]) => !pattern.test(key))
+      .map(([key, nested]) => [key, omitSensitiveConfig(nested, pattern)]),
   );
 }
 
@@ -84,7 +86,7 @@ export class ModelConfigService {
     return {
       models: models.map((m) => ({
         ...m,
-        defaultParams: omitSensitiveConfig(m.defaultParams) as Record<string, unknown>,
+        defaultParams: omitSensitiveConfig(m.defaultParams, modelSensitiveKeyPattern) as Record<string, unknown>,
       })),
       platforms: platforms.map(sanitizePlatform),
       channels: channelsRows.map(({ channel, platformName }) => ({

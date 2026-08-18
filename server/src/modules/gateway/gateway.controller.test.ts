@@ -174,16 +174,17 @@ describe('GatewayController', () => {
       expect(result.data[0].defaultParams.temperature).toBe(0.7);
     });
 
-    it('GET /gateway/models/:slug 移除 defaultParams 中的密钥', async () => {
+    it('GET /gateway/models/:slug 移除 defaultParams 中的密钥与连接字段（模型层不参与 key/连接配置）', async () => {
       mockGatewayService.getModel.mockResolvedValue({
         slug: 'gpt-4o',
-        defaultParams: { baseUrl: 'https://cn.pptoken.cc/v1', apiKey: 'sk-secret' },
+        defaultParams: { baseUrl: 'https://cn.pptoken.cc/v1', apiKey: 'sk-secret', temperature: 0.7 },
       });
 
       const result = await controller.getModel('gpt-4o');
 
       expect(result.data.defaultParams.apiKey).toBeUndefined();
-      expect(result.data.defaultParams.baseUrl).toBe('https://cn.pptoken.cc/v1');
+      expect(result.data.defaultParams.baseUrl).toBeUndefined();
+      expect(result.data.defaultParams.temperature).toBe(0.7);
     });
   });
 

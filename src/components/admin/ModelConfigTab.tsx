@@ -98,7 +98,6 @@ interface ModelForm {
   outputType: string;
   costCredits: string;
   sortOrder: string;
-  baseUrl: string;
   timeoutMs: string;
   size: string;
   n: string;
@@ -145,7 +144,6 @@ const emptyModelForm: ModelForm = {
   outputType: 'image',
   costCredits: '1',
   sortOrder: '0',
-  baseUrl: '',
   timeoutMs: '',
   size: '',
   n: '',
@@ -302,7 +300,6 @@ export default function ModelConfigTab() {
       outputType: model.outputType,
       costCredits: String(model.costCredits),
       sortOrder: String(model.sortOrder),
-      baseUrl: typeof params.baseUrl === 'string' ? params.baseUrl : '',
       timeoutMs: typeof params.timeoutMs === 'number' ? String(params.timeoutMs) : '',
       size: typeof params.size === 'string' ? params.size : '',
       n: typeof params.n === 'number' ? String(params.n) : '',
@@ -315,7 +312,6 @@ export default function ModelConfigTab() {
   const saveModel = async () => {
     const capabilities = modelForm.capabilities.split(',').map((value) => value.trim()).filter(Boolean);
     const defaultParams: Record<string, unknown> = {};
-    if (modelForm.baseUrl.trim()) defaultParams.baseUrl = modelForm.baseUrl.trim();
     if (modelForm.timeoutMs.trim()) defaultParams.timeoutMs = Number(modelForm.timeoutMs);
     if (modelForm.size.trim()) defaultParams.size = modelForm.size.trim();
     if (modelForm.n.trim()) defaultParams.n = Number(modelForm.n);
@@ -771,7 +767,6 @@ export default function ModelConfigTab() {
             <div className="rounded-lg border border-border bg-surface-hover/40 p-3">
               <p className="mb-2 text-xs font-medium text-muted-foreground">模型级网关参数（defaultParams，仅业务参数，不含密钥）</p>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5"><Label htmlFor="model-base-url">Base URL</Label><Input id="model-base-url" placeholder="https://api.openai.com/v1" value={modelForm.baseUrl} onChange={(event) => setModelForm((current) => ({ ...current, baseUrl: event.target.value }))} /></div>
                 <div className="space-y-1.5"><Label htmlFor="model-timeout">超时（毫秒）</Label><Input id="model-timeout" type="number" min="0" value={modelForm.timeoutMs} onChange={(event) => setModelForm((current) => ({ ...current, timeoutMs: event.target.value }))} /></div>
                 <div className="space-y-1.5"><Label htmlFor="model-temperature">温度</Label><Input id="model-temperature" type="number" step="0.1" value={modelForm.temperature} onChange={(event) => setModelForm((current) => ({ ...current, temperature: event.target.value }))} /></div>
               </div>

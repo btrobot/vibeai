@@ -25,7 +25,7 @@ import type { AdapterModel } from './adapters/protocol-adapter.interface';
 import { ModelRoutingService } from './model-routing.service';
 import { toAdapterModel } from './model-mapper';
 
-const sensitiveKeyPattern = /(api[-_]?key|token|secret|password|authorization|credential)/i;
+const sensitiveKeyPattern = /(api[-_]?key|token|secret|password|authorization|credential|baseurl)/i;
 
 /**
  * 模型 HTTP 出口脱敏：移除 defaultParams 中的密钥字段（token/secret 等）。

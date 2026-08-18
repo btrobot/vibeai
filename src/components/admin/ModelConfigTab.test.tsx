@@ -251,17 +251,17 @@ describe('ModelConfigTab', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: '编辑 SDXL' }));
-    await user.type(screen.getByLabelText('Base URL'), 'https://cn.pptoken.cc/v1');
     await user.type(screen.getByLabelText('超时（毫秒）'), '120000');
     await user.type(screen.getByLabelText('温度'), '0.8');
     await user.click(screen.getByRole('button', { name: '保存模型' }));
 
     await waitFor(() => expect(requestBody).toMatchObject({
-      defaultParams: { baseUrl: 'https://cn.pptoken.cc/v1', timeoutMs: 120000, temperature: 0.8 },
+      defaultParams: { timeoutMs: 120000, temperature: 0.8 },
     }));
-    // 模型 defaultParams 不应包含任何密钥字段
+    // 模型 defaultParams 不应包含任何密钥/连接字段
     const params = (requestBody as { defaultParams: Record<string, unknown> }).defaultParams;
     expect(params.apiKey).toBeUndefined();
+    expect(params.baseUrl).toBeUndefined();
   });
 
   it('编辑渠道时填写渠道 apiKey 并提交 config', async () => {
