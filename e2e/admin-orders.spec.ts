@@ -59,10 +59,12 @@ test.describe('Admin Orders Tab', () => {
     await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     await gotoAdminOrdersTab(page);
 
-    await expect(page.getByText('总订单')).toBeVisible();
-    await expect(page.getByText('已支付')).toBeVisible();
-    await expect(page.getByText('待支付')).toBeVisible();
-    await expect(page.getByText('总收入')).toBeVisible();
+    // 统计卡片容器断言（避免与状态筛选下拉的「已支付/待支付」文案冲突）
+    const statsGrid = page.locator('.grid.grid-cols-2.gap-3').first();
+    await expect(statsGrid.getByText('总订单')).toBeVisible();
+    await expect(statsGrid.getByText('已支付')).toBeVisible();
+    await expect(statsGrid.getByText('待支付')).toBeVisible();
+    await expect(statsGrid.getByText('总收入')).toBeVisible();
   });
 
   test('订单列表 EmptyState（无订单）', async ({ page }) => {
@@ -71,8 +73,7 @@ test.describe('Admin Orders Tab', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [], total: 0, page: 1, pageSize: 10, totalPages: 1 },
+          items: [], total: 0, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });
@@ -101,8 +102,7 @@ test.describe('Admin Orders Tab', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [mockOrder], total: 1, page: 1, pageSize: 10, totalPages: 1 },
+          items: [mockOrder], total: 1, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });
@@ -128,7 +128,7 @@ test.describe('Admin Orders Tab', () => {
     await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     await gotoAdminOrdersTab(page);
 
-    await page.getByRole('button', { name: /导出订单/ }).click();
+    await page.getByRole('button', { name: '导出 CSV' }).click();
     // 导出是非阻塞下载（fetch + blob），给一点时间
     await page.waitForTimeout(500);
     expect(exportCalled).toBe(true);

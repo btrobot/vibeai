@@ -65,7 +65,17 @@ test.describe('工作空间创作流程', () => {
   });
 
   test('工作空间页面加载', async ({ page }) => {
-    await page.goto('/workspace');
+    // /workspace 为带参路由，先取当前用户的项目 id（access token 在 localStorage，需页面内 fetch）
+    const projectId = await page.evaluate(async () => {
+      const tokens = JSON.parse(localStorage.getItem('auth_tokens') || '{}');
+      const res = await fetch('/api/projects', {
+        headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      });
+      const data = await res.json();
+      return data.data?.items?.[0]?.id;
+    });
+    expect(projectId).toBeTruthy();
+    await page.goto(`/workspace/${projectId}`);
     await page.waitForLoadState('load');
     await page.waitForTimeout(2000);
 

@@ -108,6 +108,41 @@ test.describe('工作区新交互', () => {
   });
 
   test('5. 基于此修改按钮存在（已完成创作）', async ({ page }) => {
+    // mock creates API：预置一个已完成创作（fresh 库无创作数据，避免环境依赖）
+    await page.route('**/api/projects/*/creates**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            items: [
+              {
+                id: 'create-mock-1',
+                capabilitySlug: 'text-generation',
+                prompt: 'E2E 已完成创作',
+                input: {},
+                sourceCreateId: null,
+                status: 'completed',
+                output: { text: 'E2E 输出内容' },
+                modelSlug: 'kimi-k2-5',
+                taskCount: 1,
+                errorMessage: null,
+                taskId: 'task-mock-1',
+                taskStatus: 'completed',
+                taskProgress: 100,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 50,
+            totalPages: 1,
+          },
+        }),
+      }),
+    );
     await openWorkspace(page);
 
     await expect(page.locator('button:has-text("基于此修改")').first()).toBeVisible({ timeout: 10000 });

@@ -54,7 +54,7 @@ test.describe('订单页面', () => {
     expect(options).toContain('已过期');
   });
 
-  test('空订单列表显示 EmptyState", async ({ page }) => {
+  test('空订单列表显示 EmptyState', async ({ page }) => {
     // 拦截 /api/orders 返回空列表
     await page.route('**/api/orders**', (route) => {
       route.fulfill({
@@ -117,14 +117,10 @@ test.describe('订单页面', () => {
     await loginAsAdmin(page);
     await page.goto('/orders');
     await page.waitForLoadState('networkidle');
-
-    // 拦截 window.location.href 跳转，避免真实跳转
-    await page.evaluate(() => {
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: { ...window.location, href: '' },
-      });
-    });
+// 拦截 checkout 跳转导航，避免真实跳转到 Stripe
+    await page.route('**/checkout.stripe.com/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<html>mock checkout</html>' }),
+    );
 
     // 点击"立即支付"按钮
     const payBtn = page.getByRole('button', { name: '立即支付' });

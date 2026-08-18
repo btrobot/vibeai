@@ -46,8 +46,7 @@ test.describe('Admin Products Tab', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [], total: 0, page: 1, pageSize: 10, totalPages: 1 },
+          items: [], total: 0, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });
@@ -77,8 +76,7 @@ test.describe('Admin Products Tab', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [mockCategory], total: 1 },
+          items: [mockCategory], total: 1,
         }),
       });
     });
@@ -102,8 +100,7 @@ test.describe('Admin Products Tab', () => {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            success: true,
-            data: { items: [], total: 0, page: 1, pageSize: 10, totalPages: 1 },
+            items: [], total: 0, page: 1, pageSize: 10, totalPages: 1,
           }),
         });
       }
@@ -151,8 +148,7 @@ test.describe('Admin Products Tab', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [mockProduct], total: 1, page: 1, pageSize: 10, totalPages: 1 },
+          items: [mockProduct], total: 1, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });
@@ -185,8 +181,7 @@ test.describe('Admin Products Tab', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [], total: 0 },
+          items: [], total: 0,
         }),
       });
     });
@@ -210,8 +205,7 @@ test.describe('Admin Products Tab', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [mockProduct], total: 1, page: 1, pageSize: 10, totalPages: 1 },
+          items: [mockProduct], total: 1, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });

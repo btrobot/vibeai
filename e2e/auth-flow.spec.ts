@@ -35,6 +35,8 @@ async function doLogin(page: Page, email: string, password: string) {
 }
 
 test.describe('注册 → 登录 完整流程', () => {
+  // 5 个测试共享同一注册邮箱（1 注册 → 2-5 登录），必须串行避免多会话互踢
+  test.describe.configure({ mode: 'serial' });
   const email = uniqueEmail();
 
   test('1. 注册新用户 → 跳转登录页', async ({ page }) => {
@@ -61,7 +63,7 @@ test.describe('注册 → 登录 完整流程', () => {
 
     // 统计卡片
     await expect(page.getByText('项目总数')).toBeVisible();
-    await expect(page.getByText('任务总数')).toBeVisible();
+    await expect(page.getByText('创作总数')).toBeVisible();
   });
 
   test('4. 受保护页面导航正常', async ({ page }) => {
@@ -71,17 +73,17 @@ test.describe('注册 → 登录 完整流程', () => {
     // 导航到项目页
     await page.locator('nav').getByText('我的项目').click();
     await page.waitForURL(/\/projects/, { timeout: 10000 });
-    await expect(page.getByRole('heading', { name: /项目/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '我的项目' })).toBeVisible();
 
     // 导航到设置页
     await page.locator('nav').getByText('设置').click();
     await page.waitForURL(/\/settings/, { timeout: 10000 });
-    await expect(page.getByRole('heading', { name: /设置/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
 
     // 导航到画廊
     await page.locator('nav').getByText('社区画廊').click();
     await page.waitForURL(/\/gallery/, { timeout: 10000 });
-    await expect(page.getByRole('heading', { name: /画廊/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '社区画廊' })).toBeVisible();
   });
 
   test('5. 登出 → 重登录', async ({ page }) => {

@@ -16,10 +16,9 @@ test.describe('画廊浏览', () => {
     // 等待画廊数据加载完成
     await page.waitForTimeout(2000);
 
-    // 应该显示标签页
+    // 应该显示排序标签（热门/最新，关注标签已下线）
     await expect(page.getByRole('button', { name: '热门' })).toBeVisible();
     await expect(page.getByRole('button', { name: '最新' })).toBeVisible();
-    await expect(page.getByRole('button', { name: '关注' })).toBeVisible();
   });
 
   test('切换画廊标签', async ({ page }) => {
@@ -33,10 +32,10 @@ test.describe('画廊浏览', () => {
     await page.waitForTimeout(500);
     await expect(page.getByRole('button', { name: '最新' })).toBeVisible();
 
-    // 点击关注标签
-    await page.getByRole('button', { name: '关注' }).click();
+    // 切回热门标签
+    await page.getByRole('button', { name: '热门' }).click();
     await page.waitForTimeout(500);
-    await expect(page.getByRole('button', { name: '关注' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '热门' })).toBeVisible();
   });
 
   test('已登录用户可访问画廊', async ({ page }) => {

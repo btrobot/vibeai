@@ -37,8 +37,7 @@ test.describe('Admin Promo Codes Tab', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [], total: 0, page: 1, pageSize: 10, totalPages: 1 },
+          items: [], total: 0, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });
@@ -78,8 +77,7 @@ test.describe('Admin Promo Codes Tab', () => {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            success: true,
-            data: { items: [], total: 0, page: 1, pageSize: 10, totalPages: 1 },
+            items: [], total: 0, page: 1, pageSize: 10, totalPages: 1,
           }),
         });
       }
@@ -119,8 +117,7 @@ test.describe('Admin Promo Codes Tab', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [mockPromo], total: 1, page: 1, pageSize: 10, totalPages: 1 },
+          items: [mockPromo], total: 1, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });
@@ -186,8 +183,7 @@ test.describe('Admin Promo Codes Tab', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [mockPromo], total: 1, page: 1, pageSize: 10, totalPages: 1 },
+          items: [mockPromo], total: 1, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });

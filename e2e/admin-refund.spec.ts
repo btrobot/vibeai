@@ -42,8 +42,7 @@ test.describe('Admin Refund Dialog', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [paidOrder], total: 1, page: 1, pageSize: 10, totalPages: 1 },
+          items: [paidOrder], total: 1, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });
@@ -76,8 +75,7 @@ test.describe('Admin Refund Dialog', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [paidOrder], total: 1, page: 1, pageSize: 10, totalPages: 1 },
+          items: [paidOrder], total: 1, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });
@@ -108,8 +106,7 @@ test.describe('Admin Refund Dialog', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [paidOrder], total: 1, page: 1, pageSize: 10, totalPages: 1 },
+          items: [paidOrder], total: 1, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });
@@ -162,8 +159,7 @@ test.describe('Admin Refund Dialog', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          success: true,
-          data: { items: [paidOrder], total: 1, page: 1, pageSize: 10, totalPages: 1 },
+          items: [paidOrder], total: 1, page: 1, pageSize: 10, totalPages: 1,
         }),
       });
     });

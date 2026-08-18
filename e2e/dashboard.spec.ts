@@ -13,7 +13,7 @@ test.describe('仪表盘', () => {
   test('仪表盘页面加载并显示统计信息', async ({ page }) => {
     // 仪表盘显示统计卡片
     await expect(page.getByText('项目总数')).toBeVisible();
-    await expect(page.getByText('任务总数')).toBeVisible();
+    await expect(page.getByText('创作总数')).toBeVisible();
   });
 
   test('侧边导航可用', async ({ page }) => {
