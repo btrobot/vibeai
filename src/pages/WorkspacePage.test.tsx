@@ -1265,22 +1265,6 @@ describe('WorkspacePage', () => {
     });
   });
 
-  it('技能预设：点击技能填充 prompt 模板（对齐 boli SkillSelector）', async () => {
-    renderWorkspace();
-    const user = userEvent.setup();
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '技能' })).toBeInTheDocument();
-    });
-
-    // 展开技能面板 → 选「商品摄影」
-    await user.click(screen.getByRole('button', { name: '技能' }));
-    await user.click(screen.getByText('商品摄影'));
-
-    const textarea = screen.getByPlaceholderText(/输入提示词/) as HTMLTextAreaElement;
-    expect(textarea.value).toContain('Professional product photography');
-  });
-
   it('图片参数聚合按钮：gpt-image-2 显示「比例 · 质量」摘要，选择后提交 body 含 ratio', async () => {
     let requestBody: Record<string, unknown> | undefined;
     server.use(

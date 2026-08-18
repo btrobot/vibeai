@@ -37,7 +37,6 @@ import { apiFetch } from '@/lib/apiClient';
 import { ReferenceImageStack, type UploadedRefImage } from '@/components/ReferenceImageStack';
 import { ReferenceVideoSlot, type UploadedRefVideo } from '@/components/ReferenceVideoSlot';
 import { ImageParamAggregate } from '@/components/ImageParamAggregate';
-import { ImageSkillPresets, type ImageSkillPreset } from '@/components/ImageSkillPresets';
 import { FirstFrameSlot, type UploadedFirstFrame } from '@/components/FirstFrameSlot';
 
 // Map backend icon strings to Lucide components
@@ -502,12 +501,6 @@ export default function WorkspacePage() {
       setResolvedCapability(activeTab);
     }
   }, [activeTab, prompt, uploadedFiles, selectedModelSlug, models, selectedCapability]);
-
-  // 技能预设：填充 prompt 模板（不强制模型/参数，用户可按需调整）
-  const applySkillPreset = (preset: ImageSkillPreset) => {
-    setPrompt(preset.prompt);
-    showToast('success', `${preset.name}模板已填入提示词`);
-  };
 
   const handleSubmit = async () => {
     if (!prompt.trim() || submitting || modelLoading || Boolean(modelError) || !selectedModelSlug || models.length === 0) return;
@@ -1296,14 +1289,6 @@ export default function WorkspacePage() {
                     <option value="video-generation">视频生成</option>
                     <option value="style-cloning">风格克隆</option>
                   </select>
-                )}
-
-                {/* 技能预设（图片 Tab，对齐 boli SkillSelector）：一键填充 prompt 模板 */}
-                {activeTab === 'image' && (
-                  <ImageSkillPresets
-                    disabled={submitting}
-                    onApply={applySkillPreset}
-                  />
                 )}
 
                 {/* Model selector */}
