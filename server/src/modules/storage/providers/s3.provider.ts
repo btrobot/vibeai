@@ -12,6 +12,15 @@ import type {
 
 @Injectable()
 export class S3StorageProvider implements IStorageProvider {
+  /**
+   * 基于 coze-coding-dev-sdk 的 S3Storage（AWS S3 协议），兼容自建 S3 服务（MinIO 等）。
+   * 已验证：upload/read/delete/exists/list 走标准 S3 协议，对 MinIO 可用。
+   *
+   * 注意：SDK 的 generatePresignedUrl 依赖 coze 云平台（x-storage-token），
+   * 自建 S3/MinIO 下不可用。因此本 Provider 统一返回 serve 路径
+   * （/api/storage/serve/{key}，经 readFile → GetObject 转发），
+   * 与 LocalStorageProvider 行为一致，且 URL 永不过期。
+   */
   private readonly logger = new Logger(S3StorageProvider.name);
   private storage: S3Storage;
 
@@ -56,10 +65,9 @@ export class S3StorageProvider implements IStorageProvider {
       contentType: options.contentType,
     });
 
-    const url = await this.storage.generatePresignedUrl({
-      key,
-      expireTime: 86400,
-    });
+    // 不使用 SDK 的 generatePresignedUrl（依赖 coze 平台，自建 MinIO 不可用），
+    // 统一返回 serve 路径，经 readFile → S3 GetObject 转发，永不过期。
+    const url = `/api/storage/serve/${key}`;
 
     return {
       key,
@@ -98,8 +106,9 @@ export class S3StorageProvider implements IStorageProvider {
     };
   }
 
-  async getSignedUrl(key: string, expireTime = 86400): Promise<string> {
-    return this.storage.generatePresignedUrl({ key, expireTime });
+  async getSignedUrl(key: string, _expireTime = 86400): Promise<string> {
+    // coze SDK 的 presigned 依赖云平台，自建 S3/MinIO 下降级为 serve 路径（永不过期）
+    return `/api/storage/serve/${key}`;
   }
 
   async getStats(): Promise<StorageStats> {

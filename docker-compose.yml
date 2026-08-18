@@ -15,6 +15,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
 
     environment:
       - NODE_ENV=production
@@ -23,16 +25,19 @@ services:
       - DEPLOY_RUN_PORT=5000
       - PORT=5000
       - CORS_ORIGIN=${CORS_ORIGIN:-}
-      - STORAGE_PROVIDER=local
+      # 存储：MinIO（S3 兼容对象存储），镜像源 8.138.175.157:5000
+      - STORAGE_PROVIDER=s3
+      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      - S3_BUCKET_NAME=${MINIO_BUCKET:-vibeai}
+      - S3_REGION=${S3_REGION:-us-east-1}
       - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN:-}
       - REPLICATE_BASE_URL=${REPLICATE_BASE_URL:-https://api.replicate.com}
       - COZE_PROJECT_DOMAIN_DEFAULT=${COZE_PROJECT_DOMAIN_DEFAULT:-}
 
     ports:
       - "${APP_PORT:-5000}:5000"
-
-    volumes:
-      - uploads:/app/uploads
 
     networks:
       - internal
@@ -88,6 +93,51 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  minio:
+    image: 8.138.175.157:5000/minio/minio:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-minio
+    restart: unless-stopped
+
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+
+    command: server /data --console-address ":9001"
+
+    volumes:
+      - miniodata:/data
+
+    networks:
+      - internal
+
+    healthcheck:
+      test: ['CMD-SHELL', 'mc alias set local http://localhost:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} >/dev/null 2>&1; mc ready local']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  minio-init:
+    image: 8.138.175.157:5000/minio/minio:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-minio-init
+    restart: "no"
+
+    depends_on:
+      minio:
+        condition: service_healthy
+
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - mc alias set m http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD} && mc mb --ignore-existing m/$${MINIO_BUCKET:-vibeai}
+
+    networks:
+      - internal
+
 networks:
   internal:
   upstream:
@@ -96,4 +146,4 @@ networks:
 
 volumes:
   pgdata:
-  uploads:
+  miniodata:
