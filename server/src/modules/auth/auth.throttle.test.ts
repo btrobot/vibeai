@@ -12,7 +12,7 @@
  * 本测试锁定配置契约：
  * - 非暴力破解端点（me/refresh/logout/change-password/oauth）：无任何
  *   Throttle/SkipThrottle 元数据，仅受全局 default(100/min) 限制
- * - 暴力破解端点（register/login/forgot/reset）：default limit = 5（防爆破），
+ * - 暴力破解端点（register/login/forgot/reset）：default limit = 10（防爆破），
  *   且未被 SkipThrottle 跳过
  *
  * 元数据 key 来自 @nestjs/throttler 的 throttler.constants：
@@ -38,7 +38,8 @@ const NON_BRUTE_FORCE_METHODS = [
   'oauthCallback',
 ] as const;
 
-// 应保持防爆破：default limit 5/min
+// 应保持防爆破：default limit 10/min（2026-08 从 5/min 上调：配合 trust proxy 修复后
+// 按真实客户端 IP 计数，10/min 仍可防爆破，同时给真实用户误触/多设备留余量）
 const BRUTE_FORCE_METHODS = ['register', 'login', 'forgotPassword', 'resetPassword'] as const;
 
 describe('AuthController 限流配置', () => {
@@ -50,10 +51,10 @@ describe('AuthController 限流配置', () => {
     }
   });
 
-  it('register/login/forgot/reset 通过 default 覆盖为 5/min 防爆破，未被跳过', () => {
+  it('register/login/forgot/reset 通过 default 覆盖为 10/min 防爆破，未被跳过', () => {
     for (const method of BRUTE_FORCE_METHODS) {
       const handler = AuthController.prototype[method];
-      expect(Reflect.getMetadata(LIMIT_DEFAULT, handler), `${method} 应有 default limit=5`).toBe(5);
+      expect(Reflect.getMetadata(LIMIT_DEFAULT, handler), `${method} 应有 default limit=10`).toBe(10);
       expect(Reflect.getMetadata(SKIP_DEFAULT, handler), `${method} 不应被跳过`).toBeUndefined();
     }
   });

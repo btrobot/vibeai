@@ -32,14 +32,14 @@ export class AuthController {
   ) {}
 
   @Post('register')
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   async login(@Body() dto: LoginDto, @Req() req: Request) {
     const forwarded = req.headers['x-forwarded-for'];
     const ip = Array.isArray(forwarded) ? forwarded[0] : (forwarded || req.socket?.remoteAddress || '');
@@ -87,14 +87,14 @@ export class AuthController {
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
 
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }

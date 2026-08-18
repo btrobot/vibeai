@@ -116,3 +116,63 @@ describe('AuthContext 认证恢复', () => {
     fetchSpy.mockRestore();
   });
 });
+
+/**
+ * 登录错误映射回归测试
+ *
+ * 背景（post-deploy bug）：生产经 Caddy 反代未启用 trust proxy，限流按入口容器 IP
+ * 全站共享计数，登录 429 显示英文 "ThrottlerException: Too Many Requests"。
+ * 修复：1) 后端 trust proxy + 限流放宽；2) 前端 429 → 友好中文提示。
+ */
+import { fireEvent } from '@testing-library/react';
+
+function LoginHarness() {
+  const { login, error } = useAuth();
+  return (
+    <div>
+      <button onClick={() => login({ email: 'a@b.c', password: 'wrong-pass' })}>go-login</button>
+      <span data-testid="login-err">{error ?? 'none'}</span>
+    </div>
+  );
+}
+
+describe('AuthContext 登录错误映射', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it('429 限流 → 友好中文提示（而非 ThrottlerException）', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ message: 'ThrottlerException: Too Many Requests', error: 'Too Many Requests', statusCode: 429 }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    render(
+      <AuthProvider>
+        <LoginHarness />
+      </AuthProvider>,
+    );
+    fireEvent.click(screen.getByText('go-login'));
+    await waitFor(() =>
+      expect(screen.getByTestId('login-err').textContent).toBe('操作过于频繁，请 1 分钟后再试'),
+    );
+  });
+
+  it('401 保留后端语义错误（邮箱或密码错误）', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ message: '邮箱或密码错误', error: 'Unauthorized', statusCode: 401 }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    render(
+      <AuthProvider>
+        <LoginHarness />
+      </AuthProvider>,
+    );
+    fireEvent.click(screen.getByText('go-login'));
+    await waitFor(() => expect(screen.getByTestId('login-err').textContent).toBe('邮箱或密码错误'));
+  });
+});

@@ -12,7 +12,7 @@
  *
  * 本测试锁定配置契约，防止以下回归：
  * 1. forRoot 重新引入 auth/generation/upload 命名限流器（全局误伤）
- * 2. 业务路由限流值被改动（gateway 10/min、storage 20/min、auth 5/min）
+ * 2. 业务路由限流值被改动（gateway 10/min、storage 20/min、auth 10/min）
  * 3. 高频业务路由（projects/notifications）被误加 @Throttle 覆盖
  *
  * 元数据 key：THROTTLER:LIMIT + throttler name（无分隔符），见
@@ -66,10 +66,10 @@ describe('全局限流配置', () => {
     expect(Reflect.getMetadata(LIMIT_DEFAULT, StorageController.prototype.uploadFile)).toBe(20);
   });
 
-  it('auth 防爆破路由覆盖为 default(5/min)', () => {
+  it('auth 防爆破路由覆盖为 default(10/min)', () => {
     // 与 auth.throttle.test.ts 保持一致的契约（此处统一视角再锁一遍）
     for (const method of ['register', 'login', 'forgotPassword', 'resetPassword'] as const) {
-      expect(Reflect.getMetadata(LIMIT_DEFAULT, AuthController.prototype[method]), `${method} 应为 default limit=5`).toBe(5);
+      expect(Reflect.getMetadata(LIMIT_DEFAULT, AuthController.prototype[method]), `${method} 应为 default limit=10`).toBe(10);
     }
   });
 

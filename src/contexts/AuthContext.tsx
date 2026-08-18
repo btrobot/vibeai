@@ -2,6 +2,19 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import type { ApiResponse, AuthResponse, UserResponse } from '@shared/index';
 import { apiFetch } from '@/lib/apiClient';
 
+/** 解析认证接口错误；429（限流）映射为友好中文提示，避免暴露 ThrottlerException 英文原始错误 */
+async function extractAuthError(res: Response, fallback: string): Promise<string> {
+  try {
+    const text = await res.text();
+    const errResult = JSON.parse(text) as { error?: string; message?: string };
+    if (res.status === 429) return '操作过于频繁，请 1 分钟后再试';
+    // message 为业务详情（如「邮箱或密码错误」），error 仅为 HTTP 状态描述（如 Unauthorized）→ message 优先
+    return errResult.message || errResult.error || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 interface AuthContextType {
   user: UserResponse | null;
   token: string | null;
@@ -55,9 +68,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(data),
       });
 
+      if (!res.ok) {
+        throw new Error(await extractAuthError(res, '注册失败'));
+      }
       const result: ApiResponse<{ id: string; email: string; name: string; role: string; credits: number; createdAt: string }> = await res.json();
 
-      if (!res.ok || !result.success) {
+      if (!result.success) {
         throw new Error(result.error || result.message || '注册失败');
       }
 
@@ -83,15 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        let errorMsg = '登录失败';
-        try {
-          const errResult = JSON.parse(text);
-          errorMsg = errResult.error || errResult.message || errorMsg;
-        } catch {
-          // use default error message
-        }
-        throw new Error(errorMsg);
+        throw new Error(await extractAuthError(res, '登录失败'));
       }
 
       const result: ApiResponse<AuthResponse> = await res.json();

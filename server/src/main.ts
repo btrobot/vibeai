@@ -84,6 +84,11 @@ async function bootstrap() {
 
   const port = process.env.PORT || process.env.BACKEND_PORT || 3001;
   const expressApp = app.getHttpAdapter().getInstance();
+  // 生产部署经 Caddy/nginx 反向代理 → 必须启用 trust proxy，
+  // 否则 @nestjs/throttler 的 req.ip 恒为入口容器 IP，全站用户共享限流桶，
+  // auth 限流会被任意 N 个 auth 请求打爆，表现为「无法登录」（429）。
+  // 值 1 = 只信任第一跳代理（当前生产拓扑仅一层入口），取 X-Forwarded-For 真实客户端 IP。
+  expressApp.set('trust proxy', 1);
 
   // Health check — 注册在 app.init() 之前，确保可被路由匹配
   // 基础健康检查（无需 DI），用于 Docker HEALTHCHECK 和负载均衡器探活
