@@ -257,6 +257,15 @@ defaultHandlers.push(
     success: true,
     data: defaultModelConfiguration,
   })),
+  http.post('/api/storage/upload', () => HttpResponse.json({
+    success: true,
+    data: { id: 'uploaded-file' },
+  })),
+  http.get('/api/storage/files/:id', ({ params }) => HttpResponse.json({
+    id: params.id as string,
+    url: `https://example.com/${String(params.id)}.png`,
+    originalName: 'ref.png',
+  })),
 );
 
 export const server = setupServer(...defaultHandlers);

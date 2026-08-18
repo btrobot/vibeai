@@ -62,7 +62,7 @@ export class ImageAdapter implements ProtocolAdapter {
     const referenceImage = input.referenceImage as string | undefined;
 
     // 合并参考图片
-    const imageInput = referenceImages ?? (referenceImage ? [referenceImage] : undefined);
+    const imageInput = referenceImages?.length ? referenceImages : referenceImage ? [referenceImage] : undefined;
 
     this.logger.log(`Image generation: model=${model.sdkModelId}, size=${size}, taskId=${context.taskId}`);
 

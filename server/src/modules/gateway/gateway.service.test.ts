@@ -359,6 +359,52 @@ describe('GatewayService', () => {
 
   // ===== chatStream（P0：chat 走渠道解析 + fallback） =====
 
+  describe('resolveInputForAdapter — 参考图数组 fileId 解析（多参考图契约）', () => {
+    it('referenceImages 数组 {fileId} 应批量解析为 URL', async () => {
+      const urlMap = new Map<string, string>([
+        ['file-a', 'https://cdn.example.com/a.png'],
+        ['file-b', 'https://cdn.example.com/b.png'],
+      ]);
+      vi.spyOn(service['storageService'], 'resolveUrls').mockResolvedValue(urlMap);
+
+      const input = {
+        prompt: '多参考图',
+        referenceImages: [{ fileId: 'file-a' }, { fileId: 'file-b' }],
+      };
+
+      const resolved = await (service as any).resolveInputForAdapter(input);
+
+      expect(service['storageService'].resolveUrls).toHaveBeenCalledWith(['file-a', 'file-b']);
+      expect(resolved.referenceImages).toEqual([
+        'https://cdn.example.com/a.png',
+        'https://cdn.example.com/b.png',
+      ]);
+    });
+
+    it('referenceImages 空数组应保持为空（不触发解析、不残留 fileId 对象）', async () => {
+      const input = { prompt: '无图', referenceImages: [] };
+
+      const resolved = await (service as any).resolveInputForAdapter(input);
+
+      expect(service['storageService'].resolveUrls).not.toHaveBeenCalled();
+      expect(resolved.referenceImages).toEqual([]);
+    });
+
+    it('遗留单图 referenceImage {fileId} 应解析为 URL（兼容路径）', async () => {
+      const urlMap = new Map<string, string>([['file-a', 'https://cdn.example.com/a.png']]);
+      vi.spyOn(service['storageService'], 'resolveUrls').mockResolvedValue(urlMap);
+
+      const input = {
+        prompt: '单图',
+        referenceImage: { fileId: 'file-a' },
+      };
+
+      const resolved = await (service as any).resolveInputForAdapter(input);
+
+      expect(resolved.referenceImage).toBe('https://cdn.example.com/a.png');
+    });
+  });
+
   describe('chatStream — 渠道解析与 fallback', () => {
     const llmModel = {
       ...dbModel(SEED_MODELS[0]),

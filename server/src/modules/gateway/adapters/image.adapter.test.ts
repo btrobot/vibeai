@@ -150,6 +150,56 @@ describe('ImageAdapter', () => {
       );
     });
 
+    it('空数组 referenceImages 不应传 image 参数', async () => {
+      await adapter.execute(
+        {
+          prompt: '风格变换',
+          referenceImages: [],
+        },
+        mockModel,
+        mockContext,
+      );
+
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.not.objectContaining({ image: expect.anything() }),
+      );
+    });
+
+    it('空数组 referenceImages + 遗留单图并存时应回退单图 string', async () => {
+      await adapter.execute(
+        {
+          prompt: '风格变换',
+          referenceImages: [],
+          referenceImage: 'https://example.com/ref1.png',
+        },
+        mockModel,
+        mockContext,
+      );
+
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: 'https://example.com/ref1.png',
+        }),
+      );
+    });
+
+    it('单元素 referenceImages 数组应映射为字符串', async () => {
+      await adapter.execute(
+        {
+          prompt: '风格变换',
+          referenceImages: ['https://example.com/ref1.png'],
+        },
+        mockModel,
+        mockContext,
+      );
+
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: 'https://example.com/ref1.png',
+        }),
+      );
+    });
+
     it('成功后应通过 onProgress 推送 100 进度', async () => {
       await adapter.execute(
         { prompt: 'test' },

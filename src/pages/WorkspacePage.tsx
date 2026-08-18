@@ -34,6 +34,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useCreateWebSocket, type CreateWsEvent } from '@/hooks/useCreateWebSocket';
 import { apiFetch } from '@/lib/apiClient';
+import { ReferenceImageStack, type UploadedRefImage } from '@/components/ReferenceImageStack';
 
 // Map backend icon strings to Lucide components
 const iconMap: Record<string, LucideIcon> = {
@@ -291,7 +292,7 @@ export default function WorkspacePage() {
   const [sourceCreateId, setSourceCreateId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [uploadedFile, setUploadedFile] = useState<{ fileId: string; previewUrl: string; name: string } | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedRefImage[]>([]);
   const [uploading, setUploading] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
@@ -481,21 +482,21 @@ export default function WorkspacePage() {
 
   // Clear uploaded file when switching to a non-image-upload capability
   useEffect(() => {
-    if (!imageUploadCapabilities.includes(activeTab) && uploadedFile) {
-      clearUploadedFile();
+    if (!imageUploadCapabilities.includes(activeTab) && uploadedFiles.length > 0) {
+      clearUploadedFiles();
     }
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Resolve actual capability slug: image tab auto-detects, others use tab slug directly
   useEffect(() => {
     if (activeTab === 'image') {
-      const hasRef = !!uploadedFile;
+      const hasRef = uploadedFiles.length > 0;
       const modelCaps = models.find((m) => m.slug === selectedModelSlug)?.capabilities || ['image-generation'];
       setResolvedCapability(detectImageCapability(prompt, hasRef, modelCaps));
     } else {
       setResolvedCapability(activeTab);
     }
-  }, [activeTab, prompt, uploadedFile, selectedModelSlug, models]);
+  }, [activeTab, prompt, uploadedFiles, selectedModelSlug, models]);
 
   const handleSubmit = async () => {
     if (!prompt.trim() || submitting || modelLoading || Boolean(modelError) || !selectedModelSlug || models.length === 0) return;
@@ -503,8 +504,8 @@ export default function WorkspacePage() {
 
     try {
       const input: Record<string, unknown> = { prompt: prompt.trim() };
-      if (uploadedFile) {
-        input.referenceImage = { fileId: uploadedFile.fileId };
+      if (uploadedFiles.length > 0) {
+        input.referenceImages = uploadedFiles.map((f) => ({ fileId: f.fileId }));
       }
 
       const res = await apiFetch('/api/gateway/generate', {
@@ -526,7 +527,7 @@ export default function WorkspacePage() {
         showToast('success', '创作已提交，正在生成...');
         setPrompt('');
         setSourceCreateId(null);
-        clearUploadedFile();
+        clearUploadedFiles();
         // Add optimistic create to the list
         const capInfo = capabilities.find((c) => c.slug === resolvedCapability);
         if (data?.data?.createId) {
@@ -534,8 +535,8 @@ export default function WorkspacePage() {
             id: data.data.createId,
             capabilitySlug: resolvedCapability,
             prompt: prompt.trim(),
-            input: uploadedFile
-              ? { prompt: prompt.trim(), referenceImage: { fileId: uploadedFile.fileId } }
+            input: uploadedFiles.length > 0
+              ? { prompt: prompt.trim(), referenceImages: uploadedFiles.map((f) => ({ fileId: f.fileId })) }
               : { prompt: prompt.trim() },
             sourceCreateId: null,
             status: 'processing' as const,
@@ -603,16 +604,41 @@ export default function WorkspacePage() {
     // 修改时切换到对应 tab
     const isImage = ['image-generation','image-editing','background-removal','scene-composition','model-dressing'].includes(create.capabilitySlug);
     setActiveTab(isImage ? 'image' : create.capabilitySlug);
-    // 恢复参考图（若原创作曾上传过），避免基于此修改时丢失参考图
-    const refImg = (create.input as { referenceImage?: { fileId?: string } } | null)?.referenceImage;
-    if (refImg?.fileId) {
+    // 恢复参考图：新快照 referenceImages 数组优先（服务端 resolveMediaUrls 已注入 url），
+    // 遗留单图 referenceImage 快照回退按需 GET（与改造前行为一致）
+    const refInput = create.input as {
+      referenceImages?: Array<{ fileId: string; url?: string }>;
+      referenceImage?: { fileId?: string; url?: string };
+    } | null;
+    const refImages = refInput?.referenceImages;
+    if (refImages?.length) {
+      setUploadedFiles(
+        refImages
+          .filter((r) => r.fileId)
+          .map((r) => ({ fileId: r.fileId, previewUrl: r.url ?? '', name: '原参考图' })),
+      );
+      // 乐观本地条目（无 url）按需回源
+      const missing = refImages.filter((r) => r.fileId && !r.url);
+      for (const m of missing) {
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        apiFetch(`/api/storage/files/${m.fileId}`)
+          .then(async (res) => {
+            if (!res.ok) return;
+            const file = await res.json() as { id: string; url: string; originalName: string };
+            if (file.url) {
+              setUploadedFiles((prev) => prev.map((f) => (f.fileId === file.id ? { ...f, previewUrl: file.url, name: file.originalName || '原参考图' } : f)));
+            }
+          })
+          .catch(() => { /* 预览失败不阻塞修改流程 */ });
+      }
+    } else if (refInput?.referenceImage?.fileId) {
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      apiFetch(`/api/storage/files/${refImg.fileId}`)
+      apiFetch(`/api/storage/files/${refInput.referenceImage.fileId}`)
         .then(async (res) => {
           if (!res.ok) return;
           const file = await res.json() as { id: string; url: string; originalName: string };
           if (file.url) {
-            setUploadedFile({ fileId: file.id, previewUrl: file.url, name: file.originalName || '原参考图' });
+            setUploadedFiles([{ fileId: file.id, previewUrl: file.url, name: file.originalName || '原参考图' }]);
           }
         })
         .catch(() => { /* 预览失败不阻塞修改流程 */ });
@@ -623,51 +649,69 @@ export default function WorkspacePage() {
   const imageUploadCapabilities = ['image'];
   const supportsImageUpload = imageUploadCapabilities.includes(activeTab);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const MAX_REF_IMAGES = 9;
 
-    // Validate file type and size
-    if (!file.type.startsWith('image/')) {
-      showToast('error', '请选择图片文件');
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? []);
+    if (selected.length === 0) return;
+
+    // 累计上限：堆叠总数不超过 maxImages，多余截断
+    const remaining = Math.max(MAX_REF_IMAGES - uploadedFiles.length, 0);
+    const accepted = selected.slice(0, remaining);
+    if (accepted.length === 0) {
+      showToast('info', `最多上传 ${MAX_REF_IMAGES} 张参考图`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('error', '图片大小不能超过 10MB');
-      return;
+    if (selected.length > remaining) {
+      showToast('info', `最多上传 ${MAX_REF_IMAGES} 张参考图，已保留前 ${accepted.length} 张`);
     }
 
     setUploading(true);
-    const previewUrl = URL.createObjectURL(file);
+    const targetTab = activeTab; // 上传中切 tab 则中止，不落地错 tab 图片
+    let failed = 0;
+    let uploaded = 0;
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('category', 'temp');
+      for (const file of accepted) {
+        // 类型/大小校验：跳过继续（不中断整批）
+        if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
+          failed += 1;
+          continue;
+        }
 
-      const uploadRes = await apiFetch('/api/storage/upload', {
-        method: 'POST',
-        body: formData,
-      });
+        const previewUrl = URL.createObjectURL(file);
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('category', 'temp');
 
-      const uploadData = await uploadRes.json();
-      if (uploadRes.ok) {
-        const upload = uploadData.data ?? uploadData;
-        const fileId = upload.id;
-        if (fileId) {
-          setUploadedFile({ fileId, previewUrl, name: file.name });
-          showToast('success', '图片已上传');
-        } else {
-          showToast('error', '上传失败：未获取文件ID');
+          const uploadRes = await apiFetch('/api/storage/upload', {
+            method: 'POST',
+            body: formData,
+          });
+          const uploadData = await uploadRes.json();
+          if (uploadRes.ok) {
+            const upload = uploadData.data ?? uploadData;
+            const fileId = upload.id;
+            if (fileId) {
+              // 上传中切 tab：中止循环，丢弃已完成项
+              if (activeTab !== targetTab) break;
+              setUploadedFiles((prev) => [...prev, { fileId, previewUrl, name: file.name }]);
+              uploaded += 1;
+            } else {
+              failed += 1;
+              URL.revokeObjectURL(previewUrl);
+            }
+          } else {
+            failed += 1;
+            URL.revokeObjectURL(previewUrl);
+          }
+        } catch {
+          failed += 1;
           URL.revokeObjectURL(previewUrl);
         }
-      } else {
-        showToast('error', uploadData.message || '上传失败');
-        URL.revokeObjectURL(previewUrl);
       }
-    } catch {
-      showToast('error', '上传失败，请检查网络');
-      URL.revokeObjectURL(previewUrl);
     } finally {
       setUploading(false);
       // Reset file input so the same file can be selected again
@@ -675,13 +719,25 @@ export default function WorkspacePage() {
         fileInputRef.current.value = '';
       }
     }
+
+    if (uploaded > 0 && failed === 0) {
+      showToast('success', uploaded === 1 ? '图片已上传' : `已上传 ${uploaded} 张参考图`);
+    } else if (failed > 0) {
+      showToast('error', `${failed} 张图片上传失败`);
+    }
   };
 
-  const clearUploadedFile = () => {
-    if (uploadedFile) {
-      URL.revokeObjectURL(uploadedFile.previewUrl);
-    }
-    setUploadedFile(null);
+  const clearUploadedFiles = () => {
+    uploadedFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+    setUploadedFiles([]);
+  };
+
+  const removeUploadedFile = (fileId: string) => {
+    setUploadedFiles((prev) => {
+      const removed = prev.find((f) => f.fileId === fileId);
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((f) => f.fileId !== fileId);
+    });
   };
 
   const handlePublish = async (create: Create) => {
@@ -987,8 +1043,8 @@ export default function WorkspacePage() {
                     key={tab.slug}
                     onClick={() => {
                       setActiveTab(tab.slug);
-                      // 切换到图片 tab 时清除已上传文件（避免残留不同能力）
-                      setUploadedFile(null);
+                      // 切换 tab 时清除已上传参考图（避免残留不同能力）
+                      clearUploadedFiles();
                     }}
                     title={tab.label}
                     className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors ${
@@ -1006,49 +1062,25 @@ export default function WorkspacePage() {
             <div className="flex min-w-0 flex-1 flex-col p-3">
               {/* Row 1: 参考图 (left stack) + Prompt (right flex-1) */}
               <div className="flex items-stretch gap-3">
-                {/* 参考图 stack */}
-                <div className="flex w-12 shrink-0 flex-col items-center justify-center">
+                {/* 参考图 stack：多图堆叠（折叠 → hover 扇形展开） */}
+                <div className="relative flex w-12 shrink-0 flex-col items-center justify-center overflow-visible">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
                   {supportsImageUpload && (
-                    uploadedFile ? (
-                      <div className="group relative">
-                        <img
-                          src={uploadedFile.previewUrl}
-                          alt="参考图"
-                          className="h-12 w-12 rounded-lg border border-border object-cover"
-                        />
-                        <button
-                          onClick={clearUploadedFile}
-                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-card text-muted-foreground shadow hover:text-destructive"
-                          aria-label="移除参考图"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-1">
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileSelect}
-                          className="hidden"
-                        />
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          disabled={uploading || submitting}
-                          className="flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-input text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-                          aria-label="上传参考图"
-                          title="上传参考图"
-                        >
-                          {uploading ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Paperclip className="h-4 w-4" />
-                          )}
-                        </button>
-                        <span className="text-[10px] leading-none text-muted-foreground">参考图</span>
-                      </div>
-                    )
+                    <ReferenceImageStack
+                      files={uploadedFiles}
+                      uploading={uploading}
+                      disabled={submitting}
+                      onAdd={() => fileInputRef.current?.click()}
+                      onRemove={removeUploadedFile}
+                      onClear={clearUploadedFiles}
+                    />
                   )}
                 </div>
 

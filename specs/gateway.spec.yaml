@@ -473,6 +473,20 @@ operations:
     path: /gateway/generate
     description: 提交生成任务（图片/视频）
     auth: jwt
+    input:
+      projectId: { type: string, format: uuid }
+      capabilitySlug: { type: string }
+      modelSlug: { type: string }
+      prompt: { type: string }
+      referenceImages:
+        type: array
+        maxItems: 9
+        items: { type: object, properties: { fileId: { type: string, format: uuid } } }
+        description: 多参考图 fileId 引用数组（运行时解析 fileId→URL 后传给 AI 适配器）；无参考图时省略该字段，与 referenceImage 单图兼容
+      referenceImage:
+        type: object
+        properties: { fileId: { type: string, format: uuid } }
+        description: 单参考图兼容字段（遗留快照恢复用），新提交请优先使用 referenceImages
     pre:
       - 用户已登录
       - 信用额度充足（预扣）
@@ -1386,6 +1400,7 @@ seed_data:
             items:
               type: string
               format: uri
+            maxItems: 9
             description: 参考图片 URL（图生图）
           sequentialImageGeneration:
             type: string
@@ -1440,6 +1455,7 @@ seed_data:
             items:
               type: string
               format: uri
+            maxItems: 9
         required:
           - prompt
       defaultParams:

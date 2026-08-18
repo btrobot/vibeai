@@ -540,7 +540,7 @@ describe('WorkspacePage', () => {
       expect(storageCalled).toBe(true);
     });
     // 上传文件预览应出现
-    expect(await screen.findByLabelText('移除参考图')).toBeInTheDocument();
+    expect(await screen.findByLabelText(/^移除参考图/)).toBeInTheDocument();
   });
 
   it('基于此修改无参考图时不调用存储 API', async () => {
@@ -637,6 +637,248 @@ describe('WorkspacePage', () => {
 
     await waitFor(() => {
       expect(postedBody).toMatchObject({ capabilitySlug: 'model-dressing' });
+    });
+  });
+
+  it('图片 Tab 上传多张参考图后提交 referenceImages 数组（无图时 omit）', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    let uploadSeq = 0;
+    server.use(
+      http.post('/api/gateway/generate', async ({ request }) => {
+        requestBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { createId: 'create-3', modelSlug: 'doubao-seedream-5-0' } });
+      }),
+      http.post('/api/storage/upload', () => HttpResponse.json({
+        success: true,
+        data: { id: `uploaded-${++uploadSeq}` },
+      })),
+    );
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByTitle('视频生成')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTitle('图片'));
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]);
+
+    // 上传完成后堆叠出现两张卡
+    await waitFor(() => {
+      expect(screen.getByLabelText('移除参考图 1')).toBeInTheDocument();
+      expect(screen.getByLabelText('移除参考图 2')).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByPlaceholderText(/输入提示词/), '根据两张参考图生成');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(requestBody).toBeTruthy();
+      const input = (requestBody as { input: Record<string, unknown> }).input;
+      expect(input.referenceImages).toEqual([{ fileId: 'uploaded-1' }, { fileId: 'uploaded-2' }]);
+      expect(input.referenceImage).toBeUndefined();
+    });
+  });
+
+  it('无参考图时提交 body 不含 referenceImages/referenceImage key', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    server.use(
+      http.post('/api/gateway/generate', async ({ request }) => {
+        requestBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { createId: 'create-3', modelSlug: 'kimi-k2-5' } });
+      }),
+    );
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByPlaceholderText(/输入提示词/), '纯文字生成');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(requestBody).toBeTruthy();
+      const input = (requestBody as { input: Record<string, unknown> }).input;
+      expect(input.referenceImages).toBeUndefined();
+      expect(input.referenceImage).toBeUndefined();
+    });
+  });
+
+  it('超过 9 张累计上限时截断并提示', async () => {
+    server.use(
+      http.post('/api/storage/upload', () => HttpResponse.json({ success: true, data: { id: 'uploaded-x' } })),
+    );
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByTitle('视频生成')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTitle('图片'));
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    // 先传 3 张（剩余容量 6）
+    await user.upload(fileInput, [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+      new File(['c'], 'c.png', { type: 'image/png' }),
+    ]);
+    await waitFor(() => {
+      expect(screen.getByLabelText('移除参考图 3')).toBeInTheDocument();
+    });
+    // 再选 8 张 → 仅补足至 9（保留 6 张）
+    await user.upload(fileInput, Array.from({ length: 8 }, (_, i) =>
+      new File([`f${i}`], `f${i}.png`, { type: 'image/png' }),
+    ));
+    // 最终 9 张（原 3 + 补 6），不出现第 10 张
+    await waitFor(() => {
+      expect(screen.getByLabelText('移除参考图 9')).toBeInTheDocument();
+      expect(screen.queryByLabelText('移除参考图 10')).not.toBeInTheDocument();
+    });
+  });
+
+  it('移除单张参考图不影响其余，且 revoke 该张 URL', async () => {
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL');
+    let uploadSeq = 0;
+    server.use(
+      http.post('/api/storage/upload', () => HttpResponse.json({ success: true, data: { id: `uploaded-${++uploadSeq}` } })),
+    );
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByTitle('视频生成')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTitle('图片'));
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]);
+    await waitFor(() => {
+      expect(screen.getByLabelText('移除参考图 2')).toBeInTheDocument();
+    });
+
+    // 移除第 1 张（hover 后点击移除按钮）
+    const remove1 = screen.getByLabelText('移除参考图 1');
+    fireEvent.mouseEnter(screen.getAllByRole('img')[0].closest('.group') as HTMLElement);
+    fireEvent.click(remove1);
+    await waitFor(() => {
+      expect(revokeSpy).toHaveBeenCalled();
+    });
+    // 移除后剩 1 张卡（剩余卡片重新编号为「移除参考图 1」）
+    await waitFor(() => {
+      expect(screen.getAllByRole('img')).toHaveLength(1);
+      expect(screen.getByLabelText('移除参考图 1')).toBeInTheDocument();
+    });
+  });
+
+  it('清空全部 revoke 所有 URL 并回到空态', async () => {
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL');
+    let uploadSeq = 0;
+    server.use(
+      http.post('/api/storage/upload', () => HttpResponse.json({ success: true, data: { id: `uploaded-${++uploadSeq}` } })),
+    );
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByTitle('视频生成')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTitle('图片'));
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]);
+    await waitFor(() => {
+      expect(screen.getByLabelText('移除参考图 2')).toBeInTheDocument();
+    });
+
+    // hover 容器展开 → 点清空全部
+    const container = screen.getByLabelText('添加参考图').closest('.relative') as HTMLElement;
+    fireEvent.mouseEnter(container);
+    fireEvent.click(screen.getByLabelText('清空参考图'));
+    await waitFor(() => {
+      expect(screen.getByLabelText('上传参考图')).toBeInTheDocument();
+      expect(screen.queryByLabelText(/^移除参考图/)).not.toBeInTheDocument();
+    });
+    // 清空 revoke 两张 blob URL
+    expect(revokeSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('多图快照（服务端已注入 url）基于此修改恢复全部参考图且不触发按需 GET', async () => {
+    let storageGets = 0;
+    server.use(
+      http.get('/api/projects/proj-1', () => HttpResponse.json(mockProject)),
+      http.get('/api/projects/proj-1/creates', () => HttpResponse.json({
+        total: 1,
+        items: [{
+          id: 'c-ref', capabilitySlug: 'image-generation', prompt: '多图测试', sourceCreateId: null,
+          status: 'completed', output: { images: [{ url: 'https://example.com/a.png' }] },
+          input: {
+            prompt: '多图测试',
+            referenceImages: [
+              { fileId: 'file-a', url: 'https://example.com/ref1.png' },
+              { fileId: 'file-b', url: 'https://example.com/ref2.png' },
+            ],
+          },
+          modelSlug: 'doubao-seedream-5-0', taskCount: 1, errorMessage: null, taskStatus: 'completed',
+          taskProgress: 100, createdAt: '2026-01-15T10:00:00Z', updatedAt: '2026-01-15T10:01:00Z',
+        }],
+      })),
+      http.get('/api/storage/files/:id', () => {
+        storageGets += 1;
+        return HttpResponse.json({ id: 'x', url: 'https://example.com/x.png', originalName: 'x.png' });
+      }),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('多图测试')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /基于此修改/ }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('移除参考图 1')).toBeInTheDocument();
+      expect(screen.getByLabelText('移除参考图 2')).toBeInTheDocument();
+    });
+    // 快照含 url：不应触发按需 GET
+    expect(storageGets).toBe(0);
+  });
+
+  it('上传中切换 tab：in-flight 上传不落地错 tab 图片', async () => {
+    let resolveUpload: (() => void) | undefined;
+    server.use(
+      http.post('/api/storage/upload', () => new Promise((resolve) => {
+        resolveUpload = () => resolve(HttpResponse.json({ success: true, data: { id: 'uploaded-late' } }));
+      })),
+    );
+    renderWorkspace();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByTitle('视频生成')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTitle('图片'));
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    // 触发上传（挂起）
+    const uploadPromise = user.upload(fileInput, [new File(['a'], 'a.png', { type: 'image/png' })]);
+    // 等待上传请求发出（挂起中）
+    await new Promise((r) => setTimeout(r, 50));
+    // 切到视频 tab（清空 + 中止上传）
+    await user.click(screen.getByTitle('视频生成'));
+    // 放行 in-flight 上传
+    resolveUpload?.();
+    await uploadPromise;
+
+    // 切回图片 tab：应回到空态（无残留堆叠）
+    await user.click(screen.getByTitle('图片'));
+    await waitFor(() => {
+      expect(screen.getByLabelText('上传参考图')).toBeInTheDocument();
+      expect(screen.queryByLabelText(/^移除参考图/)).not.toBeInTheDocument();
     });
   });
 });
