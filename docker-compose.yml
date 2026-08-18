@@ -94,7 +94,7 @@ services:
         max-file: "3"
 
   minio:
-    image: 8.138.175.157:5000/minio/minio:latest
+    image: ${MINIO_IMAGE:-ccr.ccs.tencentyun.com/nodecoda/minio:latest}
     container_name: ${COMPOSE_PROJECT_NAME}-minio
     restart: unless-stopped
 
@@ -123,7 +123,7 @@ services:
         max-file: "3"
 
   minio-init:
-    image: 8.138.175.157:5000/minio/minio:latest
+    image: ${MINIO_IMAGE:-ccr.ccs.tencentyun.com/nodecoda/minio:latest}
     container_name: ${COMPOSE_PROJECT_NAME}-minio-init
     restart: "no"
 
