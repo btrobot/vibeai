@@ -1207,4 +1207,52 @@ describe('WorkspacePage', () => {
       expect(input.referenceVideos).toEqual([{ fileId: 'video-1' }]);
     });
   });
+
+  it('视频 Tab 上传首帧图后提交 firstFrame 契约（图生视频）', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    let uploadSeq = 0;
+    server.use(
+      http.get('/api/gateway/models', ({ request }) => {
+        const capability = new URL(request.url).searchParams.get('capability');
+        if (capability === 'style-cloning') {
+          return HttpResponse.json({ success: true, data: [mockVideoModels[1]] });
+        }
+        return HttpResponse.json({ success: true, data: mockVideoModels });
+      }),
+      http.post('/api/gateway/generate', async ({ request }) => {
+        requestBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ success: true, data: { createId: 'create-ff', modelSlug: 'doubao-seedance-1-5-pro' } });
+      }),
+      http.post('/api/storage/upload', () => HttpResponse.json({ success: true, data: { id: `uploaded-${++uploadSeq}` } })),
+    );
+
+    renderWorkspace();
+    const user = userEvent.setup();
+    await waitFor(() => { expect(screen.getByTitle('视频生成')).toBeInTheDocument(); });
+    await user.click(screen.getByTitle('视频生成'));
+
+    // 默认 video-generation：首帧图槽出现
+    await waitFor(() => {
+      expect(screen.getByLabelText('首帧图（点击上传）')).toBeInTheDocument();
+    });
+
+    // 上传首帧图
+    await user.click(screen.getByLabelText('首帧图（点击上传）'));
+    const frameInput = document.querySelectorAll('input[type="file"]')[2] as HTMLInputElement; // 0=参考图 1=参考视频 2=首帧
+    await user.upload(frameInput, new File(['f'], 'start.png', { type: 'image/png' }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('首帧图（已上传，点击替换）')).toBeInTheDocument();
+    });
+
+    // 提交：capabilitySlug=video-generation + firstFrame 契约
+    await user.type(screen.getByPlaceholderText(/输入提示词/), '让首帧图动起来');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => {
+      expect(requestBody).toBeTruthy();
+      expect((requestBody as { capabilitySlug: string }).capabilitySlug).toBe('video-generation');
+      const input = (requestBody as { input: Record<string, unknown> }).input;
+      expect(input.firstFrame).toEqual({ fileId: 'uploaded-1' });
+      expect(input.referenceVideos).toBeUndefined();
+    });
+  });
 });

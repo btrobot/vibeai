@@ -37,6 +37,7 @@ import { apiFetch } from '@/lib/apiClient';
 import { ReferenceImageStack, type UploadedRefImage } from '@/components/ReferenceImageStack';
 import { RoleImageSlots } from '@/components/RoleImageSlots';
 import { ReferenceVideoSlot, type UploadedRefVideo } from '@/components/ReferenceVideoSlot';
+import { FirstFrameSlot, type UploadedFirstFrame } from '@/components/FirstFrameSlot';
 
 // Map backend icon strings to Lucide components
 const iconMap: Record<string, LucideIcon> = {
@@ -332,6 +333,9 @@ export default function WorkspacePage() {
   // 风格克隆参考视频（独立契约字段 referenceVideos:[{fileId}]，非参考图 role）
   const [uploadedVideo, setUploadedVideo] = useState<UploadedRefVideo | null>(null);
   const [videoUploading, setVideoUploading] = useState(false);
+  // 视频生成首帧图（图生视频，契约 firstFrame:{fileId}）
+  const [uploadedFirstFrame, setUploadedFirstFrame] = useState<UploadedFirstFrame | null>(null);
+  const [firstFrameUploading, setFirstFrameUploading] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [specParams, setSpecParams] = useState<Record<string, string>>({});
@@ -339,6 +343,7 @@ export default function WorkspacePage() {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const firstFrameInputRef = useRef<HTMLInputElement>(null);
   // 槽位模式：点击某角色槽后记录 pendingRole，文件选择落地到该槽（单张替换语义）
   const pendingRoleRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -559,6 +564,9 @@ export default function WorkspacePage() {
       if (selectedCapability === 'style-cloning' && uploadedVideo) {
         input.referenceVideos = [{ fileId: uploadedVideo.fileId }];
       }
+      if (resolvedCapability === 'video-generation' && uploadedFirstFrame) {
+        input.firstFrame = { fileId: uploadedFirstFrame.fileId };
+      }
 
       const res = await apiFetch('/api/gateway/generate', {
         method: 'POST',
@@ -581,6 +589,7 @@ export default function WorkspacePage() {
         setSourceCreateId(null);
         clearUploadedFiles();
         clearUploadedVideo();
+        clearUploadedFirstFrame();
         // Add optimistic create to the list
         const capInfo = capabilities.find((c) => c.slug === resolvedCapability);
         if (data?.data?.createId) {
@@ -697,6 +706,23 @@ export default function WorkspacePage() {
           }
         })
         .catch(() => { /* 预览失败不阻塞修改流程 */ });
+    }
+
+    // 视频生成首帧图恢复（快照 firstFrame:{fileId,url?}；无 url 按需 GET）
+    const firstFrameInput = (create.input as { firstFrame?: { fileId?: string; url?: string } } | null)?.firstFrame;
+    if (firstFrameInput?.fileId) {
+      if (firstFrameInput.url) {
+        setUploadedFirstFrame({ fileId: firstFrameInput.fileId, previewUrl: firstFrameInput.url, name: '原首帧图' });
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        apiFetch(`/api/storage/files/${firstFrameInput.fileId}`)
+          .then(async (res) => {
+            if (!res.ok) return;
+            const file = await res.json() as { id: string; url: string; originalName: string };
+            if (file.url) setUploadedFirstFrame({ fileId: file.id, previewUrl: file.url, name: file.originalName || '原首帧图' });
+          })
+          .catch(() => { /* 预览失败不阻塞修改流程 */ });
+      }
     }
 
     // 风格克隆参考视频恢复（快照 referenceVideos 数组优先，服务端注入 url；遗留无 url 按需 GET）
@@ -886,6 +912,47 @@ export default function WorkspacePage() {
       setVideoUploading(false);
       if (videoInputRef.current) videoInputRef.current.value = '';
     }
+  };
+
+  const handleFirstFrameSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      if (firstFrameInputRef.current) firstFrameInputRef.current.value = '';
+      return;
+    }
+    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
+      showToast('error', '仅支持 10MB 以内的图片');
+      if (firstFrameInputRef.current) firstFrameInputRef.current.value = '';
+      return;
+    }
+    const previewUrl = URL.createObjectURL(file);
+    setFirstFrameUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('category', 'temp');
+      const uploadRes = await apiFetch('/api/storage/upload', { method: 'POST', body: formData });
+      const uploadData = await uploadRes.json();
+      const upload = uploadData.data ?? uploadData;
+      if (uploadRes.ok && upload.id) {
+        setUploadedFirstFrame({ fileId: upload.id, previewUrl, name: file.name });
+        showToast('success', '首帧图已上传');
+      } else {
+        URL.revokeObjectURL(previewUrl);
+        showToast('error', '图片上传失败');
+      }
+    } catch {
+      URL.revokeObjectURL(previewUrl);
+      showToast('error', '网络错误');
+    } finally {
+      setFirstFrameUploading(false);
+      if (firstFrameInputRef.current) firstFrameInputRef.current.value = '';
+    }
+  };
+
+  const clearUploadedFirstFrame = () => {
+    if (uploadedFirstFrame) URL.revokeObjectURL(uploadedFirstFrame.previewUrl);
+    setUploadedFirstFrame(null);
   };
 
   const clearUploadedVideo = () => {
@@ -1245,6 +1312,22 @@ export default function WorkspacePage() {
                     onChange={handleVideoSelect}
                     className="hidden"
                   />
+                  <input
+                    ref={firstFrameInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFirstFrameSelect}
+                    className="hidden"
+                  />
+                  {activeTab === 'video-generation' && selectedCapability !== 'style-cloning' && (
+                    <FirstFrameSlot
+                      frame={uploadedFirstFrame}
+                      uploading={firstFrameUploading}
+                      disabled={submitting}
+                      onSelect={() => firstFrameInputRef.current?.click()}
+                      onRemove={clearUploadedFirstFrame}
+                    />
+                  )}
                   {activeTab === 'video-generation' && selectedCapability === 'style-cloning' && (
                     <ReferenceVideoSlot
                       video={uploadedVideo}
