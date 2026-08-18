@@ -7,6 +7,7 @@ import { eq, and, like, desc, count, sql, inArray } from 'drizzle-orm';
 import { IStorageProvider } from './interfaces/storage-provider.interface';
 import type { UploadFileInput, ListFilesQuery, FileResponse } from './dto';
 import axios from 'axios';
+import sharp from 'sharp';
 
 @Injectable()
 export class StorageService {
@@ -262,6 +263,30 @@ export class StorageService {
     } catch {
       return null;
     }
+  }
+
+  // ===== 图片变体（?w= 动态缩放，sharp） =====
+
+  /** 支持 ?w= 动态缩放的图片类型（其余类型原样返回） */
+  static isResizableImage(contentType: string): boolean {
+    return ['image/png', 'image/jpeg', 'image/webp', 'image/avif'].includes(contentType);
+  }
+
+  /** 解析 ?w= 参数：整数且在 [16, 4096] 内才生效，否则视为未指定（返回 undefined） */
+  static parseResizeWidth(w: unknown): number | undefined {
+    if (typeof w !== 'string' || !/^\d+$/.test(w)) return undefined;
+    const n = Number(w);
+    if (!Number.isInteger(n) || n < 16 || n > 4096) return undefined;
+    return n;
+  }
+
+  /** 缩放到指定宽度并转 WebP（不放大、保留 EXIF 方向） */
+  async resizeToWebp(data: Buffer, width: number): Promise<Buffer> {
+    return sharp(data)
+      .rotate()
+      .resize({ width, withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .toBuffer();
   }
 
   /**

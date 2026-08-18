@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Heart, Eye, ImageIcon, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { imageVariant } from '@/lib/imageVariant';
 import { EmptyState } from '@/components/ui/empty-state';
 
 interface GalleryDetail {
@@ -139,7 +140,7 @@ export default function GalleryDetailPage() {
             />
           ) : preview ? (
             <img
-              src={preview}
+              src={imageVariant(preview, 1600)}
               alt={work.title}
               className="mx-auto max-h-[70vh] w-full object-contain"
             />

@@ -11,6 +11,7 @@
  */
 
 import axios from 'axios';
+import sharp from 'sharp';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Inject } from '@nestjs/common';
@@ -399,5 +400,51 @@ describe('StorageService', () => {
       expect(result).toBeDefined();
       expect(result.originalName).toBe('extra.jpg');
     });
+  });
+});
+
+// ===== 图片变体（?w= 缩放） =====
+describe('图片变体（?w= 动态缩放）', () => {
+  it('isResizableImage：只认 png/jpeg/webp/avif', () => {
+    expect(StorageService.isResizableImage('image/png')).toBe(true);
+    expect(StorageService.isResizableImage('image/jpeg')).toBe(true);
+    expect(StorageService.isResizableImage('image/webp')).toBe(true);
+    expect(StorageService.isResizableImage('image/avif')).toBe(true);
+    expect(StorageService.isResizableImage('image/gif')).toBe(false);
+    expect(StorageService.isResizableImage('image/svg+xml')).toBe(false);
+    expect(StorageService.isResizableImage('video/mp4')).toBe(false);
+  });
+
+  it('parseResizeWidth：合法整数 [16,4096] 生效，其余返回 undefined', () => {
+    expect(StorageService.parseResizeWidth('320')).toBe(320);
+    expect(StorageService.parseResizeWidth('16')).toBe(16);
+    expect(StorageService.parseResizeWidth('4096')).toBe(4096);
+    expect(StorageService.parseResizeWidth('0')).toBeUndefined();
+    expect(StorageService.parseResizeWidth('15')).toBeUndefined();
+    expect(StorageService.parseResizeWidth('4097')).toBeUndefined();
+    expect(StorageService.parseResizeWidth('abc')).toBeUndefined();
+    expect(StorageService.parseResizeWidth('-5')).toBeUndefined();
+    expect(StorageService.parseResizeWidth('320.5')).toBeUndefined();
+    expect(StorageService.parseResizeWidth(undefined)).toBeUndefined();
+    expect(StorageService.parseResizeWidth('')).toBeUndefined();
+  });
+
+  it('resizeToWebp：真实 sharp 缩放到目标宽度并转 WebP（不放大）', async () => {
+    const svc = new StorageService({} as never, mockProvider as never);
+    const png = await sharp({
+      create: { width: 800, height: 600, channels: 3, background: { r: 255, g: 0, b: 0 } },
+    }).png().toBuffer();
+
+    const out = await svc.resizeToWebp(png, 320);
+    const meta = await sharp(out).metadata();
+    expect(meta.format).toBe('webp');
+    expect(meta.width).toBe(320);
+    expect(meta.height).toBe(240);
+
+    // 请求宽度大于原图 → 不放大，保持原尺寸
+    const up = await svc.resizeToWebp(png, 2000);
+    const metaUp = await sharp(up).metadata();
+    expect(metaUp.format).toBe('webp');
+    expect(metaUp.width).toBe(800);
   });
 });

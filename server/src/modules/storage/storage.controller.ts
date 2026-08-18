@@ -13,6 +13,7 @@ import {
   Req,
   Res,
   Inject,
+  Logger,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -25,6 +26,8 @@ import type { Request, Response } from 'express';
 @ApiTags('storage')
 @Controller('storage')
 export class StorageController {
+  private readonly logger = new Logger(StorageController.name);
+
   constructor(@Inject('STORAGE_SERVICE') private readonly storageService: StorageService) {}
 
   /**
@@ -33,13 +36,31 @@ export class StorageController {
    * URL format: /api/storage/serve/users/{userId}/generated/{filename}
    */
   @Get('serve/*splat')
-  async serveFile(@Param('splat') splat: string | string[], @Res() res: Response) {
+  async serveFile(
+    @Param('splat') splat: string | string[],
+    @Query('w') w: string | undefined,
+    @Res() res: Response,
+  ) {
     const key = Array.isArray(splat) ? splat.join('/') : splat;
     try {
       const result = await this.storageService.readFile(key);
       if (!result) {
         res.status(404).json({ error: 'File not found' });
         return;
+      }
+      const width = StorageService.parseResizeWidth(w);
+      if (width && StorageService.isResizableImage(result.contentType)) {
+        try {
+          // 变体：缩略图/网格用 ?w=320 等，WebP 输出，避免客户端下载+解码全尺寸大图
+          const resized = await this.storageService.resizeToWebp(result.data, width);
+          res.setHeader('Content-Type', 'image/webp');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.send(resized);
+          return;
+        } catch (e) {
+          this.logger.warn(`serve resize failed (w=${width}, key=${key}): ${(e as Error).message}`);
+          // 缩放失败回退原图
+        }
       }
       res.setHeader('Content-Type', result.contentType);
       res.setHeader('Cache-Control', 'public, max-age=86400');

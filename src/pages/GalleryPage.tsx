@@ -12,6 +12,7 @@ import {
   Star,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { imageVariant } from '@/lib/imageVariant';
 import { EmptyState } from '@/components/ui/empty-state';
 
 interface GalleryItem {
@@ -129,7 +130,7 @@ export default function GalleryPage() {
               >
                 {work.imageUrl ? (
                   <img
-                    src={work.imageUrl}
+                    src={imageVariant(work.imageUrl, 480)}
                     alt={work.title}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     loading="lazy"
@@ -224,7 +225,7 @@ export default function GalleryPage() {
               <div className="aspect-square bg-background">
                 {item.imageUrl ? (
                   <img
-                    src={item.imageUrl}
+                    src={imageVariant(item.imageUrl, 480)}
                     alt={item.title}
                     className="h-full w-full object-cover"
                     loading="lazy"

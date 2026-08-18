@@ -11,6 +11,7 @@
 
 import { useState, useCallback } from 'react';
 import { Paperclip, Plus, X, Trash2, Loader2 } from 'lucide-react';
+import { imageVariant } from '@/lib/imageVariant';
 
 /** Layout constants — 适配 Workspace 48px rail（boli 原 60/80/36 过大） */
 const CARD_W = 44;
@@ -99,7 +100,7 @@ export function ReferenceImageStack({
           >
             <div className="h-14 w-11 overflow-hidden rounded-md border border-border bg-card shadow-sm">
               <img
-                src={file.previewUrl}
+                src={imageVariant(file.previewUrl, 320)}
                 alt={file.name || `参考图 ${idx + 1}`}
                 className="h-full w-full object-cover"
                 draggable={false}

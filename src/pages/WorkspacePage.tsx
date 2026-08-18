@@ -30,6 +30,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { imageVariant } from '@/lib/imageVariant';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useCreateWebSocket, type CreateWsEvent } from '@/hooks/useCreateWebSocket';
@@ -1077,7 +1078,7 @@ export default function WorkspacePage() {
                           const url = typeof img === 'string' ? img : img.url;
                           return (
                             <button key={i} onClick={() => setLightboxUrl(url)} className="group relative overflow-hidden rounded-md">
-                              <img src={url} alt="" className="h-32 w-full rounded-md object-cover transition-transform group-hover:scale-105" loading="lazy" />
+                              <img src={imageVariant(url, 320)} alt="" className="h-32 w-full rounded-md object-cover transition-transform group-hover:scale-105" loading="lazy" decoding="async" />
                               <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20">
                                 <Maximize2 className="h-5 w-5 text-white opacity-0 transition-opacity group-hover:opacity-100" />
                               </div>
@@ -1379,7 +1380,7 @@ export default function WorkspacePage() {
           onClick={() => setLightboxUrl(null)}
         >
           <div className="relative max-h-[90vh] max-w-[90vw]">
-            <img src={lightboxUrl} alt="放大查看" className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain" />
+            <img src={imageVariant(lightboxUrl, 1600)} alt="放大查看" className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain" />
             <button
               onClick={() => setLightboxUrl(null)}
               className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full bg-card shadow-lg text-muted-foreground hover:text-foreground"
