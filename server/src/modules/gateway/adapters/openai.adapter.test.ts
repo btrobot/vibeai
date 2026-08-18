@@ -24,8 +24,8 @@ function model(overrides: Partial<AdapterModel> = {}): AdapterModel {
   };
 }
 
-function ctx(): ExecutionContext {
-  return { taskId: 'task-1', userId: 'user-1', onProgress: vi.fn() };
+function ctx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
+  return { taskId: 'task-1', userId: 'user-1', onProgress: vi.fn(), ...overrides };
 }
 
 describe('OpenAIAdapter', () => {
@@ -297,6 +297,39 @@ describe('OpenAIAdapter', () => {
       expect(fetchMock.mock.calls[0][0]).toBe('https://app.example.com/api/storage/serve/users/1/ref.webp');
       expect(fetchMock.mock.calls[1][0]).toBe('https://cn.pptoken.cc/v1/images/edits');
       expect(result.output.images).toHaveLength(1);
+    });
+  });
+
+  describe('生成等待期进度心跳', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('外部网关生成期间每 8s 推送心跳进度（消除长时间静默）', async () => {
+      vi.useFakeTimers();
+      let resolveFetch!: (v: Response) => void;
+      fetchMock.mockImplementation(
+        () => new Promise<Response>((resolve) => { resolveFetch = resolve; }),
+      );
+      const onProgress = vi.fn();
+      const promise = adapter.execute({ prompt: 'cat' }, model(), ctx({ onProgress }));
+
+      // 推进 16s → 应收到 2 次心跳（8s / 16s）
+      await vi.advanceTimersByTimeAsync(16_000);
+      const heartbeatCalls = onProgress.mock.calls.filter(([, msg]) =>
+        String(msg).includes('已等待'),
+      );
+      expect(heartbeatCalls.length).toBe(2);
+      expect(String(heartbeatCalls[0][1])).toContain('已等待 8s');
+      expect(Number(heartbeatCalls[0][0])).toBeGreaterThanOrEqual(10);
+
+      // 完成响应 → 心跳停止
+      resolveFetch(jsonResponse({ data: [{ url: 'https://cdn.example.com/a.png' }] }));
+      await promise;
+      const before = onProgress.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(24_000);
+      expect(onProgress.mock.calls.length).toBe(before);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });
 

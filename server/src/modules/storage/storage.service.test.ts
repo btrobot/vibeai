@@ -10,6 +10,7 @@
  * - getStorageStats 统计 → groupBy + sum
  */
 
+import axios from 'axios';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Inject } from '@nestjs/common';
@@ -306,6 +307,23 @@ describe('StorageService', () => {
   describe('downloadAndStore', () => {
     it('should be defined as a method on StorageService', () => {
       expect(typeof service.downloadAndStore).toBe('function');
+    });
+
+    it('data URL 日志脱敏：只打类型与长度，不 dump base64 全图', async () => {
+      vi.spyOn(axios, 'get').mockResolvedValue({ data: Buffer.from('payload-bytes') });
+      mockProvider.upload.mockResolvedValue({ key: 'gen/out.png', url: '/api/storage/serve/gen/out.png' });
+      mockReturning(db, [{ id: 'file-1' }]);
+      const logSpy = vi.spyOn((service as any).logger, 'log');
+
+      const dataUrl = `data:image/png;base64,${'A'.repeat(3000)}`;
+      const result = await service.downloadAndStore('user-1', dataUrl, 'out.png', 'image/png');
+
+      const dl = logSpy.mock.calls.map((c) => String(c[0])).find((l) => l.includes('Downloading from'));
+      expect(dl).toContain('data:…');
+      expect(dl).toMatch(/\(\d+ chars\)/);
+      expect(dl).toContain(String(dataUrl.length)); // 长度 = 完整 data URL 字符数
+      expect(dl).not.toContain('A'.repeat(50)); // 不包含 base64 内容
+      expect(result.fileId).toBe('file-1');
     });
 
     // downloadAndStore is fully tested via TaskExecutionService tests
