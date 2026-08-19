@@ -431,7 +431,7 @@ describe('GatewayService', () => {
       ]);
     });
 
-    it('遗留单图 referenceImage {fileId} 应解析为 URL（兼容路径）', async () => {
+    it('遗留单图 referenceImage {fileId} 应解析为 URL 且并入 referenceImages（兼容路径，防 refs=0 走文生图）', async () => {
       const urlMap = new Map<string, string>([['file-a', 'https://cdn.example.com/a.png']]);
       vi.spyOn(service['storageService'], 'resolveUrls').mockResolvedValue(urlMap);
 
@@ -442,7 +442,23 @@ describe('GatewayService', () => {
 
       const resolved = await (service as any).resolveInputForAdapter(input);
 
+      // 单数字段保留（快照兼容）
       expect(resolved.referenceImage).toBe('https://cdn.example.com/a.png');
+      // 归一化：单数并入复数，确保适配器（只读 referenceImages）收到参考图
+      expect(resolved.referenceImages).toEqual(['https://cdn.example.com/a.png']);
+    });
+
+    it('referenceImage 为字符串 URL 时并入 referenceImages 且不被 fileId 解析影响', async () => {
+      const input = {
+        prompt: '单图URL',
+        referenceImage: 'https://cdn.example.com/legacy.png',
+      };
+
+      const resolved = await (service as any).resolveInputForAdapter(input);
+
+      expect(service['storageService'].resolveUrls).not.toHaveBeenCalled();
+      expect(resolved.referenceImages).toEqual(['https://cdn.example.com/legacy.png']);
+      expect(resolved.referenceImage).toBe('https://cdn.example.com/legacy.png');
     });
 
     it('COZE_PROJECT_DOMAIN_DEFAULT 为空时 fallbackDomain 将相对 URL 绝对化（请求域名兜底）', async () => {

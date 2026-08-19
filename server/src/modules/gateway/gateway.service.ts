@@ -340,6 +340,25 @@ export class GatewayService {
   ): Promise<Record<string, unknown>> {
     const resolved = { ...input };
 
+    // 兼容归一化：历史客户端（导航工具页等）以单数 referenceImage 提交参考图，
+    // 而适配器消费契约是复数 referenceImages 数组。若只解析单数而不同步到复数，
+    // 适配器会得到 refs=0 而走文生图（参考图被静默忽略）。
+    const singularRef = resolved['referenceImage'];
+    if (singularRef !== undefined && singularRef !== null) {
+      const refArray = Array.isArray(resolved['referenceImages'])
+        ? [...(resolved['referenceImages'] as unknown[])]
+        : [];
+      const isFileIdRef =
+        typeof singularRef === 'string' ||
+        (typeof singularRef === 'object' &&
+          singularRef !== null &&
+          'fileId' in (singularRef as Record<string, unknown>));
+      if (isFileIdRef) {
+        refArray.push(singularRef);
+      }
+      resolved['referenceImages'] = refArray;
+    }
+
     // Collect all fileIds to resolve in batch
     const fileIds: string[] = [];
 

@@ -120,4 +120,42 @@ describe('ToolPage', () => {
     expect(calls.some((u: string) => u.includes('/api/projects?pageSize=1') || u === '/api/projects')).toBe(false);
     expect(screen.getByText('生成结果')).toBeInTheDocument();
   });
+
+  it('上传参考图后 generate 请求体携带复数 referenceImages 数组（适配器消费契约）', async () => {
+    const generateBodies: Array<{ input?: { referenceImages?: unknown } }> = [];
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/projects/default') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { id: 'toolbox-1' } }) });
+      }
+      if (url === '/api/storage/upload') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { id: 'file-uploaded-1' } }) });
+      }
+      if (url === '/api/gateway/generate') {
+        generateBodies.push(JSON.parse(String(init?.body)));
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { taskId: 'task-1' } }) });
+      }
+      if (url.includes('/api/tasks/')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { status: 'completed', output: { content: 'done' } } }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: null }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderToolPage('background-removal');
+    fireEvent.change(screen.getByLabelText(/上传图片/), {
+      target: { files: [new File(['fake-bytes'], 'product.png', { type: 'image/png' })] },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/去除背景，保留商品主体/), {
+      target: { value: '去除背景' },
+    });
+    fireEvent.click(screen.getByText('开始生成'));
+
+    await waitFor(() => {
+      expect(generateBodies.length).toBe(1);
+    });
+    const gen = generateBodies[0];
+    expect(gen?.input?.referenceImages).toEqual([{ fileId: 'file-uploaded-1' }]);
+    // 不再发送会被适配器忽略的单数 referenceImage
+    expect((gen?.input as Record<string, unknown>)?.referenceImage).toBeUndefined();
+  });
 });

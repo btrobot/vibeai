@@ -134,7 +134,8 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
           capabilitySlug: config.capability,
           input: {
             prompt: prompt.trim() || `使用 ${config.name} 工具处理`,
-            ...(uploadedFileId ? { referenceImage: { fileId: uploadedFileId } } : {}),
+            // 适配器消费契约：参考图必须是复数 referenceImages 数组（单数 referenceImage 会被忽略 → refs=0 走文生图）
+            referenceImages: uploadedFileId ? [{ fileId: uploadedFileId }] : [],
           },
         }),
       });
