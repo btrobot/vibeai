@@ -11,6 +11,7 @@ import {
   Palette,
   Shirt,
   FileText,
+  Lightbulb,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/lib/apiClient';
@@ -60,6 +61,46 @@ export const BG_COLORS: Array<{ value: string; label: string }> = [
   { value: 'transparent', label: '透明' },
 ];
 
+// boli 对齐：场景合成预设（对齐 boli apps/web scene-compose SCENE_PRESETS，8 场景）
+export const SCENE_PRESETS: Array<{ value: string; label: string; desc: string }> = [
+  { value: 'living-room', label: '客厅', desc: '现代简约客厅' },
+  { value: 'kitchen', label: '厨房', desc: '整洁明亮厨房' },
+  { value: 'bedroom', label: '卧室', desc: '温馨卧室场景' },
+  { value: 'outdoor', label: '户外', desc: '自然户外环境' },
+  { value: 'office', label: '办公', desc: '商务办公场景' },
+  { value: 'cafe', label: '咖啡厅', desc: '休闲咖啡厅' },
+  { value: 'studio-white', label: '白色影棚', desc: '纯白背景影棚' },
+  { value: 'studio-dark', label: '深色影棚', desc: '深色背景影棚' },
+];
+
+// boli 对齐：光影风格（对齐 boli LIGHTING_STYLES，5 风格）
+export const LIGHTING_STYLES: Array<{ value: string; label: string; desc: string }> = [
+  { value: 'studio', label: '摄影棚', desc: '专业摄影棚灯光' },
+  { value: 'natural', label: '自然光', desc: '柔和自然光线' },
+  { value: 'dramatic', label: '戏剧光', desc: '强烈明暗对比' },
+  { value: 'warm', label: '暖光', desc: '温暖舒适氛围' },
+  { value: 'cool', label: '冷光', desc: '冷静科技感' },
+];
+
+// boli 对齐：风格强度 slider（0.1–1，步进 0.05，默认 0.7）
+export const SCENE_DEFAULT_STRENGTH = 0.7;
+export const SCENE_STRENGTH_MIN = 0.1;
+export const SCENE_STRENGTH_MAX = 1;
+export const SCENE_STRENGTH_STEP = 0.05;
+
+// boli 对齐：模特换装固定基础 prompt（对齐 boli ClothingChangeRecipe prompt='模特换装'；
+// 扩写以适配 OpenAI 多图编辑的角色顺序语义：第一张模特、第二张服装）
+export const MODEL_DRESSING_BASE_PROMPT =
+  '模特换装：第一张图为模特，第二张图为服装，将服装穿到模特身上，保持模特面部和姿态不变，生成自然逼真的试穿效果图';
+
+// boli 对齐：模特图拍摄建议（对齐 boli clothing-change 页面 Tips 文案）
+export const MODEL_DRESSING_TIPS: string[] = [
+  '正面或微侧面站立姿势',
+  '双手自然下垂或叉腰',
+  '避免遮挡身体主要部位',
+  '背景简洁、光线充足',
+];
+
 export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } = {}) {
   const navigate = useNavigate();
   const params = useParams<{ toolType?: string }>();
@@ -69,6 +110,12 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
   const [preview, setPreview] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [bgColor, setBgColor] = useState('#ffffff'); // 白底图背景色（boli 对齐，默认纯白）
+  const [sceneTemplate, setSceneTemplate] = useState('living-room'); // 场景合成：场景模板（boli 对齐，默认客厅）
+  const [lightingStyle, setLightingStyle] = useState('studio'); // 场景合成：光影风格（boli 对齐，默认摄影棚）
+  const [strength, setStrength] = useState(SCENE_DEFAULT_STRENGTH); // 场景合成：风格强度（boli 对齐，默认 0.7）
+  const [garmentFile, setGarmentFile] = useState<File | null>(null); // 模特换装：服装图（第二张）
+  const [garmentPreview, setGarmentPreview] = useState<string | null>(null);
+  const isModelDressing = toolSlug === 'model-dressing';
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +140,17 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
     }
   };
 
+  // 模特换装：服装图（第二张）上传（boli 对齐双槽位）
+  const handleGarmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      setGarmentFile(f);
+      setGarmentPreview(URL.createObjectURL(f));
+      setResult(null);
+      setError(null);
+    }
+  };
+
   // 导航电商工具直通入口：统一归属每用户的「工具箱」项目（后端幂等创建，无需前端找/建项目）
   const ensureProject = async (): Promise<string | null> => {
     try {
@@ -105,8 +163,35 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
     }
   };
 
+  // boli 对齐：各工具 prompt 构造
+  // - 场景合成：对齐 boli SceneComposeRecipe.buildScenePrompt（场景描述 + lighting + scene 模板 + 电商后缀）
+  // - 模特换装：固定基础 prompt（对齐 boli prompt='模特换装'）+ 可选补充要求
+  const buildPrompt = (): string => {
+    const trimmed = prompt.trim();
+    if (toolSlug === 'scene-composition') {
+      const parts: string[] = [];
+      parts.push(trimmed || `Place the product in a ${sceneTemplate} scene`);
+      parts.push(`${lightingStyle} lighting`);
+      parts.push(`scene: ${sceneTemplate}`);
+      parts.push('professional product photography, high quality, detailed');
+      return parts.join(', ');
+    }
+    if (isModelDressing) {
+      return trimmed
+        ? `${MODEL_DRESSING_BASE_PROMPT}。补充要求：${trimmed}`
+        : MODEL_DRESSING_BASE_PROMPT;
+    }
+    return (
+      trimmed ||
+      (toolSlug === 'background-removal'
+        ? `去除背景，保留商品主体，生成${BG_COLORS.find((c) => c.value === bgColor)?.label ?? '纯白'}底图`
+        : `使用 ${config.name} 工具处理`)
+    );
+  };
+
   const handleSubmit = async () => {
-    if (!file && !prompt.trim()) return;
+    // 模特换装（boli 对齐）：模特图 + 服装图双槽必填
+    if (isModelDressing ? !file || !garmentFile : !file && !prompt.trim()) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -120,9 +205,14 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
       }
 
       let uploadedFileId = '';
-      if (file) {
+      let garmentFileId = '';
+      for (const [target, slotFile] of [
+        ['file', file],
+        ['garment', isModelDressing ? garmentFile : null],
+      ] as Array<[string, File | null]>) {
+        if (!slotFile) continue;
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', slotFile);
         formData.append('category', 'temp');
 
         const uploadRes = await apiFetch('/api/storage/upload', {
@@ -132,7 +222,9 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
         const uploadData = await uploadRes.json();
         if (uploadRes.ok) {
           const upload = uploadData.data ?? uploadData;
-          uploadedFileId = upload.id || '';
+          const fid = upload.id || '';
+          if (target === 'file') uploadedFileId = fid;
+          else garmentFileId = fid;
         }
       }
 
@@ -143,15 +235,19 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
           projectId,
           capabilitySlug: config.capability,
           input: {
-            prompt:
-              prompt.trim() ||
-              (toolSlug === 'background-removal'
-                ? `去除背景，保留商品主体，生成${BG_COLORS.find((c) => c.value === bgColor)?.label ?? '纯白'}底图`
-                : `使用 ${config.name} 工具处理`),
+            prompt: buildPrompt(),
             // 适配器消费契约：参考图必须是复数 referenceImages 数组（单数 referenceImage 会被忽略 → refs=0 走文生图）
-            referenceImages: uploadedFileId ? [{ fileId: uploadedFileId }] : [],
+            // 模特换装（boli 对齐）：双参考图按角色顺序排列（第一张模特、第二张服装）
+            referenceImages: uploadedFileId || garmentFileId
+              ? [
+                  ...(uploadedFileId ? [{ fileId: uploadedFileId }] : []),
+                  ...(garmentFileId ? [{ fileId: garmentFileId }] : []),
+                ]
+              : [],
             // 白底图对齐（boli）：背景色透传（hex/transparent）→ OpenAI background opaque/transparent；rmbg-2-0 → background_color
             ...(toolSlug === 'background-removal' ? { backgroundColor: bgColor } : {}),
+            // 场景合成对齐（boli）：场景模板/光影/强度透传（进入 creates.input 快照；OpenAI 适配器按需消费）
+            ...(toolSlug === 'scene-composition' ? { sceneTemplate, lightingStyle, strength } : {}),
           },
         }),
       });
@@ -238,40 +334,130 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input Section */}
         <div className="space-y-4">
-          <div className="rounded-xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold text-foreground mb-3">上传图片</h2>
+          {isModelDressing ? (
+            <>
+              <div className="rounded-xl border border-border bg-card p-4">
+                <h2 className="text-sm font-semibold text-foreground mb-3">模特图（第一张）</h2>
 
-            {preview ? (
-              <div className="relative">
-                <img
-                  src={preview}
-                  alt="预览"
-                  className="w-full h-48 rounded-lg object-cover"
-                />
-                <button
-                  onClick={() => {
-                    setFile(null);
-                    setPreview(null);
-                  }}
-                  className="absolute top-2 right-2 rounded-lg bg-black/50 px-2 py-1 text-xs text-primary-foreground"
-                >
-                  更换
-                </button>
+                {preview ? (
+                  <div className="relative">
+                    <img
+                      src={preview}
+                      alt="模特图预览"
+                      className="w-full h-48 rounded-lg object-cover"
+                    />
+                    <button
+                      onClick={() => {
+                        setFile(null);
+                        setPreview(null);
+                      }}
+                      className="absolute top-2 right-2 rounded-lg bg-black/50 px-2 py-1 text-xs text-primary-foreground"
+                    >
+                      更换
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-8 transition-colors hover:border-primary/30">
+                    <Upload className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+                    <p className="text-sm text-muted-foreground">点击上传模特图</p>
+                    <p className="text-xs text-muted-foreground">支持 JPG、PNG、WebP，最大 10MB</p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                )}
               </div>
-            ) : (
-              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-8 transition-colors hover:border-primary/30">
-                <Upload className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-                <p className="text-sm text-muted-foreground">点击上传图片</p>
-                <p className="text-xs text-muted-foreground">支持 JPG、PNG、WebP，最大 10MB</p>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </label>
-            )}
-          </div>
+
+              <div className="rounded-xl border border-border bg-card p-4">
+                <h2 className="text-sm font-semibold text-foreground mb-3">衣服图（第二张）</h2>
+
+                {garmentPreview ? (
+                  <div className="relative">
+                    <img
+                      src={garmentPreview}
+                      alt="衣服图预览"
+                      className="w-full h-48 rounded-lg object-cover"
+                    />
+                    <button
+                      onClick={() => {
+                        setGarmentFile(null);
+                        setGarmentPreview(null);
+                      }}
+                      className="absolute top-2 right-2 rounded-lg bg-black/50 px-2 py-1 text-xs text-primary-foreground"
+                    >
+                      更换
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-8 transition-colors hover:border-primary/30">
+                    <Upload className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+                    <p className="text-sm text-muted-foreground">点击上传衣服图</p>
+                    <p className="text-xs text-muted-foreground">支持 JPG、PNG、WebP，最大 10MB</p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleGarmentChange}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-border bg-primary/5 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+                    <Lightbulb className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground">模特图拍摄建议</h2>
+                    <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      {MODEL_DRESSING_TIPS.map((tip) => (
+                        <li key={tip}>• {tip}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h2 className="text-sm font-semibold text-foreground mb-3">上传图片</h2>
+
+              {preview ? (
+                <div className="relative">
+                  <img
+                    src={preview}
+                    alt="预览"
+                    className="w-full h-48 rounded-lg object-cover"
+                  />
+                  <button
+                    onClick={() => {
+                      setFile(null);
+                      setPreview(null);
+                    }}
+                    className="absolute top-2 right-2 rounded-lg bg-black/50 px-2 py-1 text-xs text-primary-foreground"
+                  >
+                    更换
+                  </button>
+                </div>
+              ) : (
+                <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-8 transition-colors hover:border-primary/30">
+                  <Upload className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+                  <p className="text-sm text-muted-foreground">点击上传图片</p>
+                  <p className="text-xs text-muted-foreground">支持 JPG、PNG、WebP，最大 10MB</p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </div>
+          )}
 
           {toolSlug === 'background-removal' && (
             <div className="rounded-xl border border-border bg-card p-4">
@@ -309,12 +495,80 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
             </div>
           )}
 
+          {toolSlug === 'scene-composition' && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h2 className="text-sm font-semibold text-foreground mb-3">选择场景</h2>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {SCENE_PRESETS.map((scene) => (
+                  <button
+                    key={scene.value}
+                    type="button"
+                    onClick={() => setSceneTemplate(scene.value)}
+                    className={`flex flex-col items-start gap-0.5 rounded-lg border-2 px-3 py-2 text-left text-sm transition-all ${
+                      sceneTemplate === scene.value
+                        ? 'border-primary bg-primary/5 text-foreground'
+                        : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                    }`}
+                  >
+                    <span className="font-medium">{scene.label}</span>
+                    <span className="text-xs opacity-80">{scene.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {toolSlug === 'scene-composition' && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h2 className="text-sm font-semibold text-foreground mb-3">光影风格</h2>
+              <div className="flex flex-wrap gap-2">
+                {LIGHTING_STYLES.map((light) => (
+                  <button
+                    key={light.value}
+                    type="button"
+                    onClick={() => setLightingStyle(light.value)}
+                    className={`flex items-center gap-2 rounded-lg border-2 px-3 py-1.5 text-sm transition-all ${
+                      lightingStyle === light.value
+                        ? 'border-primary bg-primary/5 text-foreground'
+                        : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                    }`}
+                  >
+                    <span className="font-medium">{light.label}</span>
+                    <span className="text-xs opacity-80">{light.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {toolSlug === 'scene-composition' && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-foreground">风格强度</h2>
+                <span className="text-sm text-muted-foreground">{Math.round(strength * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min={SCENE_STRENGTH_MIN}
+                max={SCENE_STRENGTH_MAX}
+                step={SCENE_STRENGTH_STEP}
+                value={strength}
+                onChange={(e) => setStrength(Number(e.target.value))}
+                aria-label="风格强度"
+                className="w-full accent-primary"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">控制场景与光影的融合程度，值越高风格越明显（0.1 – 1.0）</p>
+            </div>
+          )}
+
           <div className="rounded-xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold text-foreground mb-3">提示词</h2>
+            <h2 className="text-sm font-semibold text-foreground mb-3">
+              {isModelDressing ? '补充要求（可选）' : '提示词'}
+            </h2>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={`输入描述，例如：${toolSlug === 'background-removal' ? '去除背景，保留商品主体' : toolSlug === 'scene-composition' ? '将商品放在自然光下的木桌上' : toolSlug === 'model-dressing' ? '模特穿这件衣服在户外街拍' : '生成包含商品详情、规格、卖点的详情页'}`}
+              placeholder={`${isModelDressing ? '可选：描述期望的穿搭效果、姿势或场景' : '输入描述，例如：'}${toolSlug === 'background-removal' ? '去除背景，保留商品主体' : toolSlug === 'scene-composition' ? '将商品放在自然光下的木桌上' : toolSlug === 'model-dressing' ? '（例如：叉腰站姿、户外街拍）' : '生成包含商品详情、规格、卖点的详情页'}`}
               rows={4}
               className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none transition-all duration-150"
             />
@@ -325,7 +579,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
             className="w-full"
             size="lg"
             onClick={handleSubmit}
-            disabled={(!file && !prompt.trim()) || loading}
+            disabled={(isModelDressing ? !file || !garmentFile : !file && !prompt.trim()) || loading}
           >
             {loading ? (
               <>
@@ -335,7 +589,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
-                开始生成
+                {isModelDressing ? '开始换装' : '开始生成'}
               </>
             )}
           </Button>

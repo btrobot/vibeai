@@ -795,3 +795,36 @@ Month 11-12: Phase 6 - 客服支持（P2）
 - 新增模型种子 `rmbg-2-0`（`bria/remove-background`，replicate 渠道，capabilities=[background-removal]），Replicate 适配器已支持 `image`/`background_color`/`width`/`height` 映射（对齐 boli `encodeWhiteBg`）。
 - **当前 prod-02 的 `REPLICATE_API_TOKEN` 无效（Replicate API 401）**，rmbg-2-0 未加入能力路由（默认白底仍走 gpt-image-2/pptoken openai）。
 - 激活路径：配置有效 `REPLICATE_API_TOKEN` → Admin 为 `background-removal` 添加 rmbg-2-0 路由（seed 只增不删，勿手工删模型行）。
+
+
+---
+
+## 附：场景合成功能对齐（2026-08-19）
+
+### 已对齐（`/tools/scene-composition`，OpenAI gpt-image-2 路径实时生效）
+- **场景模板**：8 预设网格（客厅/厨房/卧室/户外/办公/咖啡厅/白色影棚/深色影棚，value 对齐 boli `SCENE_PRESETS`），默认 `living-room`。
+- **光影风格**：5 风格（摄影棚/自然光/戏剧光/暖光/冷光，value 对齐 boli `LIGHTING_STYLES`），默认 `studio`。
+- **风格强度**：Slider 0.1–1 步进 0.05，默认 0.7（对齐 boli；透传 `input.strength` 进 creates.input 快照，OpenAI Images API 无 strength 参数，与 boli recipe 一致不消费）。
+- **Prompt 构造**：前端对齐 boli `SceneComposeRecipe.buildScenePrompt` —— `场景描述, ${lightingStyle} lighting, scene: ${sceneTemplate}, professional product photography, high quality, detailed`；无自定义描述时回退 `Place the product in a ${sceneTemplate} scene`。
+- **提交契约**：复用现有 `POST /api/gateway/generate`（capabilitySlug=`scene-composition`，路由 gpt-image-2），参考图走复数 `referenceImages: [{fileId}]`（OpenAI edits 路径，input_fidelity 语义由白底图对齐继承）。
+- **零后端改动**：纯前端 UI + prompt 构造，spec（gateway.spec.yaml）无需变更；未知 input 字段（sceneTemplate/lightingStyle/strength）透传进 creates.input 快照，适配器忽略。
+
+### 与 boli 的差异（有意为之）
+- **场景模板来源**：boli 从 DB 接口 `GET /ai/product-listing/scene-templates` 拉取（失败回退前端常量）；VibeAI 直接使用前端常量 `SCENE_PRESETS`（同 boli 回退集），不新增 DB 模板表/端点（避免 Spec 治理面扩大）。
+- **strength**：UI 与透传对齐 boli，但 boli recipe 亦不消费该值（OpenAI Images 无对应参数），两平台行为一致。
+
+
+---
+
+## 附：模特换装功能对齐（2026-08-19）
+
+### 已对齐（`/tools/model-dressing`，OpenAI gpt-image-2 多图编辑路径实时生效）
+- **双上传槽位**：模特图（第一张）+ 衣服图（第二张），**双图必填**（按钮禁用直至双图齐全），对齐 boli `clothing-change`（一键换装，person + garment 双输入）。
+- **参考图契约**：`referenceImages: [{fileId: 模特}, {fileId: 服装}]` 按角色顺序排列（OpenAI edits 多图字段顺序即角色顺序）；spec `refImageRoles`（model/garment）已定义，无需改 spec。
+- **Prompt**：固定基础模板对齐 boli `ClothingChangeRecipe prompt='模特换装'`，扩写为多图编辑角色消歧文案（"第一张图为模特，第二张图为服装…"）；可选"补充要求"输入追加为后缀（boli 无该字段，属 VibeAI 增强，空则纯固定模板）。
+- **拍摄建议**：Tips 卡对齐 boli（正面或微侧面站立姿势 / 双手自然下垂或叉腰 / 避免遮挡身体主要部位 / 背景简洁、光线充足），采用语义色（bg-primary/5，boli 的 purple 原生色盘不适用 VibeAI design-check）。
+- **按钮/文案**：开始换装（对齐 boli）；双图必填校验与 boli validate() 一致。
+
+### 与 boli 的差异（有意为之）
+- **模型**：boli 用 `idm-vton`（Replicate IDM-VTON）；VibeAI 路由 `gpt-image-2`（pptoken openai 渠道，多图 edits），不新增 Replicate 渠道/模型路由（避免 Spec 治理面扩大；待有效 `REPLICATE_API_TOKEN` 后可走 Admin 加路由）。
+- **角色元数据**：boli codec 以 person/garment role 传给模型；VibeAI 以参考图数组顺序 + prompt 消歧（OpenAI edits 无 role 参数）。
