@@ -60,28 +60,30 @@ describe('GatewayService', () => {
   // ===== Capabilities =====
 
   describe('Capabilities', () => {
-    it('listCapabilities 返回所有启用能力并按 sortOrder 排序（屏蔽能力除外）', () => {
+    it('listCapabilities 返回全部内置能力并按 sortOrder 排序', () => {
       const capabilities = service.listCapabilities();
-      // 屏蔽 白底/场景/模特换装 后 = 内置能力数 - 3
-      expect(capabilities).toHaveLength(builtInCapabilities.length - 3);
+      // 2026-08-19 起全量开放（L2 经独立工具页），不再屏蔽
+      expect(capabilities).toHaveLength(builtInCapabilities.length);
       for (let i = 1; i < capabilities.length; i++) {
         expect(capabilities[i].sortOrder).toBeGreaterThanOrEqual(capabilities[i - 1].sortOrder);
       }
     });
 
-    it('listCapabilities 返回 6 个启用能力，且屏蔽 白底/场景/模特换装', () => {
+    it('listCapabilities 返回全部 9 个能力（L1 工作区两条路 + L2 独立工具页）', () => {
       const capabilities = service.listCapabilities();
-      expect(capabilities).toHaveLength(6);
+      expect(capabilities).toHaveLength(9);
       const slugs = capabilities.map((c) => c.slug);
-      expect(slugs).toContain('text-generation');
-      expect(slugs).toContain('image-generation');
-      expect(slugs).toContain('video-generation');
-      expect(slugs).toContain('image-editing');
-      expect(slugs).not.toContain('background-removal');
-      expect(slugs).not.toContain('scene-composition');
-      expect(slugs).not.toContain('model-dressing');
-      expect(slugs).toContain('detail-page-generation');
-      expect(slugs).toContain('style-cloning');
+      expect(slugs).toEqual(expect.arrayContaining([
+        'text-generation',
+        'image-generation',
+        'video-generation',
+        'image-editing',
+        'background-removal',
+        'scene-composition',
+        'model-dressing',
+        'detail-page-generation',
+        'style-cloning',
+      ]));
     });
 
     it('getCapability 仍可读取被屏蔽能力（历史数据渲染用）', () => {

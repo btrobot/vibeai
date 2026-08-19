@@ -310,16 +310,16 @@ describe('Gateway Spec Tests', () => {
       }
     });
 
-    it('返回 6 个可新建能力（屏蔽 白底/场景/换装 后）', () => {
-      // 2026-08 产品决策：图片创作收敛为文生图/图片编辑双路，屏蔽 3 个能力的新建入口
-      expect(service.listCapabilities()).toHaveLength(6);
+    it('返回全部 9 个可新建能力（L1 工作区 + L2 独立工具页）', () => {
+      // 2026-08-19 恢复：白底/场景/换装 以独立工具页（/tools/*）开放新建（spec enabled: true）
+      expect(service.listCapabilities()).toHaveLength(9);
       const slugs = service.listCapabilities().map((c) => c.slug);
-      expect(slugs).not.toContain('background-removal');
-      expect(slugs).not.toContain('scene-composition');
-      expect(slugs).not.toContain('model-dressing');
+      expect(slugs).toContain('background-removal');
+      expect(slugs).toContain('scene-composition');
+      expect(slugs).toContain('model-dressing');
     });
 
-    it('屏蔽的能力仍可通过 getCapability 读取（历史数据渲染/恢复兼容）', () => {
+    it('L2 能力仍可通过 getCapability 读取（历史数据渲染/恢复兼容）', () => {
       expect(service.getCapability('model-dressing')?.slug).toBe('model-dressing');
     });
   });

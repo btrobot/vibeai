@@ -7,7 +7,6 @@ function renderToolPage(toolType: string) {
   const toolRoutes: Record<string, string> = {
     'detail-page': 'detail-page',
     'invalid-tool': 'invalid-tool',
-    // 屏蔽的工具：访问路径仍可渲染（走 :toolType 兜底），应显示"工具不存在"
     'background-removal': 'background-removal',
     'scene-composition': 'scene-composition',
     'model-dressing': 'model-dressing',
@@ -35,22 +34,25 @@ describe('ToolPage', () => {
     localStorage.clear();
   });
 
-  it('屏蔽：白底图工具入口不再可用（显示工具不存在）', () => {
+  it('渲染白底图生成工具（/tools/background-removal）', () => {
     renderToolPage('background-removal');
-    expect(screen.getByText('工具不存在')).toBeInTheDocument();
-    expect(screen.queryByText('白底图生成')).not.toBeInTheDocument();
+    expect(screen.getByText('白底图生成')).toBeInTheDocument();
+    expect(screen.getByText('一键去除商品背景，生成纯白底图，支持批量处理')).toBeInTheDocument();
+    expect(screen.getByText('开始生成')).toBeInTheDocument();
   });
 
-  it('屏蔽：场景合成工具入口不再可用（显示工具不存在）', () => {
+  it('渲染场景合成工具（/tools/scene-composition）', () => {
     renderToolPage('scene-composition');
-    expect(screen.getByText('工具不存在')).toBeInTheDocument();
-    expect(screen.queryByText('场景合成')).not.toBeInTheDocument();
+    expect(screen.getByText('场景合成')).toBeInTheDocument();
+    expect(screen.getByText('将商品智能融入各类场景，生成自然逼真的场景图')).toBeInTheDocument();
+    expect(screen.getByText('开始生成')).toBeInTheDocument();
   });
 
-  it('屏蔽：模特换装工具入口不再可用（显示工具不存在）', () => {
+  it('渲染模特换装工具（/tools/model-dressing）', () => {
     renderToolPage('model-dressing');
-    expect(screen.getByText('工具不存在')).toBeInTheDocument();
-    expect(screen.queryByText('模特换装')).not.toBeInTheDocument();
+    expect(screen.getByText('模特换装')).toBeInTheDocument();
+    expect(screen.getByText('AI 虚拟模特换装，快速生成不同穿搭效果图')).toBeInTheDocument();
+    expect(screen.getByText('开始生成')).toBeInTheDocument();
   });
 
   it('应该渲染详情页生成工具', () => {

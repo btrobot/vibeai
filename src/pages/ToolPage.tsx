@@ -7,14 +7,40 @@ import {
   Sparkles,
   Loader2,
   Download,
+  ShieldCheck,
+  Palette,
+  Shirt,
   FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import type { LucideIcon } from 'lucide-react';
 
-// 2026-08 产品决策：屏蔽 白底图/场景合成/模特换装 工具入口（与 WorkspacePage 能力屏蔽一致）
-const toolConfig: Record<string, { name: string; description: string; icon: LucideIcon; color: string; capability: string }> = {
+// 2026-08-19 产品决策：恢复 白底图/场景合成/模特换装 独立工具页入口
+// （工作区能力选择器仍收敛为 L1 文生图/图片编辑，L2 后处理经 /tools/* 工具页开放，spec enabled: true）
+// 导出 toolConfig 供 image-capability-consistency 防漂移测试引用（L2 能力 ↔ 工具页全覆盖）
+export const toolConfig: Record<string, { name: string; description: string; icon: LucideIcon; color: string; capability: string }> = {
+  'background-removal': {
+    name: '白底图生成',
+    description: '一键去除商品背景，生成纯白底图，支持批量处理',
+    icon: ShieldCheck,
+    color: 'text-muted-foreground',
+    capability: 'background-removal',
+  },
+  'scene-composition': {
+    name: '场景合成',
+    description: '将商品智能融入各类场景，生成自然逼真的场景图',
+    icon: Palette,
+    color: 'text-brand',
+    capability: 'scene-composition',
+  },
+  'model-dressing': {
+    name: '模特换装',
+    description: 'AI 虚拟模特换装，快速生成不同穿搭效果图',
+    icon: Shirt,
+    color: 'text-primary',
+    capability: 'model-dressing',
+  },
   'detail-page': {
     name: '详情页生成',
     description: 'AI 自动生成商品详情页，包含文案、排版、图片',

@@ -132,9 +132,10 @@ const tabConfig = [
   { slug: 'detail-page-generation', label: '详情页', icon: FileText, color: 'text-foreground' },
 ];
 
-// 2026-08 产品决策：屏蔽 白底图/场景合成/模特换装 三个能力（含历史数据仅渲染、不可新建），
-// 图片创作收敛为两条路：无参考图 → 文生图（image-generation）；有参考图 → 图片编辑（image-editing）。
-// 屏蔽能力 slug 常量（历史 create 仍按 IMAGE_OUTPUT_CAPABILITIES 渲染/发布/恢复）
+// 2026-08 产品决策：工作区图片创作收敛为两条路：无参考图 → 文生图（image-generation）；
+// 有参考图 → 图片编辑（image-editing）。白底/场景/换装（L2）不进入工作区能力选择器，
+// 经独立工具页（/tools/background-removal 等）开放（spec enabled: true，见 gateway.spec.yaml）。
+// 工作区屏蔽 slug 常量（历史 create 仍按 IMAGE_OUTPUT_CAPABILITIES 渲染/发布/恢复）
 const DISABLED_IMAGE_CAPABILITIES = ['background-removal', 'scene-composition', 'model-dressing'] as const;
 
 const capabilities = [
@@ -157,14 +158,15 @@ export const IMAGE_OUTPUT_CAPABILITIES = [
 
 // 可新建图片能力白名单（2026-08 起 UI 无能力选择器，图片 Tab 纯自动识别：
 // 有参考图 → image-editing，无参考图 → image-generation）。
-// 屏蔽能力不提供新建入口（历史数据渲染/恢复不受影响）；与 spec seed_data.capabilities.enabled 双向一致。
+// 工作区不提供 L2 新建入口（历史数据渲染/恢复不受影响）；L2 能力经独立工具页开放
+// （与 specs/gateway.spec.yaml enabled 语义一致，见 image-capability-consistency 测试）。
 export const SELECTABLE_IMAGE_CAPABILITIES = IMAGE_OUTPUT_CAPABILITIES.filter(
   (slug) => !(DISABLED_IMAGE_CAPABILITIES as readonly string[]).includes(slug),
 );
 
 // L1/L2 分层（2026-08 产品共识，对齐 RunningHub）：
 //   L1 生成层 = 文生图（image-generation，无参考图）/ 图片编辑（image-editing，多参考图无 role，语义由 prompt 描述）
-//   L2 后处理层 = 白底/场景/换装/局部重绘 等"结果图附加操作"，本期不启用（enabled: false，历史数据仅渲染）
+//   L2 后处理层 = 白底/场景/换装 等"结果图附加操作"，以独立工具页开放（enabled: true），工作区选择器不暴露
 // 参考图 role 槽位（refImageRoles）属 L2 操作语义，L1 不消费；specs/gateway.spec.yaml 保留字段作为历史/未来 L2 文档
 
 
