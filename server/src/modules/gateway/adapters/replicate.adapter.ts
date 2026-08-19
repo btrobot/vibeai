@@ -112,6 +112,26 @@ export class ReplicateAdapter implements ProtocolAdapter {
     input: Record<string, unknown>,
     model: AdapterModel,
   ): Record<string, unknown> {
+    // 白底图专用抠图模型（rmbg-2-0，对齐 boli encodeWhiteBg）：
+    // 无 prompt；输入契约 = image（参考图首图）+ background_color（hex/transparent）+ 可选 width/height。
+    // 说明：种子默认走 replicate 渠道（sdkModelId: bria/remove-background），
+    // 运行时需有效 REPLICATE_API_TOKEN 才可执行（当前 prod 未配置有效 token，路由保持 dormant）。
+    if (model.slug === 'rmbg-2-0') {
+      const refs = (input.referenceImages as unknown[] | undefined) ?? [];
+      const image = (input.image as string | undefined) ?? (refs[0] as string | undefined);
+      if (!image) {
+        throw new Error('rmbg-2-0 需要商品图（input.image 或 referenceImages[0]）');
+      }
+      const bg = (input.backgroundColor as string | undefined) ?? '#ffffff';
+      if (bg !== 'transparent' && !/^#[0-9a-fA-F]{6}$/.test(bg)) {
+        throw new Error(`rmbg-2-0 background invalid: ${String(bg)}`);
+      }
+      const predictionInput: Record<string, unknown> = { image, background_color: bg };
+      if (input.width !== undefined) predictionInput.width = input.width;
+      if (input.height !== undefined) predictionInput.height = input.height;
+      return predictionInput;
+    }
+
     const predictionInput: Record<string, unknown> = {};
 
     // Prompt is always included

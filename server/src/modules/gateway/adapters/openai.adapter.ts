@@ -38,6 +38,14 @@ function extensionForBlob(contentType: string): string {
   return '.png';
 }
 
+/** boli 对齐：白底图 backgroundColor（hex / transparent）→ OpenAI Images background 参数语义 */
+function translateBackground(value: unknown): 'transparent' | 'auto' | 'opaque' | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (value === 'transparent' || value === 'auto') return value;
+  if (typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)) return 'opaque';
+  throw new Error(`OpenAI Images background invalid: ${String(value)}`);
+}
+
 /** 外部取消信号联动内部超时 controller：任一触发即 abort */
 function linkExternalSignal(controller: AbortController, external?: AbortSignal): void {
   if (!external) return;
@@ -90,6 +98,8 @@ export class OpenAIAdapter implements ProtocolAdapter {
       ?? '1024x1024';
     const quality = (input.quality as string) ?? (model.defaultParams.quality as string);
     const count = (input.count as number) ?? (input.n as number) ?? (model.defaultParams.n as number) ?? 1;
+    // 白底图对齐（boli）：backgroundColor（hex/transparent）→ OpenAI Images background（opaque/transparent/auto）
+    const background = translateBackground(input.backgroundColor);
 
     // 生产模式：渠道必须配置完整，未配置 apiKey 直接报错（不再 Mock）
     if (!apiKey) {
@@ -134,6 +144,11 @@ export class OpenAIAdapter implements ProtocolAdapter {
         if (effectiveSize && effectiveSize !== 'auto') {
           form.append('size', effectiveSize);
         }
+        if (background) {
+          // boli 对齐：白底图显式声明背景（opaque=纯色 / transparent=透明），并开启高保真还原主体
+          form.append('background', background);
+          form.append('input_fidelity', 'high');
+        }
         for (let i = 0; i < referenceImages.length; i++) {
           const refUrl = referenceImages[i];
           if (!refUrl) continue;
@@ -162,6 +177,7 @@ export class OpenAIAdapter implements ProtocolAdapter {
             size,
             n: count,
             ...(quality ? { quality } : {}),
+            ...(background ? { background } : {}),
           }),
           signal: controller.signal,
         });

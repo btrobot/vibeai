@@ -23,7 +23,7 @@ import type { LucideIcon } from 'lucide-react';
 export const toolConfig: Record<string, { name: string; description: string; icon: LucideIcon; color: string; capability: string }> = {
   'background-removal': {
     name: '白底图生成',
-    description: '一键去除商品背景，生成纯白底图，支持批量处理',
+    description: '上传产品图片，一键生成纯白/自定义背景产品图',
     icon: ShieldCheck,
     color: 'text-muted-foreground',
     capability: 'background-removal',
@@ -51,6 +51,15 @@ export const toolConfig: Record<string, { name: string; description: string; ico
   },
 };
 
+// boli 对齐：白底图背景色选择（对齐 boli apps/web whitebg BG_COLORS：纯白/浅灰/银灰/纯黑/透明）
+export const BG_COLORS: Array<{ value: string; label: string }> = [
+  { value: '#ffffff', label: '纯白' },
+  { value: '#f5f5f5', label: '浅灰' },
+  { value: '#e8e8e8', label: '银灰' },
+  { value: '#000000', label: '纯黑' },
+  { value: 'transparent', label: '透明' },
+];
+
 export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } = {}) {
   const navigate = useNavigate();
   const params = useParams<{ toolType?: string }>();
@@ -59,6 +68,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [bgColor, setBgColor] = useState('#ffffff'); // 白底图背景色（boli 对齐，默认纯白）
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -133,9 +143,15 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
           projectId,
           capabilitySlug: config.capability,
           input: {
-            prompt: prompt.trim() || `使用 ${config.name} 工具处理`,
+            prompt:
+              prompt.trim() ||
+              (toolSlug === 'background-removal'
+                ? `去除背景，保留商品主体，生成${BG_COLORS.find((c) => c.value === bgColor)?.label ?? '纯白'}底图`
+                : `使用 ${config.name} 工具处理`),
             // 适配器消费契约：参考图必须是复数 referenceImages 数组（单数 referenceImage 会被忽略 → refs=0 走文生图）
             referenceImages: uploadedFileId ? [{ fileId: uploadedFileId }] : [],
+            // 白底图对齐（boli）：背景色透传（hex/transparent）→ OpenAI background opaque/transparent；rmbg-2-0 → background_color
+            ...(toolSlug === 'background-removal' ? { backgroundColor: bgColor } : {}),
           },
         }),
       });
@@ -256,6 +272,42 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
               </label>
             )}
           </div>
+
+          {toolSlug === 'background-removal' && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h2 className="text-sm font-semibold text-foreground mb-3">选择背景颜色</h2>
+              <div className="flex flex-wrap gap-2">
+                {BG_COLORS.map((color) => (
+                  <button
+                    key={color.value}
+                    type="button"
+                    onClick={() => setBgColor(color.value)}
+                    className={`flex items-center gap-2 rounded-lg border-2 px-3 py-1.5 text-sm transition-all ${
+                      bgColor === color.value
+                        ? 'border-primary bg-primary/5 text-foreground'
+                        : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                    }`}
+                  >
+                    <span
+                      className="h-4 w-4 rounded-full border"
+                      style={{
+                        backgroundColor: color.value === 'transparent' ? '#fff' : color.value,
+                        ...(color.value === 'transparent'
+                          ? {
+                              backgroundImage:
+                                'linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc), linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc)',
+                              backgroundSize: '8px 8px',
+                              backgroundPosition: '0 0, 4px 4px',
+                            }
+                          : {}),
+                      }}
+                    />
+                    {color.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="rounded-xl border border-border bg-card p-4">
             <h2 className="text-sm font-semibold text-foreground mb-3">提示词</h2>

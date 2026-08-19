@@ -448,6 +448,39 @@ export const SEED_MODELS: ModelSeed[] = [
     isFeatured: false,
     sortOrder: 32,
   },
+
+  // ===== 白底图抠图模型（1 个，dormant 待有效 REPLICATE_API_TOKEN）=====
+  // 对齐 boli whitebg：专业抠图（Bria RMBG 2.0），精确主体分离 + 256 级透明。
+  // 无能力路由（SEED_MODEL_ROUTES 不含本模型）→ 默认白底仍走 gpt-image-2（pptoken openai）。
+  // 激活方式：配置有效 REPLICATE_API_TOKEN 后，在 Admin 为 background-removal 添加本模型路由。
+  {
+    slug: 'rmbg-2-0',
+    name: 'Bria RMBG 2.0',
+    providerName: 'replicate',
+    description: '专业抠图模型（Bria RMBG 2.0），白底图/换背景专用，精确主体分离与自然边缘',
+    capabilities: ['background-removal'],
+    inputModes: ['image'],
+    outputType: 'image',
+    modality: 'image',
+    sdkModelId: 'bria/remove-background',
+    sdkClient: 'replicate',
+    constraints: { supportsImageToImage: true, outputFormats: ['png'] },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        image: { type: 'string', format: 'uri', description: '商品图 URL' },
+        backgroundColor: { type: 'string', description: '背景色 hex 或 transparent，默认 #ffffff' },
+        width: { type: 'integer', minimum: 256, maximum: 4096, default: 1024 },
+        height: { type: 'integer', minimum: 256, maximum: 4096, default: 1024 },
+      },
+      required: ['image'],
+    },
+    defaultParams: { maxWaitTime: 120 },
+    costCredits: 5,
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 33,
+  },
 ];
 
 /**
@@ -474,6 +507,7 @@ const channelCostPerCall: Record<string, string> = {
   'gpt-image-2': '0.05',
   sdxl: '0.002',
   'flux-schnell': '0.003',
+  'rmbg-2-0': '0.003',
 };
 
 export const SEED_PLATFORMS: PlatformSeed[] = Array.from(

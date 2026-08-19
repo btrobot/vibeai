@@ -22,8 +22,8 @@ describe('Seeds Data Integrity', () => {
   // ===== SEED_MODELS 完整性 =====
 
   describe('SEED_MODELS', () => {
-    it('包含 14 个模型', () => {
-      expect(SEED_MODELS).toHaveLength(14);
+    it('包含 15 个模型', () => {
+      expect(SEED_MODELS).toHaveLength(15);
     });
 
     it('每个模型有唯一 slug', () => {
@@ -41,9 +41,9 @@ describe('Seeds Data Integrity', () => {
       expect(llmModels).toHaveLength(7);
     });
 
-    it('包含 5 个图片模型', () => {
+    it('包含 6 个图片模型', () => {
       const imageModels = SEED_MODELS.filter((m) => m.modality === 'image');
-      expect(imageModels).toHaveLength(5);
+      expect(imageModels).toHaveLength(6);
     });
 
     it('包含 2 个视频模型', () => {
@@ -105,9 +105,10 @@ describe('Seeds Data Integrity', () => {
       }
     });
 
-    it('图片模型的 inputSchema 包含 prompt 字段', () => {
+    it('图片模型的 inputSchema 包含 prompt 字段（纯抠图模型 rmbg-2-0 除外，输入为 image）', () => {
       const imageModels = SEED_MODELS.filter((m) => m.modality === 'image');
       for (const m of imageModels) {
+        if (m.slug === 'rmbg-2-0') continue; // 白底抠图模型无 prompt，输入契约 = image + backgroundColor
         const schema = m.inputSchema as Record<string, any>;
         expect(schema.properties.prompt).toBeDefined();
         expect(schema.required).toContain('prompt');

@@ -189,6 +189,90 @@ describe('ReplicateAdapter - Real 模式', () => {
     expect(result.providerTaskId).toBe('pred-123');
   });
 
+  it('rmbg-2-0 白底抠图：映射 image/background_color/width/height → model endpoint predictions', async () => {
+    adapter = new ReplicateAdapter();
+    const model = createMockModel({
+      slug: 'rmbg-2-0',
+      name: 'Bria RMBG 2.0',
+      sdkModelId: 'bria/remove-background',
+    });
+    const context = createMockContext();
+
+    const requestBodies: Array<{ url: string; body?: Record<string, unknown> }> = [];
+    let callIndex = 0;
+    global.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('/predictions') && init?.method === 'POST') {
+        requestBodies.push({ url: u, body: JSON.parse(String(init.body)) });
+      }
+      const responses = [
+        { status: 201, body: { id: 'pred-rmbg', status: 'starting', output: null, error: null, logs: null } },
+        {
+          status: 200,
+          body: {
+            id: 'pred-rmbg',
+            status: 'succeeded',
+            output: 'https://replicate.delivery/whitebg.png',
+            error: null,
+            logs: null,
+          },
+        },
+      ];
+      const resp = responses[callIndex] || responses[responses.length - 1];
+      callIndex++;
+      return {
+        ok: resp.status >= 200 && resp.status < 300,
+        status: resp.status,
+        json: async () => resp.body,
+        text: async () => JSON.stringify(resp.body),
+      } as Response;
+    }) as typeof global.fetch;
+
+    const result = await adapter.execute(
+      {
+        referenceImages: ['https://cdn.example.com/product.png'],
+        backgroundColor: '#000000',
+        width: 1024,
+        height: 1024,
+      },
+      model,
+      context,
+    );
+
+    // 走 model endpoint（owner/model 形式，非 version hash）
+    expect(requestBodies[0].url).toBe('https://api.replicate.com/v1/models/bria/remove-background/predictions');
+    expect(requestBodies[0].body).toEqual({
+      input: { image: 'https://cdn.example.com/product.png', background_color: '#000000', width: 1024, height: 1024 },
+    });
+    expect(result.output.images[0].url).toBe('https://replicate.delivery/whitebg.png');
+  });
+
+  it('rmbg-2-0 缺商品图时显性报错（不静默走文生图）', async () => {
+    adapter = new ReplicateAdapter();
+    const model = createMockModel({
+      slug: 'rmbg-2-0',
+      sdkModelId: 'bria/remove-background',
+    });
+    await expect(adapter.execute({ prompt: '随便画' }, model, createMockContext())).rejects.toThrow(
+      /rmbg-2-0 需要商品图/,
+    );
+  });
+
+  it('rmbg-2-0 backgroundColor 非法值显性报错', async () => {
+    adapter = new ReplicateAdapter();
+    const model = createMockModel({
+      slug: 'rmbg-2-0',
+      sdkModelId: 'bria/remove-background',
+    });
+    await expect(
+      adapter.execute(
+        { referenceImages: ['https://cdn.example.com/product.png'], backgroundColor: 'rainbow' },
+        model,
+        createMockContext(),
+      ),
+    ).rejects.toThrow(/rmbg-2-0 background invalid: rainbow/);
+  });
+
   it('output 为数组时应正确映射多张图片', async () => {
     adapter = new ReplicateAdapter();
     const model = createMockModel();

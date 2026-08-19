@@ -300,6 +300,86 @@ describe('OpenAIAdapter', () => {
     });
   });
 
+  // ===== 白底图对齐（boli）：backgroundColor → OpenAI Images background / input_fidelity =====
+
+  describe('白底图 backgroundColor 透传（boli 对齐）', () => {
+    function imageResponse(): Response {
+      return new Response(new Uint8Array([1, 2, 3, 4]), {
+        headers: { 'Content-Type': 'image/webp' },
+      });
+    }
+
+    it('backgroundColor #ffffff（纯白）→ edits multipart background=opaque + input_fidelity=high', async () => {
+      fetchMock
+        .mockResolvedValueOnce(imageResponse())
+        .mockResolvedValueOnce(jsonResponse({ data: [{ url: 'https://cdn.example.com/whitebg.png' }] }));
+
+      await adapter.execute(
+        {
+          prompt: '去除背景，保留商品主体，生成纯白底图',
+          referenceImages: ['https://cdn.example.com/product.png'],
+          backgroundColor: '#ffffff',
+        },
+        model(),
+        ctx(),
+      );
+
+      const [url, init] = fetchMock.mock.calls[1];
+      expect(url).toBe('https://cn.pptoken.cc/v1/images/edits');
+      const fd = init.body as FormData;
+      expect(fd.get('background')).toBe('opaque');
+      expect(fd.get('input_fidelity')).toBe('high');
+    });
+
+    it('backgroundColor transparent（透明）→ edits multipart background=transparent', async () => {
+      fetchMock
+        .mockResolvedValueOnce(imageResponse())
+        .mockResolvedValueOnce(jsonResponse({ data: [{ url: 'https://cdn.example.com/whitebg.png' }] }));
+
+      await adapter.execute(
+        {
+          prompt: '去除背景，保留商品主体，生成透明底图',
+          referenceImages: ['https://cdn.example.com/product.png'],
+          backgroundColor: 'transparent',
+        },
+        model(),
+        ctx(),
+      );
+
+      const [, init] = fetchMock.mock.calls[1];
+      const fd = init.body as FormData;
+      expect(fd.get('background')).toBe('transparent');
+      expect(fd.get('input_fidelity')).toBe('high');
+    });
+
+    it('未传 backgroundColor 时不携带 background/input_fidelity（非白底工具行为不变）', async () => {
+      fetchMock
+        .mockResolvedValueOnce(imageResponse())
+        .mockResolvedValueOnce(jsonResponse({ data: [{ url: 'https://cdn.example.com/edit.png' }] }));
+
+      await adapter.execute(
+        { prompt: '换装', referenceImages: ['https://cdn.example.com/ref.webp'] },
+        model(),
+        ctx(),
+      );
+
+      const [, init] = fetchMock.mock.calls[1];
+      const fd = init.body as FormData;
+      expect(fd.get('background')).toBeNull();
+      expect(fd.get('input_fidelity')).toBeNull();
+    });
+
+    it('backgroundColor 非法值显性报错（不静默降级）', async () => {
+      await expect(
+        adapter.execute(
+          { prompt: 'x', referenceImages: ['https://cdn.example.com/p.png'], backgroundColor: 'rainbow' },
+          model(),
+          ctx(),
+        ),
+      ).rejects.toThrow(/background invalid: rainbow/);
+    });
+  });
+
   describe('生成等待期进度心跳', () => {
     afterEach(() => {
       vi.useRealTimers();

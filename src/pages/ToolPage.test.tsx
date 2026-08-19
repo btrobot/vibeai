@@ -37,8 +37,21 @@ describe('ToolPage', () => {
   it('渲染白底图生成工具（/tools/background-removal）', () => {
     renderToolPage('background-removal');
     expect(screen.getByText('白底图生成')).toBeInTheDocument();
-    expect(screen.getByText('一键去除商品背景，生成纯白底图，支持批量处理')).toBeInTheDocument();
+    expect(screen.getByText('上传产品图片，一键生成纯白/自定义背景产品图')).toBeInTheDocument();
     expect(screen.getByText('开始生成')).toBeInTheDocument();
+  });
+
+  it('白底图工具渲染背景色选择器（5 色对齐 boli：纯白/浅灰/银灰/纯黑/透明）', () => {
+    renderToolPage('background-removal');
+    expect(screen.getByText('选择背景颜色')).toBeInTheDocument();
+    for (const label of ['纯白', '浅灰', '银灰', '纯黑', '透明']) {
+      expect(screen.getByRole('button', { name: new RegExp(label) })).toBeInTheDocument();
+    }
+  });
+
+  it('非白底图工具不渲染背景色选择器', () => {
+    renderToolPage('scene-composition');
+    expect(screen.queryByText('选择背景颜色')).not.toBeInTheDocument();
   });
 
   it('渲染场景合成工具（/tools/scene-composition）', () => {
@@ -157,5 +170,94 @@ describe('ToolPage', () => {
     expect(gen?.input?.referenceImages).toEqual([{ fileId: 'file-uploaded-1' }]);
     // 不再发送会被适配器忽略的单数 referenceImage
     expect((gen?.input as Record<string, unknown>)?.referenceImage).toBeUndefined();
+  });
+
+  it('白底图 generate 请求体携带 backgroundColor（默认纯白 #ffffff）', async () => {
+    const generateBodies: Array<{ input?: Record<string, unknown> }> = [];
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/projects/default') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { id: 'toolbox-1' } }) });
+      }
+      if (url === '/api/gateway/generate') {
+        generateBodies.push(JSON.parse(String(init?.body)));
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { taskId: 'task-1' } }) });
+      }
+      if (url.includes('/api/tasks/')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { status: 'completed', output: { content: 'done' } } }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: null }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderToolPage('background-removal');
+    // 上传参考图（确保走 edits 路径），默认背景色纯白
+    fireEvent.change(screen.getByLabelText(/上传图片/), {
+      target: { files: [new File(['fake-bytes'], 'product.png', { type: 'image/png' })] },
+    });
+    fireEvent.click(screen.getByText('开始生成'));
+
+    await waitFor(() => {
+      expect(generateBodies.length).toBe(1);
+    });
+    expect(generateBodies[0]?.input?.backgroundColor).toBe('#ffffff');
+  });
+
+  it('选择纯黑背景后 generate 请求体携带对应 backgroundColor', async () => {
+    const generateBodies: Array<{ input?: Record<string, unknown> }> = [];
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/projects/default') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { id: 'toolbox-1' } }) });
+      }
+      if (url === '/api/gateway/generate') {
+        generateBodies.push(JSON.parse(String(init?.body)));
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { taskId: 'task-1' } }) });
+      }
+      if (url.includes('/api/tasks/')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { status: 'completed', output: { content: 'done' } } }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: null }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderToolPage('background-removal');
+    fireEvent.change(screen.getByLabelText(/上传图片/), {
+      target: { files: [new File(['fake-bytes'], 'product.png', { type: 'image/png' })] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /纯黑/ }));
+    fireEvent.click(screen.getByText('开始生成'));
+
+    await waitFor(() => {
+      expect(generateBodies.length).toBe(1);
+    });
+    expect(generateBodies[0]?.input?.backgroundColor).toBe('#000000');
+  });
+
+  it('非白底图工具请求体不带 backgroundColor', async () => {
+    const generateBodies: Array<{ input?: Record<string, unknown> }> = [];
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/projects/default') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { id: 'toolbox-1' } }) });
+      }
+      if (url === '/api/gateway/generate') {
+        generateBodies.push(JSON.parse(String(init?.body)));
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { taskId: 'task-1' } }) });
+      }
+      if (url.includes('/api/tasks/')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: { status: 'completed', output: { content: 'done' } } }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: null }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderToolPage('scene-composition');
+    fireEvent.change(screen.getByLabelText(/上传图片/), {
+      target: { files: [new File(['fake-bytes'], 'product.png', { type: 'image/png' })] },
+    });
+    fireEvent.click(screen.getByText('开始生成'));
+
+    await waitFor(() => {
+      expect(generateBodies.length).toBe(1);
+    });
+    expect((generateBodies[0]?.input as Record<string, unknown>)?.backgroundColor).toBeUndefined();
   });
 });

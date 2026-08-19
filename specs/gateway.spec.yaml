@@ -1103,6 +1103,14 @@ seed_data:
       costPerCall: null
       costPerSecond: null
       config: {}
+    - platformName: replicate
+      modelSlug: rmbg-2-0
+      sdkClient: replicate
+      sdkModelId: bria/remove-background
+      priority: 1
+      costPerCall: '0.003'
+      costPerSecond: null
+      config: {}
   models:
     - slug: doubao-seed-2-0-pro
       name: Doubao Seed 2.0 Pro
@@ -1916,6 +1924,50 @@ seed_data:
       isActive: true
       isFeatured: false
       sortOrder: 32
+    - slug: rmbg-2-0
+      name: Bria RMBG 2.0
+      providerName: replicate
+      description: 专业抠图模型（Bria RMBG 2.0），白底图/换背景专用，精确主体分离与自然边缘
+      capabilities:
+        - background-removal
+      inputModes:
+        - image
+      outputType: image
+      modality: image
+      sdkModelId: bria/remove-background
+      sdkClient: replicate
+      constraints:
+        supportsImageToImage: true
+        outputFormats:
+          - png
+      inputSchema:
+        type: object
+        properties:
+          image:
+            type: string
+            format: uri
+            description: 商品图 URL
+          backgroundColor:
+            type: string
+            description: 背景色 hex 或 transparent，默认 #ffffff
+          width:
+            type: integer
+            minimum: 256
+            maximum: 4096
+            default: 1024
+          height:
+            type: integer
+            minimum: 256
+            maximum: 4096
+            default: 1024
+        required:
+          - image
+      defaultParams:
+        maxWaitTime: 120
+      costCredits: 5
+      isActive: true
+      isFeatured: false
+      sortOrder: 33
   providers:
     - modelSlug: doubao-seed-2-0-pro
       providerName: doubao
@@ -2016,6 +2068,14 @@ seed_data:
     - modelSlug: flux-schnell
       providerName: replicate
       sdkModelId: black-forest-labs/flux-schnell
+      sdkClient: replicate
+      priority: 1
+      costPerCall: '0.003'
+      config: {}
+      isActive: true
+    - modelSlug: rmbg-2-0
+      providerName: replicate
+      sdkModelId: bria/remove-background
       sdkClient: replicate
       priority: 1
       costPerCall: '0.003'

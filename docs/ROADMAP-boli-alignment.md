@@ -781,3 +781,17 @@ Month 11-12: Phase 6 - 客服支持（P2）
 
 **下一步**: 选择 Phase 1 的第一个任务（支付集成或套餐系统），开始实施。
 
+
+---
+
+## 附：白底图功能对齐（2026-08-19）
+
+### 已对齐（v1.0.18，OpenAI 路径实时生效）
+- **背景色选择**：工具页 `/tools/background-removal` 新增 5 色选择（纯白 `#ffffff` / 浅灰 `#f5f5f5` / 银灰 `#e8e8e8` / 纯黑 `#000000` / 透明 `transparent`），对齐 boli `whitebg/page.tsx BG_COLORS`。
+- **参数透传**：前端 `input.backgroundColor` → OpenAI 适配器 `background`（hex→`opaque`，transparent→`transparent`）+ edits 路径 `input_fidelity: 'high'`（对齐 boli `openai-image-codec.ts translateBackground`）。
+- 未传 `backgroundColor` 的工具（场景合成/换装）请求体不变，零回归。
+
+### 已接线、待激活（rmbg-2-0 专用抠图）
+- 新增模型种子 `rmbg-2-0`（`bria/remove-background`，replicate 渠道，capabilities=[background-removal]），Replicate 适配器已支持 `image`/`background_color`/`width`/`height` 映射（对齐 boli `encodeWhiteBg`）。
+- **当前 prod-02 的 `REPLICATE_API_TOKEN` 无效（Replicate API 401）**，rmbg-2-0 未加入能力路由（默认白底仍走 gpt-image-2/pptoken openai）。
+- 激活路径：配置有效 `REPLICATE_API_TOKEN` → Admin 为 `background-removal` 添加 rmbg-2-0 路由（seed 只增不删，勿手工删模型行）。
