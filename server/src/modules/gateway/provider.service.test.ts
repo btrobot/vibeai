@@ -304,6 +304,47 @@ describe('ProviderService', () => {
       expect(providers).toEqual([]);
     });
 
+    it('coze 协议渠道 config.apiKey 存在时保留（对齐 boli 渠道凭证解析，无需 env token）', async () => {
+      db._result = [
+        channelRow({
+          channel: {
+            ...channelRow().channel,
+            modelSlug: 'doubao-seedream-5-0',
+            sdkClient: 'image',
+            config: { apiKey: 'cfg-image-key', baseUrl: 'https://cfg.example.com' },
+          },
+          platformName: 'coze',
+          platformBaseUrl: null,
+          platformApiKey: null,
+        }),
+      ];
+
+      const providers = await service.getAvailableProviders('doubao-seedream-5-0');
+
+      expect(providers).toHaveLength(1);
+      expect(providers[0].config.apiKey).toBe('cfg-image-key');
+    });
+
+    it('coze 协议渠道 config.apiKey 空白且 env 无 token 时被过滤', async () => {
+      db._result = [
+        channelRow({
+          channel: {
+            ...channelRow().channel,
+            modelSlug: 'doubao-seedream-5-0',
+            sdkClient: 'image',
+            config: { apiKey: '   ' },
+          },
+          platformName: 'coze',
+          platformBaseUrl: null,
+          platformApiKey: null,
+        }),
+      ];
+
+      const providers = await service.getAvailableProviders('doubao-seedream-5-0');
+
+      expect(providers).toEqual([]);
+    });
+
     it('coze 协议渠道进程环境有 COZE_LOOP_API_TOKEN 时保留', async () => {
       vi.stubEnv('COZE_LOOP_API_TOKEN', 'test-token');
       db._result = [

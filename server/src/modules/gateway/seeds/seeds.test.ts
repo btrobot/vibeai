@@ -247,6 +247,21 @@ describe('Seeds Data Integrity', () => {
       expect(modelConfigSeedSource).not.toContain('onConflictDoUpdate');
     });
 
+    it('电商工具关键 fallback 路由存在：L2 三能力 → gpt-image-2，详情页 → gpt-5.6-sol', () => {
+      // 本地/生产未配置 doubao（或 LLM 平台）渠道 key 时，工具页依赖这些 fallback 模型
+      // （pptoken/openai 渠道），缺失会导致"没有可用的模型"——防误删防线。
+      const routes = SEED_MODEL_ROUTES.filter((r) => r.isActive);
+      const hasRoute = (cap: string, model: string, prio: number) =>
+        routes.some((r) => r.capabilitySlug === cap && r.modelSlug === model && r.priority === prio);
+
+      for (const l2 of ['background-removal', 'scene-composition', 'model-dressing']) {
+        expect(hasRoute(l2, 'doubao-seedream-5-0', 1), `${l2} 主路由 doubao-seedream-5-0`).toBe(true);
+        expect(hasRoute(l2, 'gpt-image-2', 2), `${l2} fallback gpt-image-2`).toBe(true);
+      }
+      expect(hasRoute('detail-page-generation', 'doubao-seed-2-0-pro', 1), '详情页主路由 doubao-seed-2-0-pro').toBe(true);
+      expect(hasRoute('detail-page-generation', 'gpt-5.6-sol', 4), '详情页 fallback gpt-5.6-sol').toBe(true);
+    });
+
     it('模型配置迁移不会静默删除现有 Provider', () => {
       const migrationSource = fs.readFileSync(
         path.resolve(__dirname, '../../../../drizzle/0011_model_configuration_chain.sql'),
