@@ -28,6 +28,33 @@ export class ProjectService {
     };
   }
 
+  async getDefaultProject(userId: string): Promise<ProjectResponse> {
+    // 导航电商工具（白底图/场景合成/模特换装/详情页）直通入口：跳过用户手工建项目，
+    // 统一归属到每用户的工具箱项目（template='toolbox'），无则幂等创建一次。
+    const existing = await this.db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.userId, userId), eq(projects.template, 'toolbox')))
+      .limit(1);
+
+    if (existing.length > 0) {
+      return this.toResponse(existing[0]);
+    }
+
+    const [p] = await this.db
+      .insert(projects)
+      .values({
+        userId,
+        name: '我的工具创作',
+        description: '电商工具（白底图/场景合成/模特换装/详情页）生成的作品',
+        template: 'toolbox',
+      })
+      .returning();
+
+    this.logger.log(`Toolbox project created: ${p.id} (${p.name})`);
+    return this.toResponse(p);
+  }
+
   async create(userId: string, input: CreateProjectInput): Promise<ProjectResponse> {
     const [p] = await this.db
       .insert(projects)

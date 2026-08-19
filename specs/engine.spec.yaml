@@ -349,6 +349,18 @@ operations:
     post:
       - 返回用户的项目列表
     test: true
+  - name: getDefaultProject
+    method: GET
+    path: /projects/default
+    description: 获取（无则创建）用户的工具箱默认项目，供导航电商工具直通使用，不占用套餐项目配额
+    auth: jwt
+    pre:
+      - 用户已登录
+    post:
+      - 返回用户工具箱项目（template=toolbox）；不存在时自动创建
+    effect:
+      - 若用户无工具箱项目则创建 Project（template=toolbox）
+    test: true
   - name: getProject
     method: GET
     path: /projects/:id

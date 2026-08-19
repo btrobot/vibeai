@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import { ProjectService } from './project.service';
-import { createDrizzleMockForNestJS, mockSingle, mockMany, mockEmpty } from '../../test/drizzle-mock';
+import { createDrizzleMockForNestJS, mockSingle, mockMany, mockEmpty, mockReturning } from '../../test/drizzle-mock';
 import type { DrizzleMock } from '../../test/drizzle-mock';
 
 const projectRecord = {
@@ -180,6 +180,28 @@ describe('ProjectService', () => {
       mockEmpty(db);
 
       await expect(service.delete('nonexistent', 'user-1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getDefaultProject', () => {
+    it('用户已有工具箱项目时直接复用（不重复创建）', async () => {
+      const toolbox = { ...projectRecord, id: 'toolbox-1', name: '我的工具创作', template: 'toolbox' };
+      mockSingle(db, toolbox);
+
+      const result = await service.getDefaultProject('user-1');
+
+      expect(result.id).toBe('toolbox-1');
+      expect(result.name).toBe('我的工具创作');
+    });
+
+    it('用户无工具箱项目时幂等创建 template=toolbox', async () => {
+      mockEmpty(db); // select 无结果
+      mockReturning(db, [{ ...projectRecord, id: 'toolbox-new', name: '我的工具创作', template: 'toolbox' }]);
+
+      const result = await service.getDefaultProject('user-1');
+
+      expect(result.id).toBe('toolbox-new');
+      expect(result.name).toBe('我的工具创作');
     });
   });
 

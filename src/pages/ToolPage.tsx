@@ -13,6 +13,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { apiFetch } from '@/lib/apiClient';
 import { EmptyState } from '@/components/ui/empty-state';
 import type { LucideIcon } from 'lucide-react';
 
@@ -71,12 +72,6 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
   }
 
   const Icon = config.icon;
-  const getAuthHeaders = (): Record<string, string> => {
-    const stored = localStorage.getItem('auth_tokens');
-    if (!stored) return {};
-    const { accessToken } = JSON.parse(stored);
-    return { Authorization: `Bearer ${accessToken}` };
-  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -88,28 +83,16 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
     }
   };
 
+  // 导航电商工具直通入口：统一归属每用户的「工具箱」项目（后端幂等创建，无需前端找/建项目）
   const ensureProject = async (): Promise<string | null> => {
     try {
-      const res = await fetch('/api/projects?pageSize=1', { headers: { ...getAuthHeaders() } });
+      const res = await apiFetch('/api/projects/default');
       const result = await res.json();
       const data = result.data ?? result;
-      if (data.items?.length > 0) return data.items[0].id;
-
-      // No projects — create a default one
-      const createRes = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ name: '工具创作', description: '快速工具生成' }),
-      });
-      if (createRes.ok) {
-        const createResult = await createRes.json();
-        const createData = createResult.data ?? createResult;
-        return createData.id;
-      }
+      return data?.id ?? null;
     } catch {
-      // Silently fail
+      return null;
     }
-    return null;
   };
 
   const handleSubmit = async () => {
@@ -121,7 +104,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
     try {
       const projectId = await ensureProject();
       if (!projectId) {
-        setError('无法获取项目，请先创建项目');
+        setError('无法获取项目，请刷新页面后重试');
         setLoading(false);
         return;
       }
@@ -132,9 +115,8 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
         formData.append('file', file);
         formData.append('category', 'temp');
 
-        const uploadRes = await fetch('/api/storage/upload', {
+        const uploadRes = await apiFetch('/api/storage/upload', {
           method: 'POST',
-          headers: { ...getAuthHeaders() },
           body: formData,
         });
         const uploadData = await uploadRes.json();
@@ -144,12 +126,9 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
         }
       }
 
-      const generateRes = await fetch('/api/gateway/generate', {
+      const generateRes = await apiFetch('/api/gateway/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId,
           capabilitySlug: config.capability,
@@ -166,9 +145,7 @@ export default function ToolPage({ toolSlug: _toolSlug }: { toolSlug?: string } 
         const taskId = genResult.taskId || genResult.id;
         if (taskId) {
           const poll = async () => {
-            const taskRes = await fetch(`/api/tasks/${taskId}`, {
-              headers: { ...getAuthHeaders() },
-            });
+            const taskRes = await apiFetch(`/api/tasks/${taskId}`);
             const taskData = await taskRes.json();
             const task = taskData.data ?? taskData;
             if (task.status === 'completed') {

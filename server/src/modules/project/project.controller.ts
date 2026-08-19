@@ -37,6 +37,13 @@ export class ProjectController {
     return { success: true, data: result };
   }
 
+  @Get('default')
+  async getDefaultProject(@Req() req: any) {
+    // 导航电商工具直通入口：获取（无则创建）用户工具箱项目
+    const project = await this.projectService.getDefaultProject(req.user.userId);
+    return { success: true, data: project };
+  }
+
   @Get(':id')
   async getById(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
     const project = await this.projectService.getById(id, req.user.userId);

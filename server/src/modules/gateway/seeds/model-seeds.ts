@@ -506,30 +506,19 @@ export const SEED_CHANNELS: ChannelSeed[] = [
 type ModelRouteSeed = typeof capabilityModelRoutes.$inferInsert;
 
 export const SEED_MODEL_ROUTES: ModelRouteSeed[] = [
+  // doubao 平台（8 模型）未配置任何渠道凭证（platform base_url/api_key 为空、渠道 config={}），
+  // 2026-08-19 从路由表移除：避免每次生成先命中 doubao 再「无可用渠道」过滤告警。
+  // 后续在 Admin → 模型配置补全 doubao 渠道凭证后，可经 replaceCapabilityRoutes 重新加入。
   { capabilitySlug: 'text-generation', modelSlug: 'gpt-5.6-sol', priority: 1, isActive: true },
-  { capabilitySlug: 'text-generation', modelSlug: 'doubao-seed-2-0-pro', priority: 2, isActive: true },
-  { capabilitySlug: 'text-generation', modelSlug: 'doubao-seed-2-0-lite', priority: 3, isActive: true },
-  { capabilitySlug: 'image-generation', modelSlug: 'doubao-seedream-5-0', priority: 1, isActive: true },
-  { capabilitySlug: 'image-generation', modelSlug: 'doubao-seedream-4-5', priority: 2, isActive: true },
-  { capabilitySlug: 'image-generation', modelSlug: 'gpt-image-2', priority: 3, isActive: true },
-  { capabilitySlug: 'image-generation', modelSlug: 'sdxl', priority: 4, isActive: true },
-  { capabilitySlug: 'image-generation', modelSlug: 'flux-schnell', priority: 5, isActive: true },
-  { capabilitySlug: 'video-generation', modelSlug: 'doubao-seedance-1-5-pro', priority: 1, isActive: true },
-  { capabilitySlug: 'video-generation', modelSlug: 'doubao-seedance-2-0', priority: 2, isActive: true },
-  { capabilitySlug: 'image-editing', modelSlug: 'doubao-seedream-5-0', priority: 1, isActive: true },
-  { capabilitySlug: 'image-editing', modelSlug: 'doubao-seedream-4-5', priority: 2, isActive: true },
-  { capabilitySlug: 'image-editing', modelSlug: 'gpt-image-2', priority: 3, isActive: true },
-  { capabilitySlug: 'background-removal', modelSlug: 'doubao-seedream-5-0', priority: 1, isActive: true },
-  { capabilitySlug: 'background-removal', modelSlug: 'gpt-image-2', priority: 2, isActive: true },
-  { capabilitySlug: 'scene-composition', modelSlug: 'doubao-seedream-5-0', priority: 1, isActive: true },
-  { capabilitySlug: 'scene-composition', modelSlug: 'gpt-image-2', priority: 2, isActive: true },
-  { capabilitySlug: 'model-dressing', modelSlug: 'doubao-seedream-5-0', priority: 1, isActive: true },
-  { capabilitySlug: 'model-dressing', modelSlug: 'gpt-image-2', priority: 2, isActive: true },
-  { capabilitySlug: 'detail-page-generation', modelSlug: 'doubao-seed-2-0-pro', priority: 1, isActive: true },
-  { capabilitySlug: 'detail-page-generation', modelSlug: 'doubao-seed-2-0-lite', priority: 2, isActive: true },
-  { capabilitySlug: 'detail-page-generation', modelSlug: 'kimi-k2-5', priority: 3, isActive: true },
-  { capabilitySlug: 'detail-page-generation', modelSlug: 'gpt-5.6-sol', priority: 4, isActive: true },
-  { capabilitySlug: 'style-cloning', modelSlug: 'doubao-seedance-2-0', priority: 1, isActive: true },
+  { capabilitySlug: 'image-generation', modelSlug: 'gpt-image-2', priority: 1, isActive: true },
+  { capabilitySlug: 'image-generation', modelSlug: 'sdxl', priority: 2, isActive: true },
+  { capabilitySlug: 'image-generation', modelSlug: 'flux-schnell', priority: 3, isActive: true },
+  { capabilitySlug: 'image-editing', modelSlug: 'gpt-image-2', priority: 1, isActive: true },
+  { capabilitySlug: 'background-removal', modelSlug: 'gpt-image-2', priority: 1, isActive: true },
+  { capabilitySlug: 'scene-composition', modelSlug: 'gpt-image-2', priority: 1, isActive: true },
+  { capabilitySlug: 'model-dressing', modelSlug: 'gpt-image-2', priority: 1, isActive: true },
+  { capabilitySlug: 'detail-page-generation', modelSlug: 'kimi-k2-5', priority: 1, isActive: true },
+  { capabilitySlug: 'detail-page-generation', modelSlug: 'gpt-5.6-sol', priority: 2, isActive: true },
 ];
 
 /**

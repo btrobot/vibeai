@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import ToolPage from './ToolPage';
 
@@ -76,6 +76,48 @@ describe('ToolPage', () => {
 
   it('应该渲染生成结果区域（详情页工具）', () => {
     renderToolPage('detail-page');
+    expect(screen.getByText('生成结果')).toBeInTheDocument();
+  });
+
+  it('提交时走 /api/projects/default 获取工具箱项目（不再找/建普通项目）', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/projects/default') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true, data: { id: 'toolbox-1' } }),
+        });
+      }
+      if (url === '/api/gateway/generate') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true, data: { taskId: 'task-1' } }),
+        });
+      }
+      if (url.includes('/api/tasks/')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: { status: 'completed', output: { content: 'done' } },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: null }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderToolPage('background-removal');
+    fireEvent.change(screen.getByPlaceholderText(/去除背景，保留商品主体/), {
+      target: { value: '去除背景' },
+    });
+    fireEvent.click(screen.getByText('开始生成'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/projects/default', expect.anything());
+    });
+    // 不再调用旧的"找项目/建项目"路径
+    const calls = fetchMock.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(calls.some((u: string) => u.includes('/api/projects?pageSize=1') || u === '/api/projects')).toBe(false);
     expect(screen.getByText('生成结果')).toBeInTheDocument();
   });
 });
