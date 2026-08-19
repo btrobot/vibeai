@@ -845,7 +845,7 @@ rules:
     level: error
     description: 默认模型必须从 capability_model_routes 和启用的 ai_models 中解析
     enforcement: ModelRoutingService.getDefaultModel 按启用路由 priority 和模型 sortOrder 查询数据库
-    test: model-routing.service.test.ts 返回首个启用路由模型及数据库 costCredits
+    test: model-routing.service.test.ts 返回首个有可用渠道的启用路由模型及数据库 costCredits
   - name: no_runtime_memory_model_fallback
     id: GTW-012
     severity: error
@@ -920,9 +920,9 @@ rules:
     id: GTW-022
     severity: error
     level: error
-    description: 默认路由解析跳过无启用渠道（或其平台停用）的模型并继续下一路由（路由级 fallback）；渠道级 fallback 在任务执行/chat 层继续生效
-    enforcement: ModelRoutingService.getDefaultModel 通过 exists 子查询校验模型存在启用渠道，按路由 priority 顺序返回首个可用模型
-    test: model-routing.service.test.ts 首选路由模型没有启用渠道时跳过该模型（路由级 fallback）
+    description: 默认路由解析跳过无可用渠道的模型（渠道行缺失/停用，或渠道凭证不完整）并继续下一路由（路由级 fallback）；渠道级 fallback 在任务执行/chat 层继续生效
+    enforcement: ModelRoutingService.getDefaultModel 通过 exists 子查询剪枝无渠道行模型，再按路由 priority 顺序逐个校验渠道凭证完整（ProviderService.getAvailableProviders）返回首个可用模型
+    test: model-routing.service.test.ts 渠道行存在但凭证不完整的模型被跳过，落到下一个有可用渠道的模型（对齐 boli 凭证解析）
   - name: cost_dual_track
     id: GTW-023
     severity: error
@@ -2077,14 +2077,23 @@ seed_data:
     - capabilitySlug: background-removal
       modelSlug: doubao-seedream-5-0
       priority: 1
+    - capabilitySlug: background-removal
+      modelSlug: gpt-image-2
+      priority: 2
       isActive: true
     - capabilitySlug: scene-composition
       modelSlug: doubao-seedream-5-0
       priority: 1
+    - capabilitySlug: scene-composition
+      modelSlug: gpt-image-2
+      priority: 2
       isActive: true
     - capabilitySlug: model-dressing
       modelSlug: doubao-seedream-5-0
       priority: 1
+    - capabilitySlug: model-dressing
+      modelSlug: gpt-image-2
+      priority: 2
       isActive: true
     - capabilitySlug: detail-page-generation
       modelSlug: doubao-seed-2-0-pro

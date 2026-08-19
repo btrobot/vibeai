@@ -76,7 +76,7 @@ export class GatewayService {
     @Optional() @Inject('PROVIDER_SERVICE') private readonly providerService?: ProviderService,
     @Optional() @Inject('ADAPTER_REGISTRY') private readonly adapterRegistry?: AdapterRegistry,
   ) {
-    this.modelRoutingService = modelRoutingService ?? new ModelRoutingService(db);
+    this.modelRoutingService = modelRoutingService ?? new ModelRoutingService(this.providerService!, db);
   }
 
   private readonly modelRoutingService: ModelRoutingService;
@@ -85,7 +85,7 @@ export class GatewayService {
 
   async seedModels(): Promise<void> {
     for (const model of SEED_MODELS) {
-      await this.db.insert(aiModels).values(model).onConflictDoNothing({ target: aiModels.slug });
+      await this.db.insert(aiModels).values(model).onConflictDoUpdate({ target: aiModels.slug, set: { capabilities: model.capabilities } });
     }
 
     for (const platform of SEED_PLATFORMS) {

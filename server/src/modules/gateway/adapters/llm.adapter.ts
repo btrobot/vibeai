@@ -17,28 +17,30 @@ export class LlmAdapter implements ProtocolAdapter {
   readonly sdkClient = 'llm';
 
   private readonly logger = new Logger(LlmAdapter.name);
-  private client: LLMClient | null = null;
 
-  constructor() {
-    this.initClient();
-  }
+  /**
+   * 按渠道凭证构造 client（对齐 boli GatewayCredentialResolver：凭证来自 DB 平台/渠道配置，
+   * env 仅作兜底回退）。
+   * 优先级：model.defaultParams.apiKey/baseUrl（ProviderService 合并后的平台/渠道 config）
+   *        > env COZE_LOOP_API_TOKEN / COZE_WORKLOAD_API_TOKEN + COZE_LOOP_BASE_URL
+   */
+  private resolveClient(model: AdapterModel): LLMClient {
+    const apiKey =
+      (model.defaultParams?.apiKey as string) ||
+      process.env.COZE_LOOP_API_TOKEN ||
+      process.env.COZE_WORKLOAD_API_TOKEN ||
+      '';
+    const baseUrl =
+      (model.defaultParams?.baseUrl as string) ||
+      process.env.COZE_LOOP_BASE_URL ||
+      'https://api.coze.cn';
 
-  private initClient(): void {
-    try {
-      const apiKey = process.env.COZE_LOOP_API_TOKEN || process.env.COZE_WORKLOAD_API_TOKEN || '';
-      const baseUrl = process.env.COZE_LOOP_BASE_URL || 'https://api.coze.cn';
-
-      if (!apiKey) {
-        this.logger.warn('COZE_LOOP_API_TOKEN not set: LLM 渠道未配置密钥，调用将直接失败（生产模式不 Mock）');
-        return;
-      }
-
-      const config = new Config({ apiKey, baseUrl });
-      this.client = new LLMClient(config);
-      this.logger.log('LLM client initialized');
-    } catch (e) {
-      this.logger.error('Failed to initialize LLM client', e);
+    if (!apiKey) {
+      throw new Error(
+        `LLM 渠道配置不完整：未设置 COZE_LOOP_API_TOKEN，且渠道未配置 apiKey，无法调用模型 "${model.sdkModelId}"。请配置渠道密钥后重试`,
+      );
     }
+    return new LLMClient(new Config({ apiKey, baseUrl }));
   }
 
   async execute(
@@ -49,11 +51,8 @@ export class LlmAdapter implements ProtocolAdapter {
     const prompt = (input.prompt as string) || '';
 
     // 生产模式：渠道必须配置完整，未配置密钥直接报错（不再 Mock）
-    if (!this.client) {
-      throw new Error(
-        `LLM 渠道配置不完整：未设置 COZE_LOOP_API_TOKEN，无法调用模型 "${model.sdkModelId}"。请配置渠道密钥后重试`,
-      );
-    }
+    // 凭证解析：渠道/平台 config（defaultParams.apiKey/baseUrl）> env 兜底
+    const client = this.resolveClient(model);
 
     const messages = this.buildMessages(input);
 
@@ -65,9 +64,9 @@ export class LlmAdapter implements ProtocolAdapter {
 
     this.logger.log(`LLM streaming: model=${model.sdkModelId}, taskId=${context.taskId}`);
 
-    let stream: ReturnType<typeof this.client.stream>;
+    let stream: ReturnType<typeof client.stream>;
     try {
-      stream = this.client.stream(messages, llmConfig);
+      stream = client.stream(messages, llmConfig);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('is not iterable') || msg.includes('Cannot read properties')) {

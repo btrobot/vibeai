@@ -71,8 +71,13 @@ export class ProviderService {
       return typeof env.REPLICATE_API_TOKEN === 'string' && env.REPLICATE_API_TOKEN.trim() !== '';
     }
     if (sdkClient === 'image' || sdkClient === 'llm' || sdkClient === 'video') {
-      const token = env.COZE_LOOP_API_TOKEN || env.COZE_WORKLOAD_API_TOKEN;
-      return typeof token === 'string' && token.trim() !== '';
+      // 对齐 boli GatewayCredentialResolver：凭证优先来自 DB 平台/渠道配置（mergedConfig.apiKey），
+      // env COZE_LOOP_API_TOKEN 仅作兜底回退。平台/渠道配好 key 后渠道即可参与执行/fallback。
+      const fromConfig = typeof mergedConfig.apiKey === 'string' && mergedConfig.apiKey.trim() !== '';
+      const fromEnv =
+        (typeof env.COZE_LOOP_API_TOKEN === 'string' && env.COZE_LOOP_API_TOKEN.trim() !== '') ||
+        (typeof env.COZE_WORKLOAD_API_TOKEN === 'string' && env.COZE_WORKLOAD_API_TOKEN.trim() !== '');
+      return fromConfig || fromEnv;
     }
     return true;
   }

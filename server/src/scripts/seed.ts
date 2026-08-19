@@ -160,7 +160,7 @@ async function main(): Promise<void> {
     // ===== Seed AI Models =====
     console.log('[seed] Ensuring AI model bootstrap records...');
     for (const model of SEED_MODELS) {
-      await db.insert(aiModels).values(model).onConflictDoNothing({ target: aiModels.slug });
+      await db.insert(aiModels).values(model).onConflictDoUpdate({ target: aiModels.slug, set: { capabilities: model.capabilities } });
     }
     console.log(`[seed] Checked ${SEED_MODELS.length} AI models`);
 

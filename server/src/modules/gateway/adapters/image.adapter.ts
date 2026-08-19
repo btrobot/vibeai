@@ -18,28 +18,30 @@ export class ImageAdapter implements ProtocolAdapter {
   readonly sdkClient = 'image';
 
   private readonly logger = new Logger(ImageAdapter.name);
-  private client: ImageGenerationClient | null = null;
 
-  constructor() {
-    this.initClient();
-  }
+  /**
+   * 按渠道凭证构造 client（对齐 boli GatewayCredentialResolver：凭证来自 DB 平台/渠道配置，
+   * env 仅作兜底回退）。
+   * 优先级：model.defaultParams.apiKey/baseUrl（ProviderService 合并后的平台/渠道 config）
+   *        > env COZE_LOOP_API_TOKEN / COZE_WORKLOAD_API_TOKEN + COZE_LOOP_BASE_URL
+   */
+  private resolveClient(model: AdapterModel): ImageGenerationClient {
+    const apiKey =
+      (model.defaultParams?.apiKey as string) ||
+      process.env.COZE_LOOP_API_TOKEN ||
+      process.env.COZE_WORKLOAD_API_TOKEN ||
+      '';
+    const baseUrl =
+      (model.defaultParams?.baseUrl as string) ||
+      process.env.COZE_LOOP_BASE_URL ||
+      'https://api.coze.cn';
 
-  private initClient(): void {
-    try {
-      const apiKey = process.env.COZE_LOOP_API_TOKEN || process.env.COZE_WORKLOAD_API_TOKEN || '';
-      const baseUrl = process.env.COZE_LOOP_BASE_URL || 'https://api.coze.cn';
-
-      if (!apiKey) {
-        this.logger.warn('COZE_LOOP_API_TOKEN not set: Image 渠道未配置密钥，调用将直接失败（生产模式不 Mock）');
-        return;
-      }
-
-      const config = new Config({ apiKey, baseUrl });
-      this.client = new ImageGenerationClient(config);
-      this.logger.log('Image generation client initialized');
-    } catch (e) {
-      this.logger.error('Failed to initialize image client', e);
+    if (!apiKey) {
+      throw new Error(
+        `图片生成渠道配置不完整：未设置 COZE_LOOP_API_TOKEN，且渠道未配置 apiKey，无法调用模型 "${model.sdkModelId}"。请配置渠道密钥后重试`,
+      );
     }
+    return new ImageGenerationClient(new Config({ apiKey, baseUrl }));
   }
 
   async execute(
@@ -50,11 +52,8 @@ export class ImageAdapter implements ProtocolAdapter {
     const prompt = (input.prompt as string) || '';
 
     // 生产模式：渠道必须配置完整，未配置密钥直接报错（不再 Mock）
-    if (!this.client) {
-      throw new Error(
-        `图片生成渠道配置不完整：未设置 COZE_LOOP_API_TOKEN，无法调用模型 "${model.sdkModelId}"。请配置渠道密钥后重试`,
-      );
-    }
+    // 凭证解析：渠道/平台 config（defaultParams.apiKey/baseUrl）> env 兜底
+    const client = this.resolveClient(model);
 
     const size = (input.size as string) ?? (model.defaultParams.size as string) ?? '2K';
     const watermark = (input.watermark as boolean) ?? (model.defaultParams.watermark as boolean) ?? true;
@@ -66,9 +65,9 @@ export class ImageAdapter implements ProtocolAdapter {
 
     this.logger.log(`Image generation: model=${model.sdkModelId}, size=${size}, taskId=${context.taskId}`);
 
-    let response: Awaited<ReturnType<typeof this.client.generate>>;
+    let response: Awaited<ReturnType<typeof client.generate>>;
     try {
-      response = await this.client.generate({
+      response = await client.generate({
         prompt,
         model: model.sdkModelId,
         size,
@@ -88,7 +87,7 @@ export class ImageAdapter implements ProtocolAdapter {
       throw err;
     }
 
-    const helper = this.client.getResponseHelper(response);
+    const helper = client.getResponseHelper(response);
     if (!helper.success) {
       throw new Error(helper.errorMessages.join('; ') || '图片生成失败');
     }

@@ -190,5 +190,17 @@ describe('LlmAdapter', () => {
         noTokenAdapter.execute({ prompt: 'hello' }, mockModel, mockContext),
       ).rejects.toThrow(/LLM 渠道配置不完整：未设置 COZE_LOOP_API_TOKEN/);
     });
+
+    it('渠道 defaultParams.apiKey 提供凭证时，env 无 Token 也可调用（对齐 boli 渠道凭证解析）', async () => {
+      delete process.env.COZE_LOOP_API_TOKEN;
+      delete process.env.COZE_WORKLOAD_API_TOKEN;
+      const cfgModel = {
+        ...mockModel,
+        defaultParams: { ...mockModel.defaultParams, apiKey: 'cfg-llm-key', baseUrl: 'https://cfg.example.com' },
+      };
+      const cfgAdapter = new LlmAdapter();
+
+      await expect(cfgAdapter.execute({ prompt: 'hello' }, cfgModel, mockContext)).resolves.toBeDefined();
+    });
   });
 });

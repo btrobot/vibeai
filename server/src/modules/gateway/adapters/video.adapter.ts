@@ -18,28 +18,30 @@ export class VideoAdapter implements ProtocolAdapter {
   readonly sdkClient = 'video';
 
   private readonly logger = new Logger(VideoAdapter.name);
-  private client: VideoGenerationClient | null = null;
 
-  constructor() {
-    this.initClient();
-  }
+  /**
+   * 按渠道凭证构造 client（对齐 boli GatewayCredentialResolver：凭证来自 DB 平台/渠道配置，
+   * env 仅作兜底回退）。
+   * 优先级：model.defaultParams.apiKey/baseUrl（ProviderService 合并后的平台/渠道 config）
+   *        > env COZE_LOOP_API_TOKEN / COZE_WORKLOAD_API_TOKEN + COZE_LOOP_BASE_URL
+   */
+  private resolveClient(model: AdapterModel): VideoGenerationClient {
+    const apiKey =
+      (model.defaultParams?.apiKey as string) ||
+      process.env.COZE_LOOP_API_TOKEN ||
+      process.env.COZE_WORKLOAD_API_TOKEN ||
+      '';
+    const baseUrl =
+      (model.defaultParams?.baseUrl as string) ||
+      process.env.COZE_LOOP_BASE_URL ||
+      'https://api.coze.cn';
 
-  private initClient(): void {
-    try {
-      const apiKey = process.env.COZE_LOOP_API_TOKEN || process.env.COZE_WORKLOAD_API_TOKEN || '';
-      const baseUrl = process.env.COZE_LOOP_BASE_URL || 'https://api.coze.cn';
-
-      if (!apiKey) {
-        this.logger.warn('COZE_LOOP_API_TOKEN not set: Video 渠道未配置密钥，调用将直接失败（生产模式不 Mock）');
-        return;
-      }
-
-      const config = new Config({ apiKey, baseUrl });
-      this.client = new VideoGenerationClient(config);
-      this.logger.log('Video generation client initialized');
-    } catch (e) {
-      this.logger.error('Failed to initialize video client', e);
+    if (!apiKey) {
+      throw new Error(
+        `视频生成渠道配置不完整：未设置 COZE_LOOP_API_TOKEN，且渠道未配置 apiKey，无法调用模型 "${model.sdkModelId}"。请配置渠道密钥后重试`,
+      );
     }
+    return new VideoGenerationClient(new Config({ apiKey, baseUrl }));
   }
 
   async execute(
@@ -50,11 +52,8 @@ export class VideoAdapter implements ProtocolAdapter {
     const prompt = (input.prompt as string) || '';
 
     // 生产模式：渠道必须配置完整，未配置密钥直接报错（不再 Mock）
-    if (!this.client) {
-      throw new Error(
-        `视频生成渠道配置不完整：未设置 COZE_LOOP_API_TOKEN，无法调用模型 "${model.sdkModelId}"。请配置渠道密钥后重试`,
-      );
-    }
+    // 凭证解析：渠道/平台 config（defaultParams.apiKey/baseUrl）> env 兜底
+    const client = this.resolveClient(model);
 
     const content = this.buildContent(input, model);
 
@@ -74,9 +73,9 @@ export class VideoAdapter implements ProtocolAdapter {
     context.onProgress?.(10, '提交生成请求');
     this.logger.log(`Video generation: model=${model.sdkModelId}, taskId=${context.taskId}`);
 
-    let response: Awaited<ReturnType<typeof this.client.videoGeneration>>;
+    let response: Awaited<ReturnType<typeof client.videoGeneration>>;
     try {
-      response = await this.client.videoGeneration(content, options);
+      response = await client.videoGeneration(content, options);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       // SDK 内部 bug: 当 API 返回的 data 不是预期格式时，SDK 直接迭代抛出 "is not iterable"
