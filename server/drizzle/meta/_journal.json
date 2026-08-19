@@ -92,6 +92,13 @@
       "when": 1786040000000,
       "tag": "0012_platform_dimension",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787102600000,
+      "tag": "0013_gpt_image_2_l2_capabilities",
+      "breakpoints": true
     }
   ]
 }

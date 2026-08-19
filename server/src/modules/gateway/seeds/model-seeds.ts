@@ -528,6 +528,7 @@ export const SEED_MODEL_ROUTES: ModelRouteSeed[] = [
   { capabilitySlug: 'detail-page-generation', modelSlug: 'doubao-seed-2-0-pro', priority: 1, isActive: true },
   { capabilitySlug: 'detail-page-generation', modelSlug: 'doubao-seed-2-0-lite', priority: 2, isActive: true },
   { capabilitySlug: 'detail-page-generation', modelSlug: 'kimi-k2-5', priority: 3, isActive: true },
+  { capabilitySlug: 'detail-page-generation', modelSlug: 'gpt-5.6-sol', priority: 4, isActive: true },
   { capabilitySlug: 'style-cloning', modelSlug: 'doubao-seedance-2-0', priority: 1, isActive: true },
 ];
 

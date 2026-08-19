@@ -85,7 +85,7 @@ export class GatewayService {
 
   async seedModels(): Promise<void> {
     for (const model of SEED_MODELS) {
-      await this.db.insert(aiModels).values(model).onConflictDoUpdate({ target: aiModels.slug, set: { capabilities: model.capabilities } });
+      await this.db.insert(aiModels).values(model).onConflictDoNothing({ target: aiModels.slug });
     }
 
     for (const platform of SEED_PLATFORMS) {
