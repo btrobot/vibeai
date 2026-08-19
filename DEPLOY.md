@@ -108,3 +108,42 @@ docker compose -f /srv/vibeai/docker-compose.yml logs app -f
 4. **常见错误**：
    - `missing required vars` → 检查 `.env` 完整性与 `vibeai-app.yaml` config layers
    - 部署失败自动回滚 → 查看 `forge deploy --json` 输出定位失败步骤
+
+## 六、模型能力路由维护（重要：seed 只增不删）
+
+**背景**：应用启动时 `seedModels()` 对 `capability_model_routes` 只做 `insert ... onConflictDoNothing`——
+**只新增、绝不删除/停用**已存在的路由。因此：**从 `SEED_MODEL_ROUTES` 移除某模型路由后，存量数据库里该路由仍然 active**，
+代码部署本身不会让它消失。
+
+### 标准操作：移除一条路由（两步缺一不可）
+
+**第 1 步：改代码**（`server/src/modules/gateway/seeds/model-seeds.ts`）
+- 从 `SEED_MODEL_ROUTES` 删除对应条目，并加注释说明原因 + 恢复方式。
+
+**第 2 步：部署后停用存量 DB 路由**（prod-02）
+
+```bash
+ssh nodecoda-deploy@123.207.4.56
+cd /srv/vibeai
+DB_PW=$(grep "^DB_PASSWORD=" .env | cut -d= -f2-)
+docker exec -e PGPASSWORD="$DB_PW" vibeai-db psql -U vibeai -d vibeai -c \
+  "UPDATE capability_model_routes SET is_active=false, updated_at=now() WHERE model_slug LIKE 'doubao%' AND is_active=true;"
+```
+
+- 停用而非删除：与 Admin「模型配置 → replaceCapabilityRoutes」同机制（解析只取 `is_active=true`），且可逆。
+- 一次停用**永久生效**：seed 不会重新激活这些行；后续版本也不会（除非有人主动 re-add）。
+
+**验证**（active 路由必须与新 seed 列表一致）：
+
+```bash
+docker exec -e PGPASSWORD="$DB_PW" vibeai-db psql -U vibeai -d vibeai -t -c \
+  "SELECT model_slug, count(*) FROM capability_model_routes WHERE is_active=true GROUP BY model_slug ORDER BY count(*) DESC;"
+```
+
+**恢复**：执行反向 `UPDATE ... SET is_active=true ...`，或经 Admin → replaceCapabilityRoutes 重新加入。
+
+### 实例（2026-08-19，vibeai 1.0.16）
+
+- 变更：从 seed 移除未配置凭证的 doubao 路由（text/image/video/style-cloning 等 14 条），避免生成时先命中 doubao 再「无可用渠道」告警。
+- 部署后验证发现 DB 仍 active（seed 未删除）→ 执行上述 UPDATE 停用 14 条 → active 路由与新 seed 一致（10 条）。
+- 注意：video-generation / style-cloning 原只有 doubao 路由，移除后两能力**不可路由**（本就无可用凭证渠道），属预期。
